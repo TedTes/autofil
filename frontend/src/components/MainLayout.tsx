@@ -17,7 +17,7 @@ import {
   TrendingUp,
   FolderPlus,
 } from 'lucide-react'
-import {RecentActivity,UploadView,FolderView,HomeView,FilesView,FileDetailView,QuickActions,DocumentsView} from './'
+import {RecentActivity,UploadView,FolderView,HomeView,FilesView,FileDetailView,DocumentsView} from './'
 
 
 
@@ -542,7 +542,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
 
             {/* Mobile Nav */}
             <div className="p-4 space-y-6">
-              <QuickActions onNavigate={navigateTo} />
+             
               <div>
                 <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
                   NAVIGATION

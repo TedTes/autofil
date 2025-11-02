@@ -1,5 +1,4 @@
 export * from "./FolderSelect";
-export * from "./QuickActions";
 export * from "./RecentActivity";
 export * from "./FolderView";
 export * from "./UploadView";

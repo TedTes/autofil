@@ -22,7 +22,7 @@ interface RecentActivityProps {
   onNavigate: (type: ViewType, data?:unknown, breadcrumbs?: string[]) => void
 }
 
-export default function RecentActivity({ onNavigate }: RecentActivityProps) {
+export  function RecentActivity({ onNavigate }: RecentActivityProps) {
   // Mock data - replace with real data from your backend
   const activities: ActivityItem[] = [
     {

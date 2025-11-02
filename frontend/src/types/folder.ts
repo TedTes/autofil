@@ -46,3 +46,15 @@ export interface InputFile {
     fieldsWritten?: number
     fieldsSkipped?: number
   }
+
+
+export type ViewType =
+| 'home'
+| 'upload'
+| 'files'
+| 'file-detail'
+| 'history'
+| 'compare'
+| 'export'
+| 'folders'
+| 'documents'

@@ -1,13 +1,13 @@
 'use client'
 
 import { Upload, FolderPlus, FileText, Download } from 'lucide-react'
-import type { ViewType } from '@/components/MainLayout'
+import type { ViewType } from '@/types'
 
 interface QuickActionsProps {
   onNavigate: (type: ViewType, data?: unknown, breadcrumbs?: string[]) => void
 }
 
-export default function QuickActions({ onNavigate }: QuickActionsProps) {
+export function QuickActions({ onNavigate }: QuickActionsProps) {
   const actions = [
     {
       id: 'upload',

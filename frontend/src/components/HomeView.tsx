@@ -1,16 +1,25 @@
 'use client'
 
-import { CheckSquare, Calendar, Download, FileText, TrendingUp, Zap, Clock, CheckCircle2 } from 'lucide-react'
-import React from 'react'
+import {
+  CheckSquare,
+  Calendar,
+  Download,
+  FileText,
+  TrendingUp,
+  Zap,
+  Clock,
+  CheckCircle2,
+} from 'lucide-react'
+import React, { useRef } from 'react'
 
 type HomeViewProps = {
   totalSubmissions: number
+  onUploadFiles?: (files: File[]) => void
 }
 
-export function HomeView({ totalSubmissions }: HomeViewProps) {
-  // if you later wire real data, just change this condition
+export function HomeView({ totalSubmissions, onUploadFiles }: HomeViewProps) {
   if (totalSubmissions === 0) {
-    return <EmptyDashboardState />
+    return <EmptyDashboardState onUploadFiles={onUploadFiles} />
   }
 
   return (
@@ -19,7 +28,8 @@ export function HomeView({ totalSubmissions }: HomeViewProps) {
       <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl shadow-sm p-8 text-white">
         <h2 className="text-3xl font-bold mb-2">Welcome to AutoFil</h2>
         <p className="text-blue-100 text-lg">
-          Intelligent document processing with automated extraction, version control, and export capabilities
+          Intelligent document processing with automated extraction, version control, and export
+          capabilities
         </p>
       </div>
 
@@ -34,7 +44,26 @@ export function HomeView({ totalSubmissions }: HomeViewProps) {
   )
 }
 
-function EmptyDashboardState() {
+function EmptyDashboardState({
+  onUploadFiles,
+}: {
+  onUploadFiles?: (files: File[]) => void
+}) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  const triggerFilePicker = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (files && files.length > 0) {
+      const arr = Array.from(files)
+      onUploadFiles?.(arr)
+      e.target.value = ''
+    }
+  }
+
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       {/* Compact 3-step */}
@@ -45,27 +74,44 @@ function EmptyDashboardState() {
       </div>
 
       {/* Upload zone (full width) */}
-      <div className="bg-white rounded-2xl border-2 border-dashed border-blue-200 hover:border-blue-400 transition-all duration-200 group cursor-pointer">
+      <div
+        className="bg-white rounded-2xl border-2 border-dashed border-blue-200 hover:border-blue-400 transition-all duration-200 group cursor-pointer"
+        onClick={triggerFilePicker}
+      >
         <div className="px-8 py-14 text-center">
           <div className="w-16 h-16 mx-auto mb-5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center transform group-hover:scale-110 transition-transform duration-200 shadow-lg">
             <FileText className="w-9 h-9 text-white" />
           </div>
-          
-          <h3 className="text-2xl font-bold text-gray-900 mb-2">
-            Upload your first document
-          </h3>
+
+          <h3 className="text-2xl font-bold text-gray-900 mb-2">Upload your first document</h3>
           <p className="text-gray-600 mb-6 max-w-md mx-auto">
-            Drag and drop your PDF here, or click to browse. We support ACORD forms, loss runs, financial statements, and more.
+            Drag and drop your PDF here, or click to browse. We support ACORD forms, loss runs,
+            financial statements, and more.
           </p>
-          
-          <button className="inline-flex items-center gap-2 px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-sm transition-all duration-150">
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              triggerFilePicker()
+            }}
+            className="inline-flex items-center gap-2 px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-sm transition-all duration-150"
+          >
             Upload document
           </button>
-          
-          <p className="text-sm text-gray-400 mt-4">
-            PDF, Excel, CSV • up to 50 MB
-          </p>
+
+          <p className="text-sm text-gray-400 mt-4">PDF, Excel, CSV • up to 50 MB</p>
         </div>
+
+        {/* hidden input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          onChange={handleFileChange}
+          multiple
+          accept=".pdf,.csv,.xlsx,.xls,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        />
       </div>
 
       {/* Highlights */}

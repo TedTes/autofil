@@ -1,10 +1,9 @@
 'use client'
-import { CheckSquare, Calendar } from 'lucide-react'
-import { useState } from 'react'
+
+import { useState, useEffect } from 'react'
 import {
   Home,
   Upload,
-  FolderPlus,
   FileText,
   FolderTree,
   Clock,
@@ -17,22 +16,28 @@ import {
   Menu,
   X,
   TrendingUp,
-  FileEdit
+  Sparkles,
+  Zap,
+  CheckCircle2,
+  ArrowRight,
+  Calendar
 } from 'lucide-react'
-import { type ComponentType, type SVGProps } from 'react';
+import { type ComponentType, type SVGProps } from 'react'
 
-type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
 import QuickActions from '@/components/QuickActions'
 import RecentActivity from '@/components/RecentActivity'
 
+type IconComponent = ComponentType<SVGProps<SVGSVGElement>>
+
 interface FileData {
-  client?: string;
-  name?: string;
-  date?: string;
-  confidence?: number;
+  client?: string
+  name?: string
+  date?: string
+  confidence?: number
 }
+
 // View types
-export type ViewType = 
+export type ViewType =
   | 'home'
   | 'upload'
   | 'files'
@@ -43,7 +48,7 @@ export type ViewType =
 
 interface ViewState {
   type: ViewType
-  data?: unknown // Context data for the view (e.g., file ID, client ID)
+  data?: unknown
   breadcrumbs: string[]
 }
 
@@ -54,15 +59,18 @@ interface MainLayoutProps {
 export default function MainLayout({ children }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
-  
+
   // Current view state
   const [currentView, setCurrentView] = useState<ViewState>({
     type: 'home',
     breadcrumbs: ['Home']
   })
 
+  // set to 0 to show onboarding
+  const [totalSubmissions] = useState(0)
+
   // Navigation function
-  const navigateTo = (type: ViewType, data?:unknown, breadcrumbs?: string[]) => {
+  const navigateTo = (type: ViewType, data?: unknown, breadcrumbs?: string[]) => {
     setCurrentView({
       type,
       data,
@@ -70,7 +78,6 @@ export default function MainLayout({ children }: MainLayoutProps) {
     })
   }
 
-  // Sidebar navigation items
   const navigationItems = [
     {
       id: 'home',
@@ -106,7 +113,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
-      {/* Collapsible Sidebar */}
+      {/* Sidebar */}
       <aside
         className={`
           hidden lg:flex flex-col
@@ -115,45 +122,52 @@ export default function MainLayout({ children }: MainLayoutProps) {
           ${sidebarOpen ? 'w-80' : 'w-16'}
         `}
       >
-  
-{/* Sidebar Header */}
-<div className="h-16 border-b border-gray-200 flex items-center justify-between px-4">
-  {sidebarOpen ? (
-    <>
-      <div className="flex items-center gap-2.5">
-        <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
+        {/* Sidebar Header */}
+        <div className="h-16 border-b border-gray-200 flex items-center justify-between px-4">
+          {sidebarOpen ? (
+            <>
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                  <svg
+                    className="w-5 h-5 text-white"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                    />
+                  </svg>
+                </div>
+                <div>
+                  <h1 className="text-sm font-bold text-gray-900 leading-tight">AutoFil</h1>
+                  <p className="text-[10px] text-gray-500 leading-tight">Smart Form Automation</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="w-full p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              <ChevronRight className="w-5 h-5 mx-auto" />
+            </button>
+          )}
         </div>
-        <div>
-          <h1 className="text-sm font-bold text-gray-900 leading-tight">AutoFil</h1>
-          <p className="text-[10px] text-gray-500 leading-tight">Smart Form Automation</p>
-        </div>
-      </div>
-      <button
-        onClick={() => setSidebarOpen(false)}
-        className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
-      >
-        <ChevronLeft className="w-5 h-5" />
-      </button>
-    </>
-  ) : (
-    <button
-      onClick={() => setSidebarOpen(true)}
-      className="w-full p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
-    >
-      <ChevronRight className="w-5 h-5 mx-auto" />
-    </button>
-  )}
-</div>
 
         {/* Sidebar Content */}
         <div className="flex-1 overflow-y-auto p-4">
           {sidebarOpen ? (
             <div className="space-y-6">
-             
-
               {/* Navigation */}
               <div>
                 <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
@@ -163,15 +177,12 @@ export default function MainLayout({ children }: MainLayoutProps) {
                   {navigationItems.map((item) => {
                     const Icon = item.icon
                     const isActive = currentView.type === item.id
-
                     return (
                       <button
                         key={item.id}
                         onClick={item.onClick}
                         className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-                          isActive
-                            ? 'bg-blue-50 text-blue-700'
-                            : 'text-gray-700 hover:bg-gray-100'
+                          isActive ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
                         }`}
                       >
                         <Icon className="w-4 h-4 flex-shrink-0" />
@@ -191,7 +202,6 @@ export default function MainLayout({ children }: MainLayoutProps) {
               </div>
             </div>
           ) : (
-            // Collapsed sidebar - show icons only
             <div className="space-y-2">
               <button
                 onClick={() => setSidebarOpen(true)}
@@ -218,7 +228,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
         </div>
       </aside>
 
-      {/* Mobile Sidebar Overlay */}
+      {/* Mobile Overlay */}
       {mobileSidebarOpen && (
         <div
           className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
@@ -228,112 +238,113 @@ export default function MainLayout({ children }: MainLayoutProps) {
             className="absolute left-0 top-0 bottom-0 w-80 bg-white shadow-xl overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-          {/* Mobile Sidebar Header */}
-<div className="h-16 border-b border-gray-200 flex items-center justify-between px-4">
-  <div className="flex items-center gap-2.5">
-    <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-      </svg>
-    </div>
-    <div>
-      <h1 className="text-sm font-bold text-gray-900 leading-tight">AutoFil</h1>
-      <p className="text-[10px] text-gray-500 leading-tight">Smart Form Automation</p>
-    </div>
-  </div>
-  <button
-    onClick={() => setMobileSidebarOpen(false)}
-    className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
-  >
-    <X className="w-5 h-5" />
-  </button>
-</div>
+            <div className="h-16 border-b border-gray-200 flex items-center justify-between px-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                  <svg
+                    className="w-5 h-5 text-white"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                    />
+                  </svg>
+                </div>
+                <div>
+                  <h1 className="text-sm font-bold text-gray-900 leading-tight">AutoFil</h1>
+                  <p className="text-[10px] text-gray-500 leading-tight">Smart Form Automation</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setMobileSidebarOpen(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-            {/* Mobile Sidebar Content */}
-            <div className="p-4">
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-                    QUICK ACTIONS
-                  </h3>
-                  <QuickActions onNavigate={navigateTo} />
+            <div className="p-4 space-y-6">
+              <div>
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                  QUICK ACTIONS
+                </h3>
+                <QuickActions onNavigate={navigateTo} />
+              </div>
+              <div>
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                  NAVIGATION
+                </h3>
+                <div className="space-y-1">
+                  {navigationItems.map((item) => {
+                    const Icon = item.icon
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          item.onClick()
+                          setMobileSidebarOpen(false)
+                        }}
+                        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors"
+                      >
+                        <Icon className="w-4 h-4 flex-shrink-0" />
+                        <span className="text-sm font-medium">{item.label}</span>
+                      </button>
+                    )
+                  })}
                 </div>
-                <div>
-                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-                    NAVIGATION
-                  </h3>
-                  <div className="space-y-1">
-                    {navigationItems.map((item) => {
-                      const Icon = item.icon
-                      return (
-                        <button
-                          key={item.id}
-                          onClick={() => {
-                            item.onClick()
-                            setMobileSidebarOpen(false)
-                          }}
-                          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors"
-                        >
-                          <Icon className="w-4 h-4 flex-shrink-0" />
-                          <span className="text-sm font-medium">{item.label}</span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-                    RECENT ACTIVITY
-                  </h3>
-                  <RecentActivity onNavigate={navigateTo} />
-                </div>
+              </div>
+              <div>
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                  RECENT ACTIVITY
+                </h3>
+                <RecentActivity onNavigate={navigateTo} />
               </div>
             </div>
           </aside>
         </div>
       )}
 
-      {/* Main Content Area */}
+      {/* Main */}
       <div className="flex-1 flex flex-col min-h-screen">
         {/* Header */}
-        {/* Header */}
-<header className="bg-white border-b border-gray-200 sticky top-0 z-30">
-  <div className="px-4 sm:px-6 lg:px-8">
-    <div className="flex items-center justify-between h-16">
-      {/* Left: Mobile menu + Breadcrumbs preview (on mobile) */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => setMobileSidebarOpen(true)}
-          className="lg:hidden p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-        >
-          <Menu className="w-5 h-5" />
-        </button>
-        
-        {/* Show logo on mobile only (when sidebar is hidden) */}
-        <div className="lg:hidden">
-          <h1 className="text-lg font-bold text-gray-900">AutoFil</h1>
-        </div>
+        <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
+          <div className="px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between h-16">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setMobileSidebarOpen(true)}
+                  className="lg:hidden p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <Menu className="w-5 h-5" />
+                </button>
 
-        {/* Show current view on desktop */}
-        <div className="hidden lg:block">
-          <h2 className="text-lg font-semibold text-gray-900">
-            {currentView.breadcrumbs[currentView.breadcrumbs.length - 1]}
-          </h2>
-        </div>
-      </div>
+                <div className="lg:hidden">
+                  <h1 className="text-lg font-bold text-gray-900">AutoFil</h1>
+                </div>
 
-      {/* Right: Settings + Help */}
-      <div className="flex items-center gap-2">
-        <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
-          <Settings className="w-5 h-5" />
-        </button>
-        <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
-          <HelpCircle className="w-5 h-5" />
-        </button>
-      </div>
-    </div>
-  </div>
-</header>
+                <div className="hidden lg:block">
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    {currentView.breadcrumbs[currentView.breadcrumbs.length - 1]}
+                  </h2>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
+                  <Settings className="w-5 h-5" />
+                </button>
+                <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
+                  <HelpCircle className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </header>
 
         {/* Breadcrumbs */}
         <div className="bg-white border-b border-gray-100 px-4 sm:px-6 lg:px-8 py-2">
@@ -358,11 +369,11 @@ export default function MainLayout({ children }: MainLayoutProps) {
           </nav>
         </div>
 
-        {/* Main View Content */}
+        {/* Content */}
         <main className="flex-1 overflow-y-auto bg-gray-50">
           <div className="px-4 sm:px-6 lg:px-8 py-8">
             <div className="animate-fadeIn">
-              {currentView.type === 'home' && <HomeView />}
+              {currentView.type === 'home' && <HomeView totalSubmissions={totalSubmissions} />}
               {currentView.type === 'upload' && <UploadView />}
               {currentView.type === 'files' && <FilesView onNavigate={navigateTo} />}
               {currentView.type === 'file-detail' && <FileDetailView data={currentView.data} />}
@@ -378,14 +389,17 @@ export default function MainLayout({ children }: MainLayoutProps) {
   )
 }
 
-// ========================================
+// =====================
 // VIEW COMPONENTS
-// ========================================
+// =====================
 
-function HomeView() {
+function HomeView({ totalSubmissions }: { totalSubmissions: number }) {
+  if (totalSubmissions === 0) {
+    return <EmptyDashboardState />
+  }
+
   return (
     <div className="space-y-6">
-      {/* Welcome Banner */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl shadow-sm p-8 text-white">
         <h2 className="text-3xl font-bold mb-2">Welcome to AutoFil</h2>
         <p className="text-blue-100 text-lg">
@@ -393,43 +407,103 @@ function HomeView() {
         </p>
       </div>
 
-      {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard icon={FileText} label="Total Submissions" value="0" color="blue" />
         <StatCard icon={TrendingUp} label="Avg Confidence" value="0%" color="green" />
-        <StatCard icon={CheckSquare} label="Completed Today" value="0" color="purple" />
+        <StatCard icon={CheckCircle2} label="Completed Today" value="0" color="purple" />
         <StatCard icon={Calendar} label="This Week" value="0" color="orange" />
       </div>
+    </div>
+  )
+}
 
-      {/* Feature Overview */}
-      <div>
-        <h3 className="text-xl font-bold text-gray-900 mb-4">Available Features</h3>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <FeatureCard
-            title="Smart Extraction"
-            description="Automatic data extraction with confidence scoring"
-            features={['Real-time progress', 'Low confidence filter', 'Inline guidance']}
-            badge="B5-B7"
-          />
-          <FeatureCard
-            title="Version Control"
-            description="Track changes with complete audit trail"
-            features={['Auto versioning', 'Compare & rollback', 'Change tracking']}
-            badge="B8"
-          />
-          <FeatureCard
-            title="Conflict Resolution"
-            description="Compare data and resolve conflicts"
-            features={['Side-by-side view', 'Smart suggestions', 'Batch resolution']}
-            badge="B9"
-          />
-          <FeatureCard
-            title="Export & API"
-            description="Multiple export formats and webhooks"
-            features={['CSV, JSON, ZIP', 'Webhook integration', 'Batch export']}
-            badge="B11"
-          />
+function EmptyDashboardState() {
+  const [showWelcome, setShowWelcome] = useState(true)
+
+  useEffect(() => {
+    const t = setTimeout(() => setShowWelcome(false), 2600)
+    return () => clearTimeout(t)
+  }, [])
+
+  return (
+    <div className="relative max-w-5xl mx-auto space-y-5">
+
+
+      {/* small steps row */}
+      <div className="grid grid-cols-3 gap-3 lg:gap-4">
+        <CompactQuickStartStep number="1" icon={Upload} title="Upload" />
+        <CompactQuickStartStep number="2" icon={Zap} title="Extract" />
+        <CompactQuickStartStep number="3" icon={Download} title="Download" />
+      </div>
+
+      {/* dropzone */}
+      <div className="bg-white rounded-2xl border-2 border-dashed border-blue-300 hover:border-blue-500 hover:bg-blue-50/40 transition-all duration-200 group cursor-pointer">
+        <div className="px-6 py-10 lg:px-8 lg:py-12 text-center">
+          <div className="w-16 h-16 mx-auto mb-5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center transform group-hover:scale-105 transition-transform duration-200 shadow-lg">
+            <Upload className="w-9 h-9 text-white" />
+          </div>
+
+          <h3 className="text-xl font-bold text-gray-900 mb-2">Upload Your First Document</h3>
+          <p className="text-gray-600 mb-5 max-w-md mx-auto">
+            Drag & drop or click to browse. We support ACORD, loss runs, financials, and more.
+          </p>
+
+          <button className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-lg transition-all duration-200">
+            <Upload className="w-4 h-4" />
+            Choose File
+          </button>
+
+          <p className="text-sm text-gray-500 mt-3">PDF, Excel, CSV • up to 50MB</p>
         </div>
+      </div>
+
+      {/* feature highlights */}
+      <div className="grid md:grid-cols-3 gap-5">
+        <FeatureHighlight
+          icon={CheckCircle2}
+          iconColor="text-green-600"
+          bgColor="bg-green-50"
+          title="95%+ Accuracy"
+          description="AI-powered extraction with confidence"
+        />
+        <FeatureHighlight
+          icon={Clock}
+          iconColor="text-purple-600"
+          bgColor="bg-purple-50"
+          title="Version Control"
+          description="Track every change"
+        />
+        <FeatureHighlight
+          icon={Zap}
+          iconColor="text-orange-600"
+          bgColor="bg-orange-50"
+          title="Instant Results"
+          description="Process documents in seconds"
+        />
+      </div>
+    </div>
+  )
+}
+
+
+
+function CompactQuickStartStep({
+  number,
+  icon: Icon,
+  title
+}: {
+  number: string
+  icon: IconComponent
+  title: string
+}) {
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 px-3 py-3 flex items-center gap-3 shadow-sm">
+      <div className="w-9 h-9 rounded-md bg-blue-50 text-blue-700 flex items-center justify-center text-sm font-semibold">
+        {number}
+      </div>
+      <div className="flex items-center gap-2 text-sm text-gray-800">
+        <Icon className="w-4 h-4 text-blue-500" />
+        <span className="font-medium">{title}</span>
       </div>
     </div>
   )
@@ -441,22 +515,21 @@ function UploadView() {
       <div className="bg-white rounded-lg border-2 border-dashed border-gray-300 p-12 text-center hover:border-blue-400 transition-colors">
         <Upload className="w-16 h-16 text-gray-400 mx-auto mb-4" />
         <h3 className="text-lg font-semibold text-gray-900 mb-2">Upload Documents</h3>
-        <p className="text-sm text-gray-600 mb-6">
-          Drag and drop your PDF files here, or click to browse
-        </p>
+        <p className="text-sm text-gray-600 mb-6">Drag and drop your PDF files here, or click to browse</p>
         <button className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
           Choose Files
         </button>
-        <p className="text-xs text-gray-500 mt-4">
-          Supported formats: PDF • Max size: 10MB per file
-        </p>
+        <p className="text-xs text-gray-500 mt-4">Supported formats: PDF • Max size: 10MB per file</p>
       </div>
     </div>
   )
 }
 
-function FilesView({ onNavigate }: { onNavigate: (type: ViewType, data?: unknown, breadcrumbs?: string[]) => void }) {
-  // Mock data
+function FilesView({
+  onNavigate
+}: {
+  onNavigate: (type: ViewType, data?: unknown, breadcrumbs?: string[]) => void
+}) {
   const files = [
     { id: '1', name: 'ACORD_126.pdf', client: 'Client ABC', date: '2m ago', confidence: 95 },
     { id: '2', name: 'Application.pdf', client: 'Client XYZ', date: '15m ago', confidence: 88 }
@@ -466,9 +539,7 @@ function FilesView({ onNavigate }: { onNavigate: (type: ViewType, data?: unknown
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-gray-900">All Files</h2>
-        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-          Upload New
-        </button>
+        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Upload New</button>
       </div>
 
       <div className="bg-white rounded-lg border border-gray-200 divide-y">
@@ -483,7 +554,9 @@ function FilesView({ onNavigate }: { onNavigate: (type: ViewType, data?: unknown
                 <FileText className="w-8 h-8 text-blue-600" />
                 <div>
                   <h4 className="font-semibold text-gray-900">{file.name}</h4>
-                  <p className="text-sm text-gray-500">{file.client} • {file.date}</p>
+                  <p className="text-sm text-gray-500">
+                    {file.client} • {file.date}
+                  </p>
                 </div>
               </div>
               <div className="text-right">
@@ -499,22 +572,20 @@ function FilesView({ onNavigate }: { onNavigate: (type: ViewType, data?: unknown
 }
 
 function FileDetailView({ data }: { data: unknown }) {
-  const  fileData = data as FileData;
+  const fileData = data as FileData
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-lg border border-gray-200 p-6">
         <div className="flex items-start justify-between mb-6">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">{  fileData?.name || 'File Details'}</h2>
-            <p className="text-sm text-gray-600">{fileData?.client || 'Client'} • Uploaded {fileData?.date || 'recently'}</p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">{fileData?.name || 'File Details'}</h2>
+            <p className="text-sm text-gray-600">
+              {fileData?.client || 'Client'} • Uploaded {fileData?.date || 'recently'}
+            </p>
           </div>
           <div className="flex gap-2">
-            <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
-              Edit
-            </button>
-            <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-              Export
-            </button>
+            <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Edit</button>
+            <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Export</button>
           </div>
         </div>
 
@@ -574,9 +645,18 @@ function ExportView() {
   )
 }
 
-// Helper Components
-function StatCard({ icon: Icon, label, value, color }: {icon:IconComponent,label:string, value: string, color:string}) {
-  const colors:Record<string,string>= {
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+  color
+}: {
+  icon: IconComponent
+  label: string
+  value: string
+  color: string
+}) {
+  const colors: Record<string, string> = {
     blue: 'bg-blue-50 border-blue-100 text-blue-600',
     green: 'bg-green-50 border-green-100 text-green-600',
     purple: 'bg-purple-50 border-purple-100 text-purple-600',
@@ -593,25 +673,26 @@ function StatCard({ icon: Icon, label, value, color }: {icon:IconComponent,label
   )
 }
 
-function FeatureCard({ title, description, features, badge }: {title:string, description: string, features:string[], badge:string}) {
+function FeatureHighlight({
+  icon: Icon,
+  iconColor,
+  bgColor,
+  title,
+  description
+}: {
+  icon: IconComponent
+  iconColor: string
+  bgColor: string
+  title: string
+  description: string
+}) {
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-6 hover:border-blue-200 hover:shadow-sm transition-all">
-      <div className="flex items-start justify-between mb-3">
-        <h4 className="text-lg font-semibold text-gray-900">{title}</h4>
-        <span className="px-2.5 py-1 text-xs font-semibold bg-blue-100 text-blue-700 rounded">
-          {badge}
-        </span>
+    <div className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition-all duration-200">
+      <div className={`w-12 h-12 ${bgColor} rounded-xl flex items-center justify-center mb-4`}>
+        <Icon className={`w-6 h-6 ${iconColor}`} />
       </div>
-      <p className="text-sm text-gray-600 mb-4">{description}</p>
-      <ul className="space-y-2">
-        {features.map((feature: string, idx: number) => (
-          <li key={idx} className="text-sm text-gray-700 flex items-center gap-2">
-            <CheckSquare className="w-4 h-4 text-green-600 flex-shrink-0" />
-            {feature}
-          </li>
-        ))}
-      </ul>
+      <h4 className="font-semibold text-gray-900 mb-2">{title}</h4>
+      <p className="text-sm text-gray-600 leading-relaxed">{description}</p>
     </div>
   )
 }
-

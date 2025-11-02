@@ -1,7 +1,7 @@
 'use client'
 
 import { Upload, CheckCircle, FileEdit, FileCheck, Clock } from 'lucide-react'
-import type { ViewType } from '@/components/MainLayout'
+import type { ViewType } from '@/types'
 import { type ComponentType, type SVGProps } from 'react';
 
 type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
@@ -22,7 +22,7 @@ interface RecentActivityProps {
   onNavigate: (type: ViewType, data?:unknown, breadcrumbs?: string[]) => void
 }
 
-export  function RecentActivity({ onNavigate }: RecentActivityProps) {
+export function RecentActivity({ onNavigate }: RecentActivityProps) {
   // Mock data - replace with real data from your backend
   const activities: ActivityItem[] = [
     {

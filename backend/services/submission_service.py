@@ -78,7 +78,6 @@ class SubmissionService:
         else:
             # Store in legacy uploads directory
             upload_dir = self.uploads_dir
-        
         # Progress: 10% - Saving file
         if progress_callback:
             progress_callback(submission_id, 10, 'uploading', 'Saving file...')
@@ -87,7 +86,6 @@ class SubmissionService:
         filename = secure_filename(file.filename)
         upload_path = os.path.join(upload_dir, f"{submission_id}_{filename}")
         file.save(upload_path)
-        
         # Progress: 30% - File saved
         if progress_callback:
             progress_callback(submission_id, 30, 'uploaded', 'File saved successfully')
@@ -95,10 +93,8 @@ class SubmissionService:
         # Progress: 40% - Starting extraction
         if progress_callback:
             progress_callback(submission_id, 40, 'extracting', 'Analyzing document...')
-        
         # Extract data
         extraction_result = self.extractor.extract(upload_path)
-        
         # Progress: 70% - Extraction complete
         if progress_callback:
             progress_callback(submission_id, 70, 'extracting', 'Processing fields...')
@@ -111,7 +107,6 @@ class SubmissionService:
         # Progress: 80% - Saving data
         if progress_callback:
             progress_callback(submission_id, 80, 'extracting', 'Saving extracted data...')
-        
         version_id = self.version_service.create_version(
             submission_id=submission_id,
             data=extraction_result.json,
@@ -124,7 +119,6 @@ class SubmissionService:
         with open(data_path, 'w') as f:
             json.dump(extraction_result.json, f, indent=2)
         
-        metadata['current_version_id'] = version_id
         # Progress: 90% - Creating metadata
         if progress_callback:
             progress_callback(submission_id, 90, 'ready', 'Finalizing...')
@@ -142,9 +136,9 @@ class SubmissionService:
             'warnings': extraction_result.warnings,
             'current_version_id': version_id,
             'field_confidence': extraction_result.field_confidence,
-            'field_hints': extraction_result.field_hints,
-            'extraction_issues': extraction_result.extraction_issues,
-            'suggested_fixes': extraction_result.suggested_fixes
+            # 'field_hints': extraction_result.field_hints,
+            # 'extraction_issues': extraction_result.extraction_issues,
+            # 'suggested_fixes': extraction_result.suggested_fixes
         }
         
         metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")

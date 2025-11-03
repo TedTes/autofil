@@ -1,15 +1,18 @@
 """
-ACORD 126 extractor implementation.
+ACORD 126 extractor – robust, type-safe, extensible.
 
-Orchestrates the extraction workflow:
 1. Parse PDF fields
 2. Map to canonical JSON
-3. Calculate confidence
-4. Return structured result
+3. Compute per-field & overall confidence
+4. Return a fully-populated ExtractionResult
 """
 
+from __future__ import annotations
+
 import os
-from typing import Dict, Any
+import re
+from typing import Any, Dict, List, Tuple
+
 from ..interfaces.extractor import IExtractor
 from ..interfaces.parser import IParser
 from ..interfaces.mapper import IMapper
@@ -18,337 +21,281 @@ from ..parsers.pdf_field_parser import PdfFieldParser
 from ..mappers.acord_126_extraction_mapper import Acord126ExtractionMapper
 
 
+# --------------------------------------------------------------------------- #
+# Helper constants
+# --------------------------------------------------------------------------- #
+CRITICAL_FIELDS = {
+    "applicant.business_name": "Business name",
+    "limits.each_occurrence": "Each occurrence limit",
+    "limits.general_aggregate": "General aggregate limit",
+}
+CRITICAL_CONFIDENCE_PATHS = {
+    "applicant.business_name",
+    "limits.each_occurrence",
+    "limits.general_aggregate",
+}
+CRITICAL_BUMP_PATHS = CRITICAL_CONFIDENCE_PATHS | {
+    "applicant.mailing_address",
+}
+
+
 class Acord126Extractor(IExtractor):
-    """
-    Extractor for ACORD 126 (Commercial General Liability Application).
-    
-    Coordinates PDF parsing and JSON mapping to produce
-    structured extraction results.
-    """
-    
-    def __init__(
-        self,
-        parser: IParser = None,
-        mapper: IMapper = None
-    ):
-        """
-        Initialize extractor with dependencies.
-        
-        Args:
-            parser: PDF parser (defaults to PdfFieldParser)
-            mapper: Field mapper (defaults to Acord126ExtractionMapper)
-        """
-        self.parser = parser or PdfFieldParser()
-        self.mapper = mapper or Acord126ExtractionMapper()
-    
+    """Extractor for ACORD 126 (Commercial General Liability Application)."""
+
+    # ------------------------------------------------------------------- #
+    # Construction
+    # ------------------------------------------------------------------- #
+    def __init__(self, parser: IParser | None = None, mapper: IMapper | None = None):
+        self.parser: IParser = parser or PdfFieldParser()
+        self.mapper: IMapper = mapper or Acord126ExtractionMapper()
+
+    # ------------------------------------------------------------------- #
+    # Capability
+    # ------------------------------------------------------------------- #
     def get_supported_form_type(self) -> str:
-        """Return form type this extractor supports."""
         return "126"
-    
+
     def can_extract(self, pdf_path: str) -> bool:
-        """
-        Check if this extractor can handle the given PDF.
-        
-        For ACORD 126, we check:
-        1. PDF exists
-        2. PDF has fillable fields
-        3. PDF contains ACORD 126 indicators (future: use classifier)
-        
-        Args:
-            pdf_path: Path to PDF file
-            
-        Returns:
-            True if this extractor can process the PDF
-        """
-        # Check file exists
-        if not os.path.exists(pdf_path):
-            return False
-        
-        # Check if fillable
-        if not self.parser.is_fillable(pdf_path):
-            return False
-        
-        # For MVP: assume fillable PDF is ACORD 126
-        # Future: add proper classification logic
-        return True
-    
+        """Quick pre-flight check – file exists + PDF is fillable."""
+        return os.path.isfile(pdf_path) and self.parser.is_fillable(pdf_path)
+
+    # ------------------------------------------------------------------- #
+    # Core extraction
+    # ------------------------------------------------------------------- #
     def extract(self, pdf_path: str) -> ExtractionResult:
-        """
-        Extract data from ACORD 126 PDF.
-        
-        Workflow:
-        1. Validate PDF
-        2. Parse PDF fields
-        3. Map to canonical JSON
-        4. Calculate confidence
-        5. Return result with metadata
-        
-        Args:
-            pdf_path: Path to PDF file
-            
-        Returns:
-            ExtractionResult containing:
-            - json: Canonical JSON structure
-            - confidence: Extraction confidence score
-            - warnings: List of warnings
-            - metadata: Extraction metadata
-        """
+        # Always-initialised containers
+        metadata: Dict[str, Any] = {}
+        field_confidence: Dict[str, float] = {}
+
         try:
-            # Step 1: Validate
-            if not os.path.exists(pdf_path):
+            # ----------------------------------------------------------- #
+            # 1. Validate path
+            # ----------------------------------------------------------- #
+            if not os.path.isfile(pdf_path):
                 return ExtractionResult(
                     json={},
                     confidence=0.0,
-                    error=f"PDF file not found: {pdf_path}"
+                    warnings=["File not found"],
+                    metadata=metadata,
+                    field_confidence=field_confidence,
+                    error=f"PDF file not found: {pdf_path}",
                 )
-            
-            # Step 2: Parse PDF fields
+
+            # ----------------------------------------------------------- #
+            # 2. Parse raw fields
+            # ----------------------------------------------------------- #
             raw_fields = self.parser.extract_fields(pdf_path)
-            
             if not raw_fields:
+                metadata = self._build_metadata(pdf_path, raw_fields)
                 return ExtractionResult(
                     json={},
                     confidence=0.0,
                     warnings=["No fields extracted from PDF"],
-                    error="PDF has no readable fields"
+                    metadata=metadata,
+                    field_confidence=field_confidence,
+                    error="PDF has no readable fields",
                 )
-            
-            # Step 3: Map to canonical JSON
+
+            # ----------------------------------------------------------- #
+            # 3. Map to canonical JSON
+            # ----------------------------------------------------------- #
             canonical_json = self.mapper.map_to_canonical(raw_fields)
-            
-            # Step 4: Calculate confidence
+
+            # ----------------------------------------------------------- #
+            # 4. Confidence + warnings
+            # ----------------------------------------------------------- #
             overall_confidence, field_confidence = self._calculate_confidence_with_fields(
-                raw_fields, 
                 canonical_json
             )
             warnings = self._collect_warnings(raw_fields, canonical_json)
-            
-            # Step 5: Build metadata
-            metadata = {
-                "total_fields_extracted": len(raw_fields),
-                "form_type": self.get_supported_form_type(),
-                "pdf_path": pdf_path,
-                "pdf_filename": os.path.basename(pdf_path),
-                "low_confidence_count": len([c for c in field_confidence.values() if c < 0.7])
-            }
-            
-            # Step 6: Return result
+
+            # ----------------------------------------------------------- #
+            # 5. Metadata
+            # ----------------------------------------------------------- #
+            metadata = self._build_metadata(pdf_path, raw_fields, field_confidence)
+
+            # ----------------------------------------------------------- #
+            # 6. Success
+            # ----------------------------------------------------------- #
             return ExtractionResult(
                 json=canonical_json,
                 confidence=overall_confidence,
                 warnings=warnings,
                 metadata=metadata,
-                field_confidence=field_confidence
+                field_confidence=field_confidence,
             )
-            
-        except ValueError as e:
+
+        # ------------------------------------------------------------------- #
+        # Graceful error handling
+        # ------------------------------------------------------------------- #
+        except ValueError as ve:
             return ExtractionResult(
                 json={},
                 confidence=0.0,
-                error=str(e)
+                warnings=[],
+                metadata=metadata,
+                field_confidence=field_confidence,
+                error=str(ve),
             )
-        except Exception as e:
+        except Exception as exc:  # pragma: no cover – unexpected
             return ExtractionResult(
                 json={},
                 confidence=0.0,
-                error=f"Extraction failed: {str(e)}"
+                warnings=[],
+                metadata=metadata,
+                field_confidence=field_confidence,
+                error=f"Extraction failed: {exc}",
             )
-    
-    def _calculate_confidence(
-        self,
-        raw_fields: Dict[str, Any],
-        canonical_json: Dict[str, Any]
-    ) -> float:
+
+    # ------------------------------------------------------------------- #
+    # Confidence
+    # ------------------------------------------------------------------- #
+    def _calculate_confidence_with_fields(
+        self, canonical_json: Dict[str, Any]
+    ) -> Tuple[float, Dict[str, float]]:
         """
-        Calculate extraction confidence score.
-        
-        Confidence based on:
-        - Number of fields extracted
-        - Presence of required fields
-        - Data quality indicators
-        
-        Args:
-            raw_fields: Raw PDF fields extracted
-            canonical_json: Mapped canonical JSON
-            
-        Returns:
-            Confidence score between 0.0 and 1.0
+        Overall = 0.70 * (average leaf confidence) + 0.30 * (critical-field ratio)
+
+        Critical-field ratio = #critical_fields ≥ 0.5 / total_critical_fields
         """
-        # Define critical fields that should be present
-        critical_fields = [
-            "applicant.business_name",
-            "limits.each_occurrence",
-            "limits.general_aggregate"
-        ]
-        
-        # Count how many critical fields have values
-        critical_found = 0
-        for field_path in critical_fields:
-            value = self._get_nested_value(canonical_json, field_path)
-            if value:
-                critical_found += 1
-        
-        # Base confidence on critical fields presence
-        base_confidence = critical_found / len(critical_fields)
-        
-        # Bonus for having many fields extracted
-        field_count = len(raw_fields)
-        if field_count > 100:
-            field_bonus = 0.2
-        elif field_count > 50:
-            field_bonus = 0.1
-        else:
-            field_bonus = 0.0
-        
-        # Calculate final confidence (capped at 1.0)
-        confidence = min(base_confidence + field_bonus, 1.0)
-        
-        return round(confidence, 2)
-   
-    def calculate_field_confidence(field_path: str, value: Any) -> float:
-        """Calculate confidence for a single field."""
-        if not value or value == "":
+        field_confidence = self._build_field_confidence(canonical_json)
+
+        avg_conf = (
+            sum(field_confidence.values()) / len(field_confidence)
+            if field_confidence
+            else 0.0
+        )
+
+        critical_hits = sum(
+            1 for p in CRITICAL_CONFIDENCE_PATHS if field_confidence.get(p, 0.0) >= 0.5
+        )
+        critical_ratio = critical_hits / len(CRITICAL_CONFIDENCE_PATHS)
+
+        overall = round(avg_conf * 0.70 + critical_ratio * 0.30, 2)
+        return overall, field_confidence
+
+    def _build_field_confidence(self, canonical_json: Any) -> Dict[str, float]:
+        """Traverse JSON and assign a confidence score to every leaf."""
+        confidence: Dict[str, float] = {}
+
+        def _traverse(obj: Any, path: str = "") -> None:
+            if isinstance(obj, dict):
+                for k, v in obj.items():
+                    _traverse(v, f"{path}.{k}" if path else k)
+            elif isinstance(obj, list):
+                for i, item in enumerate(obj):
+                    _traverse(item, f"{path}[{i}]")
+            else:
+                confidence[path] = self._calc_single_field_confidence(path, obj)
+
+        _traverse(canonical_json)
+        return confidence
+
+    def _calc_single_field_confidence(self, path: str, value: Any) -> float:
+        """Heuristic confidence for a single leaf value."""
+        if not self._is_non_empty(value):
             return 0.0
-        
-        # Base confidence for having a value
-        conf = 0.6
-        
-        # Bonus for longer strings (more likely to be complete)
+
+        conf = 0.60  # base for a non-empty value
+
         if isinstance(value, str):
-            if len(value) > 20:
-                conf += 0.2
-            elif len(value) > 5:
-                conf += 0.1
-        
-        # Bonus for critical fields
-        critical_fields = [
-            "applicant.business_name",
-            "applicant.mailing_address",
-            "limits.each_occurrence",
-            "limits.general_aggregate"
-        ]
-        if field_path in critical_fields:
-            conf += 0.1
-        
-        # Pattern matching bonuses
-        if isinstance(value, str):
-            import re
-            # Phone number pattern
-            if re.match(r'^\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}$', value):
-                conf += 0.1
-            # Email pattern
-            if re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', value):
-                conf += 0.1
-            # Date pattern
-            if re.match(r'^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$', value):
-                conf += 0.1
-            # Money pattern
-            if re.match(r'^\$?[\d,]+(\.\d{2})?$', value):
-                conf += 0.1
-        
+            s = value.strip()
+            length = len(s)
+
+            # Length bonuses
+            if length > 20:
+                conf += 0.20
+            elif length > 5:
+                conf += 0.10
+
+            # Pattern (lightweight, no external libs)
+            patterns = (
+                (r"^\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}$", 0.05),  # phone
+                (r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$", 0.05),  # email
+                (r"^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$", 0.05),  # date
+                (r"^\$?[\d,]+(\.\d{2})?$", 0.05),  # money
+            )
+            for regex, bonus in patterns:
+                if re.fullmatch(regex, s):
+                    conf += bonus
+
+        # Critical-field bump
+        if path in CRITICAL_BUMP_PATHS:
+            conf += 0.10
+
         return min(conf, 1.0)
 
-    # Traverse canonical JSON and calculate confidence for each leaf field
-    def traverse(obj: Any, path: str = ""):
-        if isinstance(obj, dict):
-            for key, value in obj.items():
-                new_path = f"{path}.{key}" if path else key
-                traverse(value, new_path)
-        elif isinstance(obj, list):
-            for i, item in enumerate(obj):
-                traverse(item, f"{path}[{i}]")
-        else:
-            # Leaf value - calculate confidence
-            field_confidence[path] = calculate_field_confidence(path, obj)
-    
-        traverse(canonical_json)
-        
-        # Calculate overall confidence (average of field confidences)
-        if field_confidence:
-            overall_confidence = sum(field_confidence.values()) / len(field_confidence)
-        else:
-            overall_confidence = 0.0
-        
-        # Apply critical field weighting
-        critical_fields = [
-            "applicant.business_name",
-            "limits.each_occurrence",
-            "limits.general_aggregate"
-        ]
-        
-        critical_found = sum(
-            1 for field in critical_fields 
-            if field_confidence.get(field, 0) > 0.5
-        )
-        critical_ratio = critical_found / len(critical_fields)
-        
-        # Blend overall confidence with critical field presence
-        final_confidence = (overall_confidence * 0.7) + (critical_ratio * 0.3)
-        
-        return round(final_confidence, 2), field_confidence
-    
+    @staticmethod
+    def _is_non_empty(v: Any) -> bool:
+        """True for any non-null, non-blank value."""
+        if v is None:
+            return False
+        if isinstance(v, str):
+            return v.strip() != ""
+        return True
+
+    # ------------------------------------------------------------------- #
+    # Warnings
+    # ------------------------------------------------------------------- #
     def _collect_warnings(
-        self,
-        raw_fields: Dict[str, Any],
-        canonical_json: Dict[str, Any]
-    ) -> list:
-        """
-        Collect warnings about extraction quality.
-        
-        Args:
-            raw_fields: Raw PDF fields extracted
-            canonical_json: Mapped canonical JSON
-            
-        Returns:
-            List of warning messages
-        """
-        warnings = []
-        
-        # Check for missing critical fields
-        critical_fields = {
-            "applicant.business_name": "Business name",
-            "limits.each_occurrence": "Each occurrence limit",
-            "limits.general_aggregate": "General aggregate limit"
-        }
-        
-        for field_path, field_label in critical_fields.items():
-            value = self._get_nested_value(canonical_json, field_path)
-            if not value:
-                warnings.append(f"Missing critical field: {field_label}")
-        
-        # Check for low field count
+        self, raw_fields: Dict[str, Any], canonical_json: Dict[str, Any]
+    ) -> List[str]:
+        warnings: List[str] = []
+
+        # 1. Missing critical fields
+        for field_path, label in CRITICAL_FIELDS.items():
+            if not self._nested_value(canonical_json, field_path):
+                warnings.append(f"Missing critical field: {label}")
+
+        # 2. Low raw field count
         if len(raw_fields) < 20:
             warnings.append(
                 f"Low field count ({len(raw_fields)}). PDF may be incomplete or blank."
             )
-        
-        # Check for missing coverage type selection
-        occurrence = canonical_json.get("coverage_type", {}).get("occurrence")
-        claims_made = canonical_json.get("coverage_type", {}).get("claims_made")
-        
-        if not occurrence and not claims_made:
-            warnings.append("No coverage type selected (Occurrence or Claims Made)")
-        
+
+        # 3. Coverage type
+        coverage = (
+            canonical_json.get("coverage_type", {})
+            if isinstance(canonical_json, dict)
+            else {}
+        )
+        if not coverage.get("occurrence") and not coverage.get("claims_made"):
+            warnings.append(
+                "No coverage type selected (Occurrence or Claims Made)."
+            )
+
         return warnings
-    
-    def _get_nested_value(self, obj: Dict[str, Any], path: str) -> Any:
-        """
-        Get nested value from dictionary using dot notation.
-        
-        Args:
-            obj: Dictionary to traverse
-            path: Dot-separated path (e.g., "applicant.business_name")
-            
-        Returns:
-            Value at path or None if not found
-        """
-        keys = path.split('.')
-        current = obj
-        
-        for key in keys:
-            if isinstance(current, dict) and key in current:
-                current = current[key]
+
+    # ------------------------------------------------------------------- #
+    # Utilities
+    # ------------------------------------------------------------------- #
+    @staticmethod
+    def _nested_value(obj: Dict[str, Any], path: str) -> Any:
+        """Safely retrieve a dotted path from a nested dict."""
+        cur: Any = obj
+        for part in path.split("."):
+            if isinstance(cur, dict) and part in cur:
+                cur = cur[part]
             else:
                 return None
-        
-        return current
+        return cur
+
+    @staticmethod
+    def _build_metadata(
+        pdf_path: str,
+        raw_fields: Dict[str, Any],
+        field_confidence: Dict[str, float] | None = None,
+    ) -> Dict[str, Any]:
+        """Centralised metadata construction – easy to extend."""
+        low_conf = (
+            len([c for c in field_confidence.values() if c < 0.7])
+            if field_confidence
+            else 0
+        )
+        return {
+            "total_fields_extracted": len(raw_fields),
+            "form_type": "126",
+            "pdf_path": pdf_path,
+            "pdf_filename": os.path.basename(pdf_path),
+            "low_confidence_count": low_conf,
+        }

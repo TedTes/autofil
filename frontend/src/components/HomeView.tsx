@@ -1,25 +1,18 @@
 'use client'
 
-import {
-  CheckSquare,
-  Calendar,
-  Download,
-  FileText,
-  TrendingUp,
-  Zap,
-  Clock,
-  CheckCircle2,
-} from 'lucide-react'
-import React, { useRef } from 'react'
+import React, { useRef, useState } from 'react'
+import { CheckSquare, Calendar, Download, FileText, TrendingUp, Zap, Clock, CheckCircle2 } from 'lucide-react'
+import { uploadMultiplePdfs, uploadPdf } from '@/lib/api-client' // ← adjust if different
 
 type HomeViewProps = {
   totalSubmissions: number
-  onUploadFiles?: (files: File[]) => void
+  // refresh “Files” after upload
+  onUploadComplete?: (uploadedCount: number) => void
 }
 
-export function HomeView({ totalSubmissions, onUploadFiles }: HomeViewProps) {
+export function HomeView({ totalSubmissions, onUploadComplete }: HomeViewProps) {
   if (totalSubmissions === 0) {
-    return <EmptyDashboardState onUploadFiles={onUploadFiles} />
+    return <EmptyDashboardState onUploadComplete={onUploadComplete} />
   }
 
   return (
@@ -28,8 +21,7 @@ export function HomeView({ totalSubmissions, onUploadFiles }: HomeViewProps) {
       <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl shadow-sm p-8 text-white">
         <h2 className="text-3xl font-bold mb-2">Welcome to AutoFil</h2>
         <p className="text-blue-100 text-lg">
-          Intelligent document processing with automated extraction, version control, and export
-          capabilities
+          Intelligent document processing with automated extraction, version control, and export capabilities
         </p>
       </div>
 
@@ -44,25 +36,66 @@ export function HomeView({ totalSubmissions, onUploadFiles }: HomeViewProps) {
   )
 }
 
-function EmptyDashboardState({
-  onUploadFiles,
-}: {
-  onUploadFiles?: (files: File[]) => void
-}) {
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
+function EmptyDashboardState({ onUploadComplete }: { onUploadComplete?: (uploadedCount: number) => void }) {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const [progress, setProgress] = useState<Record<number, number>>({})
+  const [message, setMessage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
-  const triggerFilePicker = () => {
-    fileInputRef.current?.click()
-  }
+  const triggerFilePicker = () => fileInputRef.current?.click()
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    if (files && files.length > 0) {
-      const arr = Array.from(files)
-      onUploadFiles?.(arr)
-      e.target.value = ''
+  const doUpload = async (files: File[]) => {
+    if (!files.length) return
+    setIsUploading(true)
+    setError(null)
+    setMessage(null)
+    setProgress({})
+
+    try {
+      // per-file granular progress, using uploadPdf in a loop:
+      const results = []
+      for (let i = 0; i < files.length; i++) {
+        const res = await uploadPdf(files[i], (p) => {
+          setProgress((prev) => ({ ...prev, [i]: p }))
+        })
+
+        results.push(res)
+      }
+      setMessage(`Uploaded ${results.length} file${results.length > 1 ? 's' : ''} successfully.`)
+      onUploadComplete?.(results.length)
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Upload failed'
+
+      setError(errorMessage)
+    } finally {
+      setIsUploading(false)
+      // reset file input so selecting the same file again fires onChange
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      // auto clear success message after a few seconds
+      setTimeout(() => setMessage(null), 3500)
     }
   }
+
+  const handleFileChange: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
+    const files = Array.from(e.target.files ?? [])
+    await doUpload(files)
+  }
+
+  const handleDrop: React.DragEventHandler<HTMLDivElement> = async (e) => {
+    e.preventDefault()
+    const files = Array.from(e.dataTransfer.files ?? [])
+    await doUpload(files)
+  }
+
+  const handleDragOver: React.DragEventHandler<HTMLDivElement> = (e) => {
+    e.preventDefault()
+  }
+
+  const percentOverall =
+    Object.keys(progress).length > 0
+      ? Math.floor(Object.values(progress).reduce((a, b) => a + b, 0) / Object.keys(progress).length)
+      : 0
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -77,13 +110,17 @@ function EmptyDashboardState({
       <div
         className="bg-white rounded-2xl border-2 border-dashed border-blue-200 hover:border-blue-400 transition-all duration-200 group cursor-pointer"
         onClick={triggerFilePicker}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
       >
         <div className="px-8 py-14 text-center">
           <div className="w-16 h-16 mx-auto mb-5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center transform group-hover:scale-110 transition-transform duration-200 shadow-lg">
             <FileText className="w-9 h-9 text-white" />
           </div>
 
-          <h3 className="text-2xl font-bold text-gray-900 mb-2">Upload your first document</h3>
+          <h3 className="text-2xl font-bold text-gray-900 mb-2">
+            Upload your document(s)
+          </h3>
           <p className="text-gray-600 mb-6 max-w-md mx-auto">
             Drag and drop your PDF here, or click to browse. We support ACORD forms, loss runs,
             financial statements, and more.
@@ -95,12 +132,33 @@ function EmptyDashboardState({
               e.stopPropagation()
               triggerFilePicker()
             }}
-            className="inline-flex items-center gap-2 px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-sm transition-all duration-150"
+            className="inline-flex items-center gap-2 px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-sm transition-all duration-150 disabled:opacity-60"
+            disabled={isUploading}
           >
-            Upload document
+            {isUploading ? 'Uploading…' : 'Upload document'}
           </button>
 
           <p className="text-sm text-gray-400 mt-4">PDF, Excel, CSV • up to 50 MB</p>
+
+          {/* Progress + messages */}
+          {(isUploading || message || error) && (
+            <div className="mt-6 max-w-md mx-auto text-left">
+              {isUploading && (
+                <div className="w-full bg-gray-100 rounded-lg h-2 overflow-hidden">
+                  <div
+                    className="h-2 bg-blue-600 transition-all"
+                    style={{ width: `${percentOverall}%` }}
+                  />
+                </div>
+              )}
+              {message && (
+                <p className="mt-3 text-sm text-green-700">{message}</p>
+              )}
+              {error && (
+                <p className="mt-3 text-sm text-red-600">{error}</p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* hidden input */}

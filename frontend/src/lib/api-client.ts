@@ -26,6 +26,8 @@ const api = axios.create({
  * Error handler
  */
 function handleApiError(error: unknown): never {
+  console.log("handleApiError log")
+  console.log(error)
   if (axios.isAxiosError(error)) {
     const axiosError = error as AxiosError<ApiResponse>
     
@@ -71,7 +73,7 @@ export async function uploadPdf(
     const formData = new FormData()
     formData.append('file', file)
 
-    const response = await api.post<ApiResponse<SubmissionResponse>>(
+    const response = await api.post(
       '/submissions/upload',
       formData,
       {
@@ -90,14 +92,15 @@ export async function uploadPdf(
     if (!response.data.success) {
       throw new Error(response.data.error || 'Upload failed')
     }
-    
-    const { submission_id, extraction } = response.data.data!;
+
+    const { submission_id, extraction } = response.data!;
     
     return {
       submission_id: submission_id!,
       extraction: extraction!,
     }
   } catch (error) {
+    
     handleApiError(error)
   }
 }

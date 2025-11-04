@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo,useRef } from 'react'
 import { 
   Search, Filter, Download, Trash2, RefreshCw, 
   Grid3x3, List, Loader2, FolderOpen, FileText,
-  Calendar, User, TrendingUp,X, ChevronDown, Sliders
+  X, Sliders,Clock
 } from 'lucide-react'
 import { getAllSubmissions, type SubmissionListItem } from '@/lib/api-client'
 import { ConfidenceBadgeCompact } from '@/components/ConfidenceBadge'
@@ -28,25 +28,83 @@ export function DocumentsView({ onFileClick }: DocumentsViewProps) {
   const [confidenceRange, setConfidenceRange] = useState<[number, number]>([0, 100])
   const [dateRange, setDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' })
   const [selectedClient, setSelectedClient] = useState<string>('all')
+
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
+const [recentSearches, setRecentSearches] = useState<string[]>([])
+const [showSearchSuggestions, setShowSearchSuggestions] = useState(false)
+const searchInputRef = useRef<HTMLInputElement>(null)
   // Fetch files on mount
   useEffect(() => {
     fetchFiles()
   }, [])
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery)
+      
+      // Save to recent searches if not empty and actually searched
+      if (searchQuery.trim() && searchQuery.length > 2) {
+        setRecentSearches((prev) => {
+          const filtered = prev.filter((s) => s !== searchQuery.trim())
+          return [searchQuery.trim(), ...filtered].slice(0, 5) // Keep last 5
+        })
+      }
+    }, 300) // 300ms delay
+  
+    return () => clearTimeout(timer)
+  }, [searchQuery])
 
-  const fetchFiles = async () => {
-    setIsLoading(true)
-    setError(null)
-
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchInputRef.current && !searchInputRef.current.contains(e.target as Node)) {
+        setShowSearchSuggestions(false)
+      }
+    }
+  
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+  // Load recent searches from localStorage on mount
+useEffect(() => {
+  const saved = localStorage.getItem('recentSearches')
+  if (saved) {
     try {
-      const submissions = await getAllSubmissions()
-      setFiles(submissions)
-    } catch (err) {
-      console.error('Failed to fetch submissions:', err)
-      setError(err instanceof Error ? err.message : 'Failed to load files')
-    } finally {
-      setIsLoading(false)
+      setRecentSearches(JSON.parse(saved))
+    } catch (e) {
+      console.error('Failed to parse recent searches')
     }
   }
+}, [])
+// Save recent searches to localStorage
+useEffect(() => {
+  if (recentSearches.length > 0) {
+    localStorage.setItem('recentSearches', JSON.stringify(recentSearches))
+  }
+}, [recentSearches])
+
+// Keyboard shortcuts
+useEffect(() => {
+  const handleKeyDown = (e: KeyboardEvent) => {
+    // Ctrl/Cmd + K to focus search
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault()
+      searchInputRef.current?.focus()
+      setShowSearchSuggestions(true)
+    }
+    
+    // Escape to clear search and close suggestions
+    if (e.key === 'Escape') {
+      if (searchQuery) {
+        setSearchQuery('')
+        setDebouncedSearchQuery('')
+      }
+      setShowSearchSuggestions(false)
+      searchInputRef.current?.blur()
+    }
+  }
+
+  document.addEventListener('keydown', handleKeyDown)
+  return () => document.removeEventListener('keydown', handleKeyDown)
+}, [searchQuery])
   // Get unique clients for filter dropdown
 const uniqueClients = useMemo(() => {
   const clients = new Set(files.map((f) => f.client_name).filter(Boolean))
@@ -90,8 +148,8 @@ const filteredFiles = useMemo(() => {
   }
 
   // Apply search query
-  if (searchQuery.trim()) {
-    const query = searchQuery.toLowerCase()
+  if (debouncedSearchQuery.trim()) {
+    const query = debouncedSearchQuery.toLowerCase()
     result = result.filter(
       (file) =>
         file.filename.toLowerCase().includes(query) ||
@@ -101,7 +159,40 @@ const filteredFiles = useMemo(() => {
   }
 
   return result
-}, [files, selectedFilter, searchQuery, confidenceRange, dateRange, selectedClient])
+}, [files, selectedFilter, debouncedSearchQuery, confidenceRange, dateRange, selectedClient])
+
+const searchSuggestions = useMemo(() => {
+  if (!searchQuery.trim() || searchQuery.length < 2) return []
+
+  const query = searchQuery.toLowerCase()
+  const suggestions = new Set<string>()
+
+  // Add matching filenames
+  files.forEach((file) => {
+    if (file.filename.toLowerCase().includes(query)) {
+      suggestions.add(file.filename)
+    }
+    if (file.client_name?.toLowerCase().includes(query)) {
+      suggestions.add(file.client_name)
+    }
+  })
+
+  return Array.from(suggestions).slice(0, 5)
+}, [files, searchQuery])
+const fetchFiles = async () => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const submissions = await getAllSubmissions()
+      setFiles(submissions)
+    } catch (err) {
+      console.error('Failed to fetch submissions:', err)
+      setError(err instanceof Error ? err.message : 'Failed to load files')
+    } finally {
+      setIsLoading(false)
+    }
+    }
 
   // Toggle file selection
   const toggleFileSelection = (fileId: string) => {
@@ -135,7 +226,10 @@ const filteredFiles = useMemo(() => {
       alert('Bulk delete functionality in Commit 15')
     }
   }
-
+  const clearRecentSearches = () => {
+    setRecentSearches([])
+    localStorage.removeItem('recentSearches')
+  }
   if (isLoading) {
     return <LoadingState />
   }
@@ -186,26 +280,99 @@ const clearAdvancedFilters = () => {
         {/* Search and Filters Row */}
         <div className="flex flex-col sm:flex-row gap-3">
           {/* Search */}
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search by filename, policy number, client..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            )}
+          {/* Enhanced Search */}
+<div className="flex-1 relative">
+  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+  <input
+    ref={searchInputRef}
+    type="text"
+    placeholder="Search by filename, client, or policy number..."
+    value={searchQuery}
+    onChange={(e) => setSearchQuery(e.target.value)}
+    onFocus={() => setShowSearchSuggestions(true)}
+    className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
+  />
+  
+  {/* Loading indicator while debouncing */}
+  {searchQuery && searchQuery !== debouncedSearchQuery && (
+    <div className="absolute right-10 top-1/2 -translate-y-1/2">
+      <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
+    </div>
+  )}
+  
+  {/* Clear button */}
+  {searchQuery && (
+    <button
+      onClick={() => {
+        setSearchQuery('')
+        setDebouncedSearchQuery('')
+        searchInputRef.current?.focus()
+      }}
+      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+    >
+      <X className="w-4 h-4" />
+    </button>
+  )}
+
+  {/* Search Suggestions Dropdown */}
+  {showSearchSuggestions && (searchSuggestions.length > 0 || recentSearches.length > 0) && (
+    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 max-h-80 overflow-y-auto">
+      {/* Recent Searches */}
+      {recentSearches.length > 0 && !searchQuery && (
+        <div className="p-2 border-b border-gray-100">
+          <div className="flex items-center justify-between px-2 py-1">
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              Recent Searches
+            </span>
+            <button
+              onClick={clearRecentSearches}
+              className="text-xs text-blue-600 hover:text-blue-700"
+            >
+              Clear
+            </button>
           </div>
+          {recentSearches.map((recent, idx) => (
+            <button
+              key={idx}
+              onClick={() => {
+                setSearchQuery(recent)
+                setShowSearchSuggestions(false)
+              }}
+              className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 rounded flex items-center gap-2"
+            >
+              <Clock className="w-4 h-4 text-gray-400" />
+              {recent}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Suggestions */}
+      {searchSuggestions.length > 0 && searchQuery && (
+        <div className="p-2">
+          <div className="px-2 py-1">
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              Suggestions
+            </span>
+          </div>
+          {searchSuggestions.map((suggestion, idx) => (
+            <button
+              key={idx}
+              onClick={() => {
+                setSearchQuery(suggestion)
+                setShowSearchSuggestions(false)
+              }}
+              className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 rounded flex items-center gap-2"
+            >
+              <Search className="w-4 h-4 text-gray-400" />
+              <span className="flex-1 truncate">{suggestion}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )}
+</div>
 
       
   {/* Filters and View Toggle */}
@@ -420,6 +587,24 @@ const clearAdvancedFilters = () => {
         )}
      
       </div>
+      {/* Search Stats */}
+{debouncedSearchQuery && (
+  <div className="mt-2 flex items-center gap-2 text-sm">
+    <span className="text-gray-600">
+      Showing {filteredFiles.length} result{filteredFiles.length !== 1 ? 's' : ''} for
+    </span>
+    <span className="font-medium text-gray-900">&quot;{debouncedSearchQuery}&quot;</span>
+    <button
+      onClick={() => {
+        setSearchQuery('')
+        setDebouncedSearchQuery('')
+      }}
+      className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+    >
+      Clear search
+    </button>
+  </div>
+)}
 
       {/* Bulk Actions Bar (shows when files selected) */}
       {selectedFiles.size > 0 && (

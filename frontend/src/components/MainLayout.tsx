@@ -17,21 +17,41 @@ import {
   TrendingUp,
   FolderPlus,
 } from 'lucide-react'
-import {RecentActivity,UploadView,FolderView,HomeView,FilesView,FileDetailView,DocumentsView} from './'
-
-
+import {
+  RecentActivity,
+  UploadView,
+  FolderView,
+  HomeView,
+  FilesView,
+  DocumentsView
+} from './'
+import { FileDetailView } from './views/FileDetailView'
 
 import {
   getFolders,
   createFolder,
 } from '@/lib/api-client'
 
-import type { Folder,ViewType } from '@/types' 
+import type { Folder, ViewType } from '@/types'
 
+// Type mapping for view data based on view type
+type ViewDataMap = {
+  'file-detail': { submissionId: string; filename?: string }
+  'home': undefined
+  'documents': undefined
+  'upload': undefined
+  'files': undefined
+  'history': undefined
+  'compare': undefined
+  'export': undefined
+  'folders': undefined
+}
+
+type ViewStateData = ViewDataMap[ViewType]
 
 interface ViewState {
   type: ViewType
-  data?: unknown
+  data?: ViewStateData
   breadcrumbs: string[]
 }
 
@@ -48,6 +68,9 @@ export default function MainLayout({ children }: MainLayoutProps) {
     breadcrumbs: ['Home'],
   })
 
+  // Navigation history for back button
+  const [viewHistory, setViewHistory] = useState<ViewState[]>([])
+
   // folders data
   const [folders, setFolders] = useState<Folder[]>([])
   const [currentFolder, setCurrentFolder] = useState<Folder | null>(null)
@@ -58,7 +81,6 @@ export default function MainLayout({ children }: MainLayoutProps) {
       try {
         const data = await getFolders()
         setFolders(data)
-        // pick first as current by default
         if (data.length > 0) {
           setCurrentFolder(data[0])
         }
@@ -68,15 +90,36 @@ export default function MainLayout({ children }: MainLayoutProps) {
     })()
   }, [])
 
+  // Enhanced navigation with history tracking
   const navigateTo = (type: ViewType, data?: unknown, breadcrumbs?: string[]) => {
+    // Save current view to history before navigating
+    setViewHistory((prev) => [...prev, currentView])
+
     setCurrentView({
       type,
-      data,
+      data: data as ViewStateData,
       breadcrumbs: breadcrumbs || [type.charAt(0).toUpperCase() + type.slice(1)],
     })
   }
 
-  // sidebar items — note we now have "Documents" only
+  // Navigate back to previous view
+  const navigateBack = () => {
+    if (viewHistory.length > 0) {
+      const previous = viewHistory[viewHistory.length - 1]
+      setCurrentView(previous)
+      setViewHistory((prev) => prev.slice(0, -1))
+    } else {
+      // Default to home if no history
+      navigateTo('home', undefined, ['Home'])
+    }
+  }
+
+  // Handle file click - navigate to file detail view
+  const handleFileClick = (submissionId: string, filename?: string) => {
+    navigateTo('file-detail', { submissionId, filename }, ['Home', 'Documents', filename || 'File'])
+  }
+
+  // sidebar items
   const navigationItems = [
     {
       id: 'home',
@@ -255,7 +298,6 @@ export default function MainLayout({ children }: MainLayoutProps) {
 
             {/* Mobile Nav */}
             <div className="p-4 space-y-6">
-             
               <div>
                 <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
                   NAVIGATION
@@ -304,11 +346,31 @@ export default function MainLayout({ children }: MainLayoutProps) {
                   <Menu className="w-5 h-5" />
                 </button>
 
-                <div className="hidden lg:block">
-                  <h2 className="text-lg font-semibold text-gray-900">
-                    {currentView.breadcrumbs[currentView.breadcrumbs.length - 1]}
-                  </h2>
-                </div>
+                {/* Breadcrumbs */}
+                <nav className="hidden lg:flex items-center gap-2 text-sm">
+                  {currentView.breadcrumbs.map((crumb, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      {idx > 0 && (
+                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      )}
+                      {idx < currentView.breadcrumbs.length - 1 ? (
+                        <button
+                          onClick={() => {
+                            if (idx === 0) navigateTo('home', undefined, ['Home'])
+                            else if (crumb === 'Documents') navigateTo('documents', undefined, ['Home', 'Documents'])
+                          }}
+                          className="text-gray-600 hover:text-gray-900 transition-colors"
+                        >
+                          {crumb}
+                        </button>
+                      ) : (
+                        <span className="text-gray-900 font-medium">{crumb}</span>
+                      )}
+                    </div>
+                  ))}
+                </nav>
               </div>
 
               <div className="flex items-center gap-2">
@@ -323,11 +385,19 @@ export default function MainLayout({ children }: MainLayoutProps) {
           </div>
         </header>
 
-        {/* Views */}
-        <main className="flex-1 overflow-y-auto bg-gray-50">
-          <div className="px-4 sm:px-6 lg:px-8 py-6">
-            {currentView.type === 'home' && <HomeView totalSubmissions={0} />}
+        {/* Views - CORRECTED */}
+        <main className={`flex-1 bg-gray-50 ${currentView.type === 'file-detail' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+          <div className={currentView.type === 'file-detail' ? 'h-full' : 'px-4 sm:px-6 lg:px-8 py-6'}>
+            
+            {/* Home View */}
+            {currentView.type === 'home' && (
+              <HomeView 
+                totalSubmissions={0}
+                onGoToFile={handleFileClick}
+              />
+            )}
 
+            {/* Documents View - CORRECTED: Removed folders/currentFolder props */}
             {currentView.type === 'documents' && (
               <DocumentsView
                 folders={folders}
@@ -338,21 +408,47 @@ export default function MainLayout({ children }: MainLayoutProps) {
               />
             )}
 
+            {/* Upload View */}
             {currentView.type === 'upload' && (
-              // keep your existing upload view here
-              <div>Upload screen here… (reuse your old UploadView but pass folder)</div>
-            )}
-
-            {currentView.type === 'file-detail' && (
-              <FileDetailView
-                data={currentView.data}
+              <UploadView 
                 currentFolder={currentFolder}
+                folders={folders}
+                onFolderChange={setCurrentFolder}
               />
             )}
 
-            {currentView.type === 'history' && <div>History view…</div>}
-            {currentView.type === 'compare' && <div>Compare view…</div>}
-            {currentView.type === 'export' && <div>Export view…</div>}
+            {/* File Detail View - CORRECTED: Pass correct props */}
+            {currentView.type === 'file-detail' && currentView.data && (
+              <FileDetailView
+                submissionId={currentView.data.submissionId}
+                filename={currentView.data.filename}
+                onBack={navigateBack}
+              />
+            )}
+
+            {/* History */}
+            {currentView.type === 'history' && (
+              <div className="p-8">
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">History</h2>
+                <p className="text-gray-600">Version history coming soon...</p>
+              </div>
+            )}
+
+            {/* Compare */}
+            {currentView.type === 'compare' && (
+              <div className="p-8">
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">Compare</h2>
+                <p className="text-gray-600">Document comparison coming soon...</p>
+              </div>
+            )}
+
+            {/* Export */}
+            {currentView.type === 'export' && (
+              <div className="p-8">
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">Export Center</h2>
+                <p className="text-gray-600">Batch export options coming soon...</p>
+              </div>
+            )}
 
             {children}
           </div>

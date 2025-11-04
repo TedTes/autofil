@@ -8,7 +8,13 @@ import {
   ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react'
 
-import { getAllSubmissions, type SubmissionListItem } from '@/lib/api-client'
+import { getAllSubmissions, type SubmissionListItem , bulkExportSubmissions,
+  bulkDeleteSubmissions,
+  exportSingleSubmission,
+  deleteSubmission,
+  downloadZip,
+  downloadBlob} from '@/lib/api-client'
+
 import { ConfidenceBadgeCompact } from '@/components/ConfidenceBadge'
 import {formatDate} from "../../lib";
 
@@ -42,6 +48,13 @@ export function DocumentsView({ onFileClick }: DocumentsViewProps) {
   const [isBulkOperationInProgress, setIsBulkOperationInProgress] = useState(false)
   const [bulkOperationProgress, setBulkOperationProgress] = useState({ current: 0, total: 0 })
   const [showBulkConfirmModal, setShowBulkConfirmModal] = useState<'export' | 'delete' | null>(null)
+
+  const [operationResults, setOperationResults] = useState<{
+    success: number
+    failed: number
+    errors: string[]
+  }>({ success: 0, failed: 0, errors: [] })
+  const [showResultsModal, setShowResultsModal] = useState(false)
 
   // Fetch files on mount
   useEffect(() => {
@@ -292,27 +305,79 @@ const toggleSelectAll = () => {
     setIsBulkOperationInProgress(true)
     
     const selectedFilesList = Array.from(selectedFiles)
+    const selectedFilesData = files.filter((f) => selectedFilesList.includes(f.submission_id))
+    
     setBulkOperationProgress({ current: 0, total: selectedFilesList.length })
+    
+    let successCount = 0
+    let failedCount = 0
+    const errors: string[] = []
   
     try {
-      for (let i = 0; i < selectedFilesList.length; i++) {
-        const fileId = selectedFilesList[i]
-        const file = files.find((f) => f.submission_id === fileId)
-        
-        // Simulate export (replace with real API call)
-        await new Promise((resolve) => setTimeout(resolve, 500))
-        
-        // Update progress
-        setBulkOperationProgress({ current: i + 1, total: selectedFilesList.length })
-        
-        console.log(`Exported: ${file?.filename}`)
+      // Strategy 1: If backend supports bulk export (ZIP), use it
+      if (selectedFilesList.length > 5) {
+        try {
+          const result = await bulkExportSubmissions(selectedFilesList)
+          
+          if (result.success) {
+            successCount = result.results.filter((r) => r.success).length
+            failedCount = result.results.filter((r) => !r.success).length
+          } else {
+            throw new Error('Bulk export failed')
+          }
+        } catch (err) {
+          console.error('Bulk export failed, falling back to individual exports:', err)
+          // Fall back to individual exports
+        }
+      }
+      
+      // Strategy 2: Individual exports (for small batches or when bulk fails)
+      if (selectedFilesList.length <= 5 || successCount === 0) {
+        for (let i = 0; i < selectedFilesList.length; i++) {
+          const fileId = selectedFilesList[i]
+          const file = selectedFilesData[i]
+          
+          try {
+            const pdfBlob = await exportSingleSubmission(fileId)
+            
+            // Generate filename
+            const timestamp = new Date().toISOString().split('T')[0]
+            const baseFilename = file.filename.replace('.pdf', '') || 'document'
+            const exportFilename = `${baseFilename}_filled_${timestamp}.pdf`
+            
+            // Download individual PDF
+            downloadBlob(pdfBlob, exportFilename)
+            
+            successCount++
+          } catch (err) {
+            console.error(`Failed to export ${file.filename}:`, err)
+            failedCount++
+            errors.push(`${file.filename}: ${err instanceof Error ? err.message : 'Unknown error'}`)
+          }
+          
+          // Update progress
+          setBulkOperationProgress({ current: i + 1, total: selectedFilesList.length })
+          
+          // Small delay between downloads to prevent browser blocking
+          if (i < selectedFilesList.length - 1) {
+            await new Promise((resolve) => setTimeout(resolve, 200))
+          }
+        }
       }
   
-      alert(`Successfully exported ${selectedFilesList.length} file(s)`)
-      clearSelection()
+      // Show results
+      setOperationResults({ success: successCount, failed: failedCount, errors })
+      
+      if (failedCount === 0) {
+        alert(`✓ Successfully exported ${successCount} file(s)`)
+        clearSelection()
+      } else {
+        setShowResultsModal(true)
+      }
+      
     } catch (err) {
       console.error('Bulk export failed:', err)
-      alert('Failed to export some files')
+      alert(`Failed to export files: ${err instanceof Error ? err.message : 'Unknown error'}`)
     } finally {
       setIsBulkOperationInProgress(false)
       setBulkOperationProgress({ current: 0, total: 0 })
@@ -324,34 +389,71 @@ const toggleSelectAll = () => {
     setIsBulkOperationInProgress(true)
     
     const selectedFilesList = Array.from(selectedFiles)
+    const selectedFilesData = files.filter((f) => selectedFilesList.includes(f.submission_id))
+    
     setBulkOperationProgress({ current: 0, total: selectedFilesList.length })
+    
+    let successCount = 0
+    let failedCount = 0
+    const errors: string[] = []
   
     try {
-      for (let i = 0; i < selectedFilesList.length; i++) {
-        const fileId = selectedFilesList[i]
-        
-        // Simulate delete (replace with real API call)
-        await new Promise((resolve) => setTimeout(resolve, 300))
-        
-        // Update progress
-        setBulkOperationProgress({ current: i + 1, total: selectedFilesList.length })
-        
-        console.log(`Deleted: ${fileId}`)
+      // Strategy 1: Try bulk delete API if available
+      if (selectedFilesList.length > 3) {
+        try {
+          await bulkDeleteSubmissions(selectedFilesList)
+          // Assume full success if API completes without throwing
+          successCount = selectedFilesList.length
+        } catch (err) {
+          console.error('Bulk delete failed, falling back to individual deletes:', err)
+          throw err
+        }
+      } else {
+        // Strategy 2: Individual deletes for small batches
+        for (let i = 0; i < selectedFilesList.length; i++) {
+          const fileId = selectedFilesList[i]
+          const file = selectedFilesData[i]
+          
+          try {
+            await deleteSubmission(fileId)
+            successCount++
+          } catch (err) {
+            console.error(`Failed to delete ${file.filename}:`, err)
+            failedCount++
+            errors.push(`${file.filename}: ${err instanceof Error ? err.message : 'Unknown error'}`)
+          }
+          
+          // Update progress
+          setBulkOperationProgress({ current: i + 1, total: selectedFilesList.length })
+        }
       }
   
-      // Remove deleted files from state
-      setFiles((prev) => prev.filter((f) => !selectedFilesList.includes(f.submission_id)))
-      alert(`Successfully deleted ${selectedFilesList.length} file(s)`)
-      clearSelection()
+      // Remove successfully deleted files from state
+      if (successCount > 0) {
+        setFiles((prev) => prev.filter((f) => !selectedFilesList.includes(f.submission_id)))
+      }
+  
+      // Show results
+      setOperationResults({ success: successCount, failed: failedCount, errors })
+      
+      if (failedCount === 0) {
+        alert(`✓ Successfully deleted ${successCount} file(s)`)
+        clearSelection()
+      } else {
+        setShowResultsModal(true)
+      }
+      
     } catch (err) {
       console.error('Bulk delete failed:', err)
-      alert('Failed to delete some files')
+      alert(`Failed to delete files: ${err instanceof Error ? err.message : 'Unknown error'}`)
     } finally {
       setIsBulkOperationInProgress(false)
       setBulkOperationProgress({ current: 0, total: 0 })
       
       // Refresh the list
-      fetchFiles()
+      if (successCount > 0) {
+        await fetchFiles()
+      }
     }
   }
   const clearRecentSearches = () => {
@@ -900,6 +1002,15 @@ const handleSort = (column: typeof sortBy) => {
         onConfirm={showBulkConfirmModal === 'delete' ? confirmBulkDelete : confirmBulkExport}
         onCancel={() => setShowBulkConfirmModal(null)}
       />
+      {/* Operation Results Modal */}
+<OperationResultsModal
+  isOpen={showResultsModal}
+  results={operationResults}
+  onClose={() => {
+    setShowResultsModal(false)
+    clearSelection()
+  }}
+/>
     </div>
   )
 }
@@ -1215,7 +1326,95 @@ function EmptyState({ onFileClick }: { onFileClick?: (id: string, name: string) 
     </div>
   )
 }
+// Operation Results Modal
+function OperationResultsModal({
+  isOpen,
+  results,
+  onClose,
+}: {
+  isOpen: boolean
+  results: { success: number; failed: number; errors: string[] }
+  onClose: () => void
+}) {
+  if (!isOpen) return null
 
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">Operation Results</h3>
+          <button
+            onClick={onClose}
+            className="p-1 text-gray-400 hover:text-gray-600 rounded transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-6 overflow-y-auto flex-1">
+          {/* Summary */}
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-green-900">{results.success}</p>
+                  <p className="text-sm text-green-700">Successful</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                  <X className="w-6 h-6 text-red-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-red-900">{results.failed}</p>
+                  <p className="text-sm text-red-700">Failed</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Error Details */}
+          {results.errors.length > 0 && (
+            <div>
+              <h4 className="text-sm font-semibold text-gray-900 mb-3">Failed Operations:</h4>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {results.errors.map((error, idx) => (
+                  <div
+                    key={idx}
+                    className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-800"
+                  >
+                    <p className="font-medium mb-1">Error {idx + 1}:</p>
+                    <p className="text-xs">{error}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 // Bulk Confirmation Modal Component
 function BulkConfirmModal({
   isOpen,

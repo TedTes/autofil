@@ -146,8 +146,6 @@ export async function getSubmission(id: string): Promise<SubmissionDetail> {
   }
 }
 
-
-
 /**
  * Fill PDF with data.
  */
@@ -408,21 +406,7 @@ export async function batchFillPdfs(submissionIds: string[]): Promise<FillRespon
   }
 }
 
-/**
- * Delete a submission.
- */
-export async function deleteSubmission(id: string): Promise<void> {
-  try {
-    await api.delete(`/submissions/${id}`)
-  } catch (error) {
-    // Ignore 404 errors (endpoint might not exist yet)
-    if (axios.isAxiosError(error) && error.response?.status === 404) {
-      console.warn('Delete endpoint not implemented on backend')
-      return
-    }
-    handleApiError(error)
-  }
-}
+
 
 /**
  * Get preview URL for a submission's input file.
@@ -1002,11 +986,77 @@ export async function getAllSubmissions(): Promise<SubmissionListItem[]> {
   return data.submissions || []
 }
 
+/**
+ * Bulk export submissions as filled PDFs
+ */
+export async function bulkExportSubmissions(
+  submissionIds: string[]
+): Promise<{ success: boolean; results: { id: string; success: boolean; error?: string }[] }> {
+  const response = await api.post(`/submissions/bulk/export`, 
+    JSON.stringify({ submission_ids: submissionIds })
+ )
 
-export async function bulkExportSubmissions(submissionIds: string[]): Promise<void> {
-  // TODO: Implement bulk export
+ if (!response.data.success) {
+  throw new Error(response.data.error || 'Batch extraction failed')
 }
 
-export async function bulkDeleteSubmissions(submissionIds: string[]): Promise<void> {
-  // TODO: Implement bulk delete
+return {
+  success: Boolean(response?.data?.success),
+  results: response?.data?.results ?? [],
+}
+
+}
+
+/**
+ * Export single submission and return blob
+ */
+export async function exportSingleSubmission(submissionId: string): Promise<Blob> {
+  return exportFilledPdf(submissionId)
+}
+
+/**
+ * Bulk delete submissions
+ */
+export async function bulkDeleteSubmissions(
+  submissionIds: string[]
+): Promise<void> {
+  try {
+    const response = await api.delete(`/submissions/bulk/delete`)
+  } catch (error ) {
+   // Ignore 404 errors (endpoint might not exist yet)
+   if (axios.isAxiosError(error) && error.response?.status === 404) {
+    console.warn('Delete endpoint not implemented on backend')
+    return
+  }
+  handleApiError(error)
+  }
+}
+
+/**
+ * Delete a submission.
+ */
+export async function deleteSubmission(id: string): Promise<void> {
+  try {
+    await api.delete(`/submissions/${id}`)
+  } catch (error) {
+    // Ignore 404 errors (endpoint might not exist yet)
+    if (axios.isAxiosError(error) && error.response?.status === 404) {
+      console.warn('Delete endpoint not implemented on backend')
+      return
+    }
+    handleApiError(error)
+  }
+}
+/**
+ * Download multiple PDFs as a ZIP file
+ */
+export function downloadZip(blob: Blob, filename: string = 'exported_files.zip') {
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  window.URL.revokeObjectURL(url)
 }

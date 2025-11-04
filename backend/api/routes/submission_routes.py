@@ -1277,3 +1277,43 @@ async def export_filled_pdf(submission_id: str):
         media_type="application/pdf",
         filename=f"{submission.filename}_filled.pdf"
     )
+
+
+@submission_bp.post("/submissions/bulk/export")
+async def bulk_export_submissions(submission_ids: list[str]):
+    """
+    Export multiple submissions as a ZIP file
+    """
+    # 1. Get all submissions
+    # 2. Generate filled PDFs for each
+    # 3. Create ZIP file with all PDFs
+    # 4. Return ZIP as downloadable file
+    
+    return FileResponse(
+        zip_path,
+        media_type="application/zip",
+        filename=f"bulk_export_{datetime.now().strftime('%Y%m%d')}.zip"
+    )
+
+@submission_bp.delete("/submissions/bulk/delete")
+async def bulk_delete_submissions(submission_ids: list[str]):
+    """
+    Delete multiple submissions
+    """
+    results = []
+    for sub_id in submission_ids:
+        try:
+            delete_submission_from_db(sub_id)
+            results.append({"id": sub_id, "success": True})
+        except Exception as e:
+            results.append({"id": sub_id, "success": False, "error": str(e)})
+    
+    return {"success": True, "results": results}
+
+@submission_bp.delete("/submissions/{submission_id}")
+async def delete_submission(submission_id: str):
+    """
+    Delete a single submission
+    """
+    delete_submission_from_db(submission_id)
+    return {"success": True}

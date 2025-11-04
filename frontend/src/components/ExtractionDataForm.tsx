@@ -2,11 +2,11 @@
 
 import { useState } from 'react'
 import { AlertCircle, Info, CheckCircle2 } from 'lucide-react'
-
+import { ConfidenceBar } from '@/components/ConfidenceBadge'
 // Type definitions for extracted data
 export interface ExtractedField {
   field_name: string
-  field_value: any
+  field_value: string 
   confidence?: number
   field_type?: 'text' | 'number' | 'date' | 'select' | 'boolean'
   section?: string
@@ -58,7 +58,7 @@ export function ExtractionDataForm({
     })
   }
 
-  const handleFieldChange = (fieldName: string, newValue: any) => {
+  const handleFieldChange = (fieldName: string, newValue: string) => {
     const updatedFields = fields.map((field) =>
       field.field_name === fieldName ? { ...field, field_value: newValue } : field
     )
@@ -82,29 +82,10 @@ export function ExtractionDataForm({
     <div className="space-y-6">
       {/* Overall Confidence Banner */}
       {data.overall_confidence !== undefined && (
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-100">
-          <div className="flex items-center gap-3">
-            <div className="flex-shrink-0">
-              <CheckCircle2 className="w-6 h-6 text-blue-600" />
-            </div>
-            <div className="flex-1">
-              <h4 className="text-sm font-semibold text-gray-900 mb-1">
-                Overall Confidence
-              </h4>
-              <div className="flex items-center gap-3">
-                <div className="flex-1 bg-white rounded-full h-2 overflow-hidden">
-                  <div
-                    className={`h-2 transition-all ${getConfidenceColor(data.overall_confidence)}`}
-                    style={{ width: `${data.overall_confidence}%` }}
-                  />
-                </div>
-                <span className="text-sm font-bold text-gray-900">
-                  {data.overall_confidence}%
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ConfidenceBar 
+        confidence={data.overall_confidence} 
+        label="Overall Extraction Confidence"
+      />
       )}
 
       {/* Warnings */}
@@ -194,7 +175,7 @@ function FieldInput({
 }: {
   field: ExtractedField
   isEditable: boolean
-  onChange: (value: any) => void
+  onChange: (value: string) => void
 }) {
   const hasLowConfidence = field.confidence !== undefined && field.confidence < 70
   const isEmpty = !field.field_value || field.field_value === ''
@@ -250,7 +231,7 @@ function FieldInput({
 function renderFieldInput(
   field: ExtractedField,
   isEditable: boolean,
-  onChange: (value: any) => void
+  onChange: (value: string) => void
 ) {
   const baseClasses = `w-full px-3 py-2 border rounded-lg text-sm transition-colors ${
     isEditable
@@ -281,8 +262,8 @@ function renderFieldInput(
         <label className="flex items-center gap-2 cursor-pointer">
           <input
             type="checkbox"
-            checked={field.field_value === true}
-            onChange={(e) => onChange(e.target.checked)}
+            checked={field.field_value?true: false}
+            onChange={(e) => onChange(field.field_value)}
             disabled={!isEditable}
             className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:cursor-not-allowed"
           />

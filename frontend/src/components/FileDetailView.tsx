@@ -25,7 +25,7 @@ export function FileDetailView({
   const fileData: FileDetailData = isFileDetailData(data) ? data : {}
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6"> 
       <div className="bg-white rounded-lg border border-gray-200 p-6">
         <div className="flex items-start justify-between mb-6">
           <div>

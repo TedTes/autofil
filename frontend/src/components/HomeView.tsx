@@ -6,6 +6,7 @@ import {
   CheckCircle2, Upload, File, FileSpreadsheet, X, Eye, Check
 } from 'lucide-react'
 import { uploadPdf, getSubmission, downloadPdf } from '@/lib/api-client'
+import { ConfidenceBadgeCompact } from '@/components/ConfidenceBadge'
 
 type Phase = 'upload' | 'extract' | 'export'
 
@@ -15,6 +16,7 @@ type UploadedRow = {
   uploadedAt: string
   fileType?: 'pdf' | 'excel' | 'csv' | 'other'
   fileSize?: number
+  confidence?:number
 }
 
 type HomeViewProps = {
@@ -510,9 +512,13 @@ function FileToast({
 
       {/* File info */}
       <div className="flex-1 min-w-0">
+        <div>
         <h4 className="text-sm font-semibold text-gray-900 truncate" title={row.filename}>
           {row.filename}
         </h4>
+        {row.confidence && <ConfidenceBadgeCompact confidence={row.confidence} />}
+        </div>
+       
         <div className="flex items-center gap-2 text-xs text-gray-500">
           <span className={`font-medium ${fileColor.text}`}>
             {row.fileType?.toUpperCase() || 'FILE'}

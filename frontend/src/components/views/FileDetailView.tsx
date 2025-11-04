@@ -65,7 +65,7 @@ export function FileDetailView({ submissionId, filename, onBack }: FileDetailVie
           },
           {
             field_name: 'auto_renewal',
-            field_value: true,
+            field_value: "true",
             confidence: 100,
             field_type: 'boolean',
             section: 'Policy Details',

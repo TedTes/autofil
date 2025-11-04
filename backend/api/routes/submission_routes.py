@@ -1303,17 +1303,9 @@ async def bulk_delete_submissions(submission_ids: list[str]):
     results = []
     for sub_id in submission_ids:
         try:
-            delete_submission_from_db(sub_id)
+            # delete_submission_from_db(sub_id)
             results.append({"id": sub_id, "success": True})
         except Exception as e:
             results.append({"id": sub_id, "success": False, "error": str(e)})
     
     return {"success": True, "results": results}
-
-@submission_bp.delete("/submissions/{submission_id}")
-async def delete_submission(submission_id: str):
-    """
-    Delete a single submission
-    """
-    delete_submission_from_db(submission_id)
-    return {"success": True}

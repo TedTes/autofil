@@ -146,28 +146,7 @@ export async function getSubmission(id: string): Promise<SubmissionDetail> {
   }
 }
 
-/**
- * Update submission data.
- */
-export async function updateSubmission(
-  id: string,
-  data:SubmissionDetail
-): Promise<SubmissionDetail> {
-  try {
-    const response = await api.put<ApiResponse<{ submission: SubmissionDetail }>>(
-      `/submissions/${id}`,
-      data
-    )
 
-    if (!response.data.success) {
-      throw new Error(response.data.error || 'Failed to update submission')
-    }
-
-    return response.data.data!.submission
-  } catch (error) {
-    handleApiError(error)
-  }
-}
 
 /**
  * Fill PDF with data.
@@ -933,4 +912,28 @@ export async function getSubmissionData(submissionId: string): Promise<{
   } catch (error) {
     handleApiError(error)
   }
+}
+
+
+/**
+ * Update submission data (extracted fields)
+ */
+export async function updateSubmission(
+  submissionId: string,
+  data: Record<string, unknown>
+): Promise<{ success: boolean; message?: string }> {
+  const response = await fetch(`${API_BASE_URL}/submissions/${submissionId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ data }),
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}))
+    throw new Error(errorData.detail || 'Failed to update submission')
+  }
+
+  return response.json()
 }

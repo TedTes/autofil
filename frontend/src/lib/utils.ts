@@ -61,3 +61,28 @@ export function transformApiFieldsToForm(apiData: Record<string, string> | objec
 
   return fields
 }
+
+// Helper function to transform form fields back to API data
+export function transformFormFieldsToApi(fields: ExtractedField[]): Record<string, unknown> {
+  const apiData: Record<string, unknown> = {}
+
+  for (const field of fields) {
+    // Use field_value directly, but handle special cases
+    let value = field.field_value  as string | number | null
+
+    // Convert empty strings to null
+    if (value === '') {
+      value = null
+    }
+
+    // Convert string numbers to actual numbers if field type is number
+    if (field.field_type === 'number' && typeof value === 'string') {
+      value = parseFloat(value) || null
+    }
+
+    // Store the value
+    apiData[field.field_name] = value
+  }
+
+  return apiData
+}

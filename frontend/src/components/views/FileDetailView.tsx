@@ -6,8 +6,8 @@ import { PdfPreview } from '@/components/PdfPreview'
 import { ExtractionDataForm, type ExtractionData } from '@/components/ExtractionDataForm'
 import {type ExtractedField} from "../../types";
 import { ConfidenceBadge } from '@/components/ConfidenceBadge'
-import { getSubmission, getInputPreviewUrl } from '@/lib/api-client'
-import {transformApiFieldsToForm} from "../../lib";
+import { getSubmission, getInputPreviewUrl,updateSubmission } from '@/lib/api-client'
+import {transformApiFieldsToForm,transformFormFieldsToApi} from "../../lib";
 
 interface FileDetailViewProps {
   submissionId: string
@@ -21,11 +21,22 @@ export function FileDetailView({ submissionId, filename, onBack }: FileDetailVie
   const [extractionData, setExtractionData] = useState<ExtractionData | null>(null)
   const [hasChanges, setHasChanges] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   // Fetch submission data
   useEffect(() => {
     fetchSubmissionData()
   }, [submissionId])
+
+  const showSuccessMessage = (message: string) => {
+    setSuccessMessage(message)
+    setTimeout(() => setSuccessMessage(null), 3000)
+  }
+  
+  const showErrorMessage = (message: string) => {
+    setErrorMessage(message)
+    setTimeout(() => setErrorMessage(null), 5000)
+  }
 
   const fetchSubmissionData = async () => {
     setIsLoading(true)
@@ -62,21 +73,30 @@ export function FileDetailView({ submissionId, filename, onBack }: FileDetailVie
 
   const handleSave = async () => {
     if (!extractionData || !hasChanges) return
-
+  
     setIsSaving(true)
+    setError(null)
+  
     try {
-      // TODO: Implement save API call in next commit
-      console.log('Saving changes:', extractionData.fields)
-      
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      
-      setHasChanges(false)
-      // Show success toast (will add in polish phase)
-      alert('Changes saved successfully!')
+      // Transform fields back to API format
+      const updatedData = transformFormFieldsToApi(extractionData.fields)
+  
+      // Call API to update submission
+      const result = await updateSubmission(submissionId, updatedData)
+  
+      if (result.success) {
+        setHasChanges(false)
+        showSuccessMessage('Changes saved successfully!')
+        
+        // Optionally refetch to get server-side updates
+        // await fetchSubmissionData()
+      } else {
+        throw new Error(result.message || 'Save failed')
+      }
     } catch (err) {
       console.error('Failed to save:', err)
-      alert('Failed to save changes')
+      const errorMessage = err instanceof Error ? err.message : 'Failed to save changes'
+      showErrorMessage(errorMessage)
     } finally {
       setIsSaving(false)
     }
@@ -195,6 +215,25 @@ export function FileDetailView({ submissionId, filename, onBack }: FileDetailVie
             </button>
           </div>
         )}
+        {/* Success message */}
+{successMessage && (
+  <div className="mt-3 px-3 py-2 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
+    <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+    </svg>
+    <p className="text-sm text-green-800">{successMessage}</p>
+  </div>
+)}
+
+{/* Error message */}
+{errorMessage && (
+  <div className="mt-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+    <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+    <p className="text-sm text-red-800">{errorMessage}</p>
+  </div>
+)}
       </div>
 
       {/* Main Content - Two Column Layout */}

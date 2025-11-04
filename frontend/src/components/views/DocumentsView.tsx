@@ -13,13 +13,14 @@ interface DocumentsViewProps {
   onFileClick?: (submissionId: string, filename: string) => void
 }
 
+type ISelected = 'all' | 'ready' | 'extracted' | 'filled'
 export function DocumentsView({ onFileClick }: DocumentsViewProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [files, setFiles] = useState<SubmissionListItem[]>([])
   const [error, setError] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list')
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedFilter, setSelectedFilter] = useState<'all' | 'ready' | 'extracted' | 'filled'>('all')
+  const [selectedFilter, setSelectedFilter] = useState<ISelected>('all')
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set())
 
   // Fetch files on mount
@@ -158,7 +159,7 @@ export function DocumentsView({ onFileClick }: DocumentsViewProps) {
           <div className="flex items-center gap-2">
             <select
               value={selectedFilter}
-              onChange={(e) => setSelectedFilter(e.target.value as any)}
+              onChange={(e) => setSelectedFilter(e.target.value as ISelected)}
               className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-500 bg-white"
             >
               <option value="all">All Files ({files.length})</option>

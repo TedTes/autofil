@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { ArrowLeft, Download, Save, Loader2 } from 'lucide-react'
 import { PdfPreview } from '@/components/PdfPreview'
+import { ExtractionDataForm, type ExtractionData } from '@/components/ExtractionDataForm'
 interface FileDetailViewProps {
   submissionId: string
   filename?: string
@@ -11,14 +12,68 @@ interface FileDetailViewProps {
 
 export function FileDetailView({ submissionId, filename, onBack }: FileDetailViewProps) {
   const [isLoading, setIsLoading] = useState(true)
+  const [extractionData, setExtractionData] = useState<ExtractionData | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Simulate loading for now
+    // Simulate loading extraction data
     const timer = setTimeout(() => {
       setIsLoading(false)
+      
+      // Mock data for testing
+      setExtractionData({
+        overall_confidence: 92,
+        warnings: ['Date format may need verification'],
+        fields: [
+          {
+            field_name: 'insured_name',
+            field_value: 'ABC Insurance Corp',
+            confidence: 95,
+            field_type: 'text',
+            section: 'General Information',
+            required: true,
+          },
+          {
+            field_name: 'policy_number',
+            field_value: 'POL-2024-12345',
+            confidence: 98,
+            field_type: 'text',
+            section: 'General Information',
+            required: true,
+          },
+          {
+            field_name: 'effective_date',
+            field_value: '2024-01-15',
+            confidence: 88,
+            field_type: 'date',
+            section: 'Policy Details',
+          },
+          {
+            field_name: 'premium_amount',
+            field_value: '2500',
+            confidence: 65,
+            field_type: 'number',
+            section: 'Policy Details',
+          },
+          {
+            field_name: 'coverage_type',
+            field_value: 'Comprehensive',
+            confidence: 92,
+            field_type: 'select',
+            section: 'Coverage',
+            options: ['Liability', 'Comprehensive', 'Collision', 'Full'],
+          },
+          {
+            field_name: 'auto_renewal',
+            field_value: true,
+            confidence: 100,
+            field_type: 'boolean',
+            section: 'Policy Details',
+          },
+        ],
+      })
     }, 1000)
-
+  
     return () => clearTimeout(timer)
   }, [submissionId])
 
@@ -95,26 +150,33 @@ export function FileDetailView({ submissionId, filename, onBack }: FileDetailVie
             </div>
           </div>
 
-          {/* Right Column: Extracted Data */}
-          <div className="bg-white overflow-y-auto">
-            <div className="p-8">
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Extracted Data</h3>
-                <p className="text-sm text-gray-600">
-                  Review and edit the extracted information below
-                </p>
-              </div>
+        {/* Right Column: Extracted Data */}
+<div className="bg-white overflow-y-auto">
+  <div className="p-8">
+    <div className="mb-6">
+      <h3 className="text-lg font-semibold text-gray-900 mb-2">Extracted Data</h3>
+      <p className="text-sm text-gray-600">
+        Review and edit the extracted information below
+      </p>
+    </div>
 
-              {/* Placeholder for extraction form */}
-              <div className="space-y-6">
-                <div className="bg-gray-50 rounded-lg p-6 text-center">
-                  <p className="text-sm text-gray-600">
-                    Extraction data will appear here
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
+    {extractionData ? (
+      <ExtractionDataForm
+        data={extractionData}
+        isEditable={false}
+        onChange={(updatedFields) => {
+          console.log('Fields updated:', updatedFields)
+        }}
+      />
+    ) : (
+      <div className="bg-gray-50 rounded-lg p-6 text-center">
+        <p className="text-sm text-gray-600">
+          Loading extraction data...
+        </p>
+      </div>
+    )}
+  </div>
+</div>
         </div>
       </div>
     </div>

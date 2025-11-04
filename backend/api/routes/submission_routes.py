@@ -1256,3 +1256,24 @@ def get_submissions_stats():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+
+
+@submission_bp.post("/submissions/{submission_id}/export")
+async def export_filled_pdf(submission_id: str):
+    # 1. Get submission data
+    submission = get_submission_from_db(submission_id)
+    
+    # 2. Get the template PDF (or original uploaded file)
+    template_path = get_template_for_submission(submission)
+    
+    # 3. Fill the PDF with extracted data
+    filled_pdf = fill_pdf_fields(template_path, submission.data)
+    
+    # 4. Return as downloadable file
+    return FileResponse(
+        filled_pdf,
+        media_type="application/pdf",
+        filename=f"{submission.filename}_filled.pdf"
+    )

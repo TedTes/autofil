@@ -6,9 +6,9 @@ import { PdfPreview } from '@/components/PdfPreview'
 import { ExtractionDataForm, type ExtractionData } from '@/components/ExtractionDataForm'
 import {type ExtractedField} from "../../types";
 import { ConfidenceBadge } from '@/components/ConfidenceBadge'
-import { getSubmission, getInputPreviewUrl,updateSubmission } from '@/lib/api-client'
+import { getSubmission, getInputPreviewUrl,updateSubmission ,exportFilledPdf, downloadBlob } from '@/lib/api-client'
 import {transformApiFieldsToForm,transformFormFieldsToApi} from "../../lib";
-
+import {ExportModal} from "../ExportModal";
 interface FileDetailViewProps {
   submissionId: string
   filename?: string
@@ -23,6 +23,8 @@ export function FileDetailView({ submissionId, filename, onBack }: FileDetailVie
   const [isSaving, setIsSaving] = useState(false)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [isExporting, setIsExporting] = useState(false)
+  const [showExportModal, setShowExportModal] = useState(false)
   // Fetch submission data
   useEffect(() => {
     fetchSubmissionData()
@@ -103,13 +105,40 @@ export function FileDetailView({ submissionId, filename, onBack }: FileDetailVie
   }
 
   const handleExport = async () => {
+    // Check if there are unsaved changes
+    if (hasChanges) {
+      const shouldSave = confirm(
+        'You have unsaved changes. Would you like to save them before exporting?'
+      )
+      if (shouldSave) {
+        await handleSave()
+        // Wait a bit for save to complete
+        await new Promise(resolve => setTimeout(resolve, 500))
+      }
+    }
+  
+    setIsExporting(true)
+    setError(null)
+  
     try {
-      // TODO: Implement export in next commit
-      console.log('Exporting PDF...')
-      alert('Export functionality coming in next commit!')
+      // Call API to generate filled PDF
+      const pdfBlob = await exportFilledPdf(submissionId)
+  
+      // Generate filename
+      const timestamp = new Date().toISOString().split('T')[0]
+      const baseFilename = filename?.replace('.pdf', '') || 'document'
+      const exportFilename = `${baseFilename}_filled_${timestamp}.pdf`
+  
+      // Download the PDF
+      downloadBlob(pdfBlob, exportFilename)
+  
+      showSuccessMessage('PDF exported successfully!')
     } catch (err) {
       console.error('Failed to export:', err)
-      alert('Failed to export PDF')
+      const errorMessage = err instanceof Error ? err.message : 'Failed to export PDF'
+      showErrorMessage(errorMessage)
+    } finally {
+      setIsExporting(false)
     }
   }
 
@@ -187,12 +216,27 @@ export function FileDetailView({ submissionId, filename, onBack }: FileDetailVie
               )}
             </button>
             <button
-              onClick={handleExport}
-              className="flex items-center gap-2 px-4 py-2 text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors text-sm font-medium"
-            >
-              <Download className="w-4 h-4" />
-              Export
-            </button>
+  onClick={handleExport}
+  // onClick={() => setShowExportModal(true)}
+  disabled={isExporting}
+  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+    isExporting
+      ? 'text-white bg-green-500 cursor-not-allowed'
+      : 'text-white bg-green-600 hover:bg-green-700'
+  }`}
+>
+  {isExporting ? (
+    <>
+      <Loader2 className="w-4 h-4 animate-spin" />
+      Exporting...
+    </>
+  ) : (
+    <>
+      <Download className="w-4 h-4" />
+      Export PDF
+    </>
+  )}
+</button>
           </div>
         </div>
 
@@ -275,6 +319,13 @@ export function FileDetailView({ submissionId, filename, onBack }: FileDetailVie
           </div>
         </div>
       </div>
+      <ExportModal
+  isOpen={showExportModal}
+  onClose={() => setShowExportModal(false)}
+  submissionId={submissionId}
+  filename={filename}
+  onExport={handleExport}
+/>
     </div>
   )
 }

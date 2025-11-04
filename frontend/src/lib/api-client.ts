@@ -937,3 +937,37 @@ export async function updateSubmission(
 
   return response.json()
 }
+
+
+/**
+ * Export/Fill PDF with extracted data
+ */
+export async function exportFilledPdf(submissionId: string): Promise<Blob> {
+  const response = await fetch(`${API_BASE_URL}/submissions/${submissionId}/export`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}))
+    throw new Error(errorData.detail || 'Failed to export PDF')
+  }
+
+  return response.blob()
+}
+
+/**
+ * Download a blob as a file
+ */
+export function downloadBlob(blob: Blob, filename: string) {
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  window.URL.revokeObjectURL(url)
+}

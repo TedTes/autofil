@@ -4,8 +4,10 @@ import { useState, useEffect, useMemo,useRef } from 'react'
 import { 
   Search, Filter, Download, Trash2, RefreshCw, 
   Grid3x3, List, Loader2, FolderOpen, FileText,
-  X, Sliders,Clock
+  X, Sliders,Clock,  Calendar, User, TrendingUp,ChevronDown, 
+  ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react'
+
 import { getAllSubmissions, type SubmissionListItem } from '@/lib/api-client'
 import { ConfidenceBadgeCompact } from '@/components/ConfidenceBadge'
 import {formatDate} from "../../lib";
@@ -30,9 +32,12 @@ export function DocumentsView({ onFileClick }: DocumentsViewProps) {
   const [selectedClient, setSelectedClient] = useState<string>('all')
 
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
-const [recentSearches, setRecentSearches] = useState<string[]>([])
-const [showSearchSuggestions, setShowSearchSuggestions] = useState(false)
-const searchInputRef = useRef<HTMLInputElement>(null)
+  const [recentSearches, setRecentSearches] = useState<string[]>([])
+  const [showSearchSuggestions, setShowSearchSuggestions] = useState(false)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+
+  const [sortBy, setSortBy] = useState<'date' | 'filename' | 'confidence' | 'client'>('date')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   // Fetch files on mount
   useEffect(() => {
     fetchFiles()
@@ -110,7 +115,8 @@ const uniqueClients = useMemo(() => {
   const clients = new Set(files.map((f) => f.client_name).filter(Boolean))
   return Array.from(clients).sort()
 }, [files])
-// Filter and search files
+
+// Filter, search, and sort files
 const filteredFiles = useMemo(() => {
   let result = files
 
@@ -137,7 +143,7 @@ const filteredFiles = useMemo(() => {
     result = result.filter((file) => {
       const fileDate = new Date(file.uploaded_at)
       const endDate = new Date(dateRange.end)
-      endDate.setHours(23, 59, 59, 999) // Include entire end day
+      endDate.setHours(23, 59, 59, 999)
       return fileDate <= endDate
     })
   }
@@ -158,8 +164,37 @@ const filteredFiles = useMemo(() => {
     )
   }
 
+  // Apply sorting
+  result.sort((a, b) => {
+    let comparison = 0
+
+    switch (sortBy) {
+      case 'date':
+        comparison = new Date(a.uploaded_at).getTime() - new Date(b.uploaded_at).getTime()
+        break
+      
+      case 'filename':
+        comparison = a.filename.localeCompare(b.filename)
+        break
+      
+      case 'confidence':
+        const aConf = a.confidence ?? -1
+        const bConf = b.confidence ?? -1
+        comparison = aConf - bConf
+        break
+      
+      case 'client':
+        const aClient = a.client_name || ''
+        const bClient = b.client_name || ''
+        comparison = aClient.localeCompare(bClient)
+        break
+    }
+
+    return sortOrder === 'asc' ? comparison : -comparison
+  })
+
   return result
-}, [files, selectedFilter, debouncedSearchQuery, confidenceRange, dateRange, selectedClient])
+}, [files, selectedFilter, debouncedSearchQuery, confidenceRange, dateRange, selectedClient, sortBy, sortOrder])
 
 const searchSuggestions = useMemo(() => {
   if (!searchQuery.trim() || searchQuery.length < 2) return []
@@ -256,6 +291,16 @@ const clearAdvancedFilters = () => {
   setConfidenceRange([0, 100])
   setDateRange({ start: '', end: '' })
   setSelectedClient('all')
+}
+
+// Toggle sort - if clicking same column, reverse order; otherwise set new column
+const handleSort = (column: typeof sortBy) => {
+  if (sortBy === column) {
+    setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+  } else {
+    setSortBy(column)
+    setSortOrder(column === 'date' || column === 'confidence' ? 'desc' : 'asc')
+  }
 }
   return (
     <div className="h-full flex flex-col bg-gray-50">
@@ -411,7 +456,48 @@ const clearAdvancedFilters = () => {
       </span>
     )}
   </button>
+{/* Advanced Filters Toggle */}
+<button
+  onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+  className={`flex items-center gap-2 px-4 py-2 border rounded-lg text-sm font-medium transition-colors ${
+    showAdvancedFilters || hasActiveAdvancedFilters
+      ? 'border-blue-500 bg-blue-50 text-blue-700'
+      : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+  }`}
+>
+  <Sliders className="w-4 h-4" />
+  Filters
+  {hasActiveAdvancedFilters && (
+    <span className="flex items-center justify-center w-5 h-5 bg-blue-600 text-white text-xs rounded-full">
+      {[
+        confidenceRange[0] > 0 || confidenceRange[1] < 100,
+        dateRange.start !== '',
+        dateRange.end !== '',
+        selectedClient !== 'all',
+      ].filter(Boolean).length}
+    </span>
+  )}
+</button>
 
+{/* Sort Dropdown */}
+<select
+  value={`${sortBy}-${sortOrder}`}
+  onChange={(e) => {
+    const [newSortBy, newSortOrder] = e.target.value.split('-') as [typeof sortBy, typeof sortOrder]
+    setSortBy(newSortBy)
+    setSortOrder(newSortOrder)
+  }}
+  className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-500 bg-white"
+>
+  <option value="date-desc">Newest First</option>
+  <option value="date-asc">Oldest First</option>
+  <option value="filename-asc">Name (A-Z)</option>
+  <option value="filename-desc">Name (Z-A)</option>
+  <option value="confidence-desc">Confidence (High-Low)</option>
+  <option value="confidence-asc">Confidence (Low-High)</option>
+  <option value="client-asc">Client (A-Z)</option>
+  <option value="client-desc">Client (Z-A)</option>
+</select>
   {/* View Mode Toggle */}
   <div className="flex items-center border border-gray-300 rounded-lg">
     <button
@@ -654,11 +740,14 @@ const clearAdvancedFilters = () => {
           <NoResultsState searchQuery={searchQuery} selectedFilter={selectedFilter} />
         ) : viewMode === 'list' ? (
           <FileListView
-            files={filteredFiles}
-            selectedFiles={selectedFiles}
-            onFileClick={onFileClick}
-            onToggleSelect={toggleFileSelection}
-          />
+          files={filteredFiles}
+          selectedFiles={selectedFiles}
+          onFileClick={onFileClick}
+          onToggleSelect={toggleFileSelection}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          onSort={handleSort}
+        />
         ) : (
           <FileGridView
             files={filteredFiles}
@@ -672,28 +761,74 @@ const clearAdvancedFilters = () => {
   )
 }
 
-// File List View (Table-like)
+// File List View (Table-like with sortable headers)
 function FileListView({
   files,
   selectedFiles,
   onFileClick,
   onToggleSelect,
+  sortBy,
+  sortOrder,
+  onSort,
 }: {
   files: SubmissionListItem[]
   selectedFiles: Set<string>
   onFileClick?: (id: string, name: string) => void
   onToggleSelect: (id: string) => void
+  sortBy: 'date' | 'filename' | 'confidence' | 'client'
+  sortOrder: 'asc' | 'desc'
+  onSort: (column: typeof sortBy) => void
 }) {
+  const SortIcon = ({ column }: { column: typeof sortBy }) => {
+    if (sortBy !== column) {
+      return <ArrowUpDown className="w-4 h-4 text-gray-400" />
+    }
+    return sortOrder === 'asc' ? (
+      <ArrowUp className="w-4 h-4 text-blue-600" />
+    ) : (
+      <ArrowDown className="w-4 h-4 text-blue-600" />
+    )
+  }
+
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-      {/* Table Header */}
+      {/* Table Header with Sortable Columns */}
       <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 grid grid-cols-12 gap-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">
         <div className="col-span-1"></div>
-        <div className="col-span-4">Filename</div>
-        <div className="col-span-2">Client</div>
+        
+        <button
+          onClick={() => onSort('filename')}
+          className="col-span-4 flex items-center gap-2 hover:text-gray-900 transition-colors"
+        >
+          Filename
+          <SortIcon column="filename" />
+        </button>
+        
+        <button
+          onClick={() => onSort('client')}
+          className="col-span-2 flex items-center gap-2 hover:text-gray-900 transition-colors"
+        >
+          Client
+          <SortIcon column="client" />
+        </button>
+        
         <div className="col-span-2">Status</div>
-        <div className="col-span-1">Confidence</div>
-        <div className="col-span-2">Uploaded</div>
+        
+        <button
+          onClick={() => onSort('confidence')}
+          className="col-span-1 flex items-center gap-2 hover:text-gray-900 transition-colors"
+        >
+          Confidence
+          <SortIcon column="confidence" />
+        </button>
+        
+        <button
+          onClick={() => onSort('date')}
+          className="col-span-2 flex items-center gap-2 hover:text-gray-900 transition-colors"
+        >
+          Uploaded
+          <SortIcon column="date" />
+        </button>
       </div>
 
       {/* File Rows */}

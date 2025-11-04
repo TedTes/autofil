@@ -971,3 +971,33 @@ export function downloadBlob(blob: Blob, filename: string) {
   document.body.removeChild(link)
   window.URL.revokeObjectURL(url)
 }
+
+/**
+ * Get all submissions (for Documents view)
+ */
+export interface SubmissionListItem {
+  submission_id: string
+  filename: string
+  client_name?: string
+  status: 'ready' | 'extracted' | 'filled'
+  confidence?: number
+  uploaded_at: string
+  file_size?: number
+  file_type?: string
+}
+
+export async function getAllSubmissions(): Promise<SubmissionListItem[]> {
+  const response = await fetch(`${API_BASE_URL}/submissions`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch submissions')
+  }
+
+  const data = await response.json()
+  return data.submissions || []
+}

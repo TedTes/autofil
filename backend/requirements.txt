@@ -12,6 +12,7 @@ gunicorn>=21.2.0
 # PDF processing
 pypdf==6.1.2
 pdfplumber>=0.10.0
+PyMuPDF 
 
 # MIME detection
 python-magic>=0.4.27
@@ -28,6 +29,7 @@ xlrd>=2.0.1
 # OCR dependencies
 pytesseract>=0.3.10
 pdf2image>=1.16.0
+ocrmypdf
 
 # Table extraction dependencies
 camelot-py[cv]>=0.11.0

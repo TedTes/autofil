@@ -4,11 +4,12 @@ import { useState, useEffect, useMemo } from 'react'
 import { 
   Search, Filter, Download, Trash2, RefreshCw, 
   Grid3x3, List, Loader2, FolderOpen, FileText,
-  Calendar, User, TrendingUp
+  Calendar, User, TrendingUp,X, ChevronDown, Sliders
 } from 'lucide-react'
 import { getAllSubmissions, type SubmissionListItem } from '@/lib/api-client'
 import { ConfidenceBadgeCompact } from '@/components/ConfidenceBadge'
 import {formatDate} from "../../lib";
+
 interface DocumentsViewProps {
   onFileClick?: (submissionId: string, filename: string) => void
 }
@@ -23,6 +24,10 @@ export function DocumentsView({ onFileClick }: DocumentsViewProps) {
   const [selectedFilter, setSelectedFilter] = useState<ISelected>('all')
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set())
 
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
+  const [confidenceRange, setConfidenceRange] = useState<[number, number]>([0, 100])
+  const [dateRange, setDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' })
+  const [selectedClient, setSelectedClient] = useState<string>('all')
   // Fetch files on mount
   useEffect(() => {
     fetchFiles()
@@ -42,29 +47,61 @@ export function DocumentsView({ onFileClick }: DocumentsViewProps) {
       setIsLoading(false)
     }
   }
+  // Get unique clients for filter dropdown
+const uniqueClients = useMemo(() => {
+  const clients = new Set(files.map((f) => f.client_name).filter(Boolean))
+  return Array.from(clients).sort()
+}, [files])
+// Filter and search files
+const filteredFiles = useMemo(() => {
+  let result = files
 
-  // Filter and search files
-  const filteredFiles = useMemo(() => {
-    let result = files
+  // Apply status filter
+  if (selectedFilter !== 'all') {
+    result = result.filter((file) => file.status === selectedFilter)
+  }
 
-    // Apply status filter
-    if (selectedFilter !== 'all') {
-      result = result.filter((file) => file.status === selectedFilter)
-    }
+  // Apply confidence range filter
+  result = result.filter((file) => {
+    if (file.confidence === undefined) return true
+    return file.confidence >= confidenceRange[0] && file.confidence <= confidenceRange[1]
+  })
 
-    // Apply search query
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase()
-      result = result.filter(
-        (file) =>
-          file.filename.toLowerCase().includes(query) ||
-          file.client_name?.toLowerCase().includes(query) ||
-          file.submission_id.toLowerCase().includes(query)
-      )
-    }
+  // Apply date range filter
+  if (dateRange.start) {
+    result = result.filter((file) => {
+      const fileDate = new Date(file.uploaded_at)
+      const startDate = new Date(dateRange.start)
+      return fileDate >= startDate
+    })
+  }
+  if (dateRange.end) {
+    result = result.filter((file) => {
+      const fileDate = new Date(file.uploaded_at)
+      const endDate = new Date(dateRange.end)
+      endDate.setHours(23, 59, 59, 999) // Include entire end day
+      return fileDate <= endDate
+    })
+  }
 
-    return result
-  }, [files, selectedFilter, searchQuery])
+  // Apply client filter
+  if (selectedClient !== 'all') {
+    result = result.filter((file) => file.client_name === selectedClient)
+  }
+
+  // Apply search query
+  if (searchQuery.trim()) {
+    const query = searchQuery.toLowerCase()
+    result = result.filter(
+      (file) =>
+        file.filename.toLowerCase().includes(query) ||
+        file.client_name?.toLowerCase().includes(query) ||
+        file.submission_id.toLowerCase().includes(query)
+    )
+  }
+
+  return result
+}, [files, selectedFilter, searchQuery, confidenceRange, dateRange, selectedClient])
 
   // Toggle file selection
   const toggleFileSelection = (fileId: string) => {
@@ -111,6 +148,21 @@ export function DocumentsView({ onFileClick }: DocumentsViewProps) {
     return <EmptyState onFileClick={onFileClick} />
   }
 
+
+// Check if any advanced filters are active
+const hasActiveAdvancedFilters = 
+  confidenceRange[0] > 0 || 
+  confidenceRange[1] < 100 || 
+  dateRange.start !== '' || 
+  dateRange.end !== '' || 
+  selectedClient !== 'all'
+
+// Clear all advanced filters
+const clearAdvancedFilters = () => {
+  setConfidenceRange([0, 100])
+  setDateRange({ start: '', end: '' })
+  setSelectedClient('all')
+}
   return (
     <div className="h-full flex flex-col bg-gray-50">
       {/* Header */}
@@ -155,42 +207,218 @@ export function DocumentsView({ onFileClick }: DocumentsViewProps) {
             )}
           </div>
 
-          {/* Filter Dropdown */}
-          <div className="flex items-center gap-2">
-            <select
-              value={selectedFilter}
-              onChange={(e) => setSelectedFilter(e.target.value as ISelected)}
-              className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-500 bg-white"
-            >
-              <option value="all">All Files ({files.length})</option>
-              <option value="ready">Ready ({files.filter(f => f.status === 'ready').length})</option>
-              <option value="extracted">Extracted ({files.filter(f => f.status === 'extracted').length})</option>
-              <option value="filled">Filled ({files.filter(f => f.status === 'filled').length})</option>
-            </select>
+      
+  {/* Filters and View Toggle */}
+<div className="flex items-center gap-2">
+  {/* Status Filter */}
+  <select
+    value={selectedFilter}
+    onChange={(e) => setSelectedFilter(e.target.value as ISelected)}
+    className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-500 bg-white"
+  >
+    <option value="all">All Files ({files.length})</option>
+    <option value="ready">Ready ({files.filter(f => f.status === 'ready').length})</option>
+    <option value="extracted">Extracted ({files.filter(f => f.status === 'extracted').length})</option>
+    <option value="filled">Filled ({files.filter(f => f.status === 'filled').length})</option>
+  </select>
 
-            {/* View Mode Toggle */}
-            <div className="flex items-center border border-gray-300 rounded-lg">
-              <button
-                onClick={() => setViewMode('list')}
-                className={`p-2 ${
-                  viewMode === 'list' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:text-gray-900'
-                } rounded-l-lg transition-colors`}
-                title="List view"
-              >
-                <List className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setViewMode('grid')}
-                className={`p-2 ${
-                  viewMode === 'grid' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:text-gray-900'
-                } rounded-r-lg transition-colors border-l border-gray-300`}
-                title="Grid view"
-              >
-                <Grid3x3 className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
+  {/* Advanced Filters Toggle */}
+  <button
+    onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+    className={`flex items-center gap-2 px-4 py-2 border rounded-lg text-sm font-medium transition-colors ${
+      showAdvancedFilters || hasActiveAdvancedFilters
+        ? 'border-blue-500 bg-blue-50 text-blue-700'
+        : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+    }`}
+  >
+    <Sliders className="w-4 h-4" />
+    Filters
+    {hasActiveAdvancedFilters && (
+      <span className="flex items-center justify-center w-5 h-5 bg-blue-600 text-white text-xs rounded-full">
+        {[
+          confidenceRange[0] > 0 || confidenceRange[1] < 100,
+          dateRange.start !== '',
+          dateRange.end !== '',
+          selectedClient !== 'all',
+        ].filter(Boolean).length}
+      </span>
+    )}
+  </button>
+
+  {/* View Mode Toggle */}
+  <div className="flex items-center border border-gray-300 rounded-lg">
+    <button
+      onClick={() => setViewMode('list')}
+      className={`p-2 ${
+        viewMode === 'list' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:text-gray-900'
+      } rounded-l-lg transition-colors`}
+      title="List view"
+    >
+      <List className="w-4 h-4" />
+    </button>
+    <button
+      onClick={() => setViewMode('grid')}
+      className={`p-2 ${
+        viewMode === 'grid' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:text-gray-900'
+      } rounded-r-lg transition-colors border-l border-gray-300`}
+      title="Grid view"
+    >
+      <Grid3x3 className="w-4 h-4" />
+    </button>
+  </div>
+</div>
         </div>
+        {/* Advanced Filters Panel */}
+        {showAdvancedFilters && (
+          <div className="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-900">Advanced Filters</h3>
+              {hasActiveAdvancedFilters && (
+                <button
+                  onClick={clearAdvancedFilters}
+                  className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Confidence Range */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-2">
+                  Confidence Range
+                </label>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={confidenceRange[0]}
+                      onChange={(e) => setConfidenceRange([parseInt(e.target.value) || 0, confidenceRange[1]])}
+                      className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                    />
+                    <span className="text-gray-500">to</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={confidenceRange[1]}
+                      onChange={(e) => setConfidenceRange([confidenceRange[0], parseInt(e.target.value) || 100])}
+                      className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                    />
+                    <span className="text-gray-500 text-sm">%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={confidenceRange[1]}
+                    onChange={(e) => setConfidenceRange([confidenceRange[0], parseInt(e.target.value)])}
+                    className="w-full"
+                  />
+                </div>
+              </div>
+
+              {/* Date Range */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-2">
+                  Date Range
+                </label>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={dateRange.start}
+                      onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                      className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                    />
+                    <span className="text-gray-500 text-xs">to</span>
+                    <input
+                      type="date"
+                      value={dateRange.end}
+                      onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                      className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Client Filter */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-2">
+                  Client
+                </label>
+                <select
+                  value={selectedClient}
+                  onChange={(e) => setSelectedClient(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-500 bg-white"
+                >
+                  <option value="all">All Clients</option>
+                  {uniqueClients.map((client) => (
+                    <option key={client} value={client}>
+                      {client}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Active Filters Summary */}
+            {hasActiveAdvancedFilters && (
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <div className="flex flex-wrap gap-2">
+                  {(confidenceRange[0] > 0 || confidenceRange[1] < 100) && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full">
+                      Confidence: {confidenceRange[0]}% - {confidenceRange[1]}%
+                      <button
+                        onClick={() => setConfidenceRange([0, 100])}
+                        className="hover:text-blue-900"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                  {dateRange.start && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full">
+                      From: {new Date(dateRange.start).toLocaleDateString()}
+                      <button
+                        onClick={() => setDateRange({ ...dateRange, start: '' })}
+                        className="hover:text-blue-900"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                  {dateRange.end && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full">
+                      To: {new Date(dateRange.end).toLocaleDateString()}
+                      <button
+                        onClick={() => setDateRange({ ...dateRange, end: '' })}
+                        className="hover:text-blue-900"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                  {selectedClient !== 'all' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full">
+                      Client: {selectedClient}
+                      <button
+                        onClick={() => setSelectedClient('all')}
+                        className="hover:text-blue-900"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+     
       </div>
 
       {/* Bulk Actions Bar (shows when files selected) */}

@@ -3,16 +3,8 @@
 import { useState } from 'react'
 import { AlertCircle, Info, CheckCircle2 } from 'lucide-react'
 import { ConfidenceBar } from '@/components/ConfidenceBadge'
-// Type definitions for extracted data
-export interface ExtractedField {
-  field_name: string
-  field_value: string 
-  confidence?: number
-  field_type?: 'text' | 'number' | 'date' | 'select' | 'boolean'
-  section?: string
-  required?: boolean
-  options?: string[] // For select fields
-}
+import {ExtractedField} from "../types";
+
 
 export interface ExtractionData {
   fields: ExtractedField[]

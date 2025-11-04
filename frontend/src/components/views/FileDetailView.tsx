@@ -4,6 +4,11 @@ import { useState, useEffect } from 'react'
 import { ArrowLeft, Download, Save, Loader2 } from 'lucide-react'
 import { PdfPreview } from '@/components/PdfPreview'
 import { ExtractionDataForm, type ExtractionData } from '@/components/ExtractionDataForm'
+import {type ExtractedField} from "../../types";
+import { ConfidenceBadge } from '@/components/ConfidenceBadge'
+import { getSubmission, getInputPreviewUrl } from '@/lib/api-client'
+import {transformApiFieldsToForm} from "../../lib";
+
 interface FileDetailViewProps {
   submissionId: string
   filename?: string
@@ -12,70 +17,92 @@ interface FileDetailViewProps {
 
 export function FileDetailView({ submissionId, filename, onBack }: FileDetailViewProps) {
   const [isLoading, setIsLoading] = useState(true)
-  const [extractionData, setExtractionData] = useState<ExtractionData | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [extractionData, setExtractionData] = useState<ExtractionData | null>(null)
+  const [hasChanges, setHasChanges] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
 
+  // Fetch submission data
   useEffect(() => {
-    // Simulate loading extraction data
-    const timer = setTimeout(() => {
-      setIsLoading(false)
-      
-      // Mock data for testing
-      setExtractionData({
-        overall_confidence: 92,
-        warnings: ['Date format may need verification'],
-        fields: [
-          {
-            field_name: 'insured_name',
-            field_value: 'ABC Insurance Corp',
-            confidence: 95,
-            field_type: 'text',
-            section: 'General Information',
-            required: true,
-          },
-          {
-            field_name: 'policy_number',
-            field_value: 'POL-2024-12345',
-            confidence: 98,
-            field_type: 'text',
-            section: 'General Information',
-            required: true,
-          },
-          {
-            field_name: 'effective_date',
-            field_value: '2024-01-15',
-            confidence: 88,
-            field_type: 'date',
-            section: 'Policy Details',
-          },
-          {
-            field_name: 'premium_amount',
-            field_value: '2500',
-            confidence: 65,
-            field_type: 'number',
-            section: 'Policy Details',
-          },
-          {
-            field_name: 'coverage_type',
-            field_value: 'Comprehensive',
-            confidence: 92,
-            field_type: 'select',
-            section: 'Coverage',
-            options: ['Liability', 'Comprehensive', 'Collision', 'Full'],
-          },
-          {
-            field_name: 'auto_renewal',
-            field_value: "true",
-            confidence: 100,
-            field_type: 'boolean',
-            section: 'Policy Details',
-          },
-        ],
-      })
-    }, 1000)
-  
-    return () => clearTimeout(timer)
+    fetchSubmissionData()
   }, [submissionId])
+
+  const fetchSubmissionData = async () => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const data = await getSubmission(submissionId)
+      
+      // Transform API response to ExtractionData format
+      const transformedData: ExtractionData = {
+        overall_confidence: data.confidence || 0,
+        warnings: data.warnings || [],
+        fields: transformApiFieldsToForm(data.data || {}),
+      }
+
+      setExtractionData(transformedData)
+    } catch (err) {
+      console.error('Failed to fetch submission:', err)
+      setError(err instanceof Error ? err.message : 'Failed to load document')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleFieldsChange = (updatedFields: ExtractedField[]) => {
+    if (!extractionData) return
+
+    setExtractionData({
+      ...extractionData,
+      fields: updatedFields,
+    })
+    setHasChanges(true)
+  }
+
+  const handleSave = async () => {
+    if (!extractionData || !hasChanges) return
+
+    setIsSaving(true)
+    try {
+      // TODO: Implement save API call in next commit
+      console.log('Saving changes:', extractionData.fields)
+      
+      // Simulate API call
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      
+      setHasChanges(false)
+      // Show success toast (will add in polish phase)
+      alert('Changes saved successfully!')
+    } catch (err) {
+      console.error('Failed to save:', err)
+      alert('Failed to save changes')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleExport = async () => {
+    try {
+      // TODO: Implement export in next commit
+      console.log('Exporting PDF...')
+      alert('Export functionality coming in next commit!')
+    } catch (err) {
+      console.error('Failed to export:', err)
+      alert('Failed to export PDF')
+    }
+  }
+
+  const handleDownloadOriginal = () => {
+    // Download the original uploaded PDF
+    const url = getInputPreviewUrl(submissionId)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename || 'document.pdf'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
 
   if (isLoading) {
     return <LoadingState />
@@ -101,82 +128,112 @@ export function FileDetailView({ submissionId, filename, onBack }: FileDetailVie
               </button>
             )}
             <div>
-              <h2 className="text-xl font-bold text-gray-900">
-                {filename || 'Document Details'}
-              </h2>
-              <p className="text-sm text-gray-500">Submission ID: {submissionId}</p>
+              <div className="flex items-center gap-3">
+                <h2 className="text-xl font-bold text-gray-900">
+                  {filename || 'Document Details'}
+                </h2>
+                {extractionData?.overall_confidence !== undefined && (
+                  <ConfidenceBadge
+                    confidence={extractionData.overall_confidence}
+                    variant="pill"
+                    showLabel={true}
+                  />
+                )}
+              </div>
+              <p className="text-sm text-gray-500 mt-1">Submission ID: {submissionId}</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             <button
-              className="flex items-center gap-2 px-4 py-2 text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg transition-colors"
-              disabled
+              onClick={handleSave}
+              disabled={!hasChanges || isSaving}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                hasChanges && !isSaving
+                  ? 'text-white bg-blue-600 hover:bg-blue-700'
+                  : 'text-gray-400 bg-gray-100 cursor-not-allowed'
+              }`}
             >
-              <Save className="w-4 h-4" />
-              <span className="text-sm font-medium">Save</span>
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  Save
+                </>
+              )}
             </button>
             <button
-              className="flex items-center gap-2 px-4 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
-              disabled
+              onClick={handleExport}
+              className="flex items-center gap-2 px-4 py-2 text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors text-sm font-medium"
             >
               <Download className="w-4 h-4" />
-              <span className="text-sm font-medium">Export</span>
+              Export
             </button>
           </div>
         </div>
+
+        {/* Changes indicator */}
+        {hasChanges && (
+          <div className="mt-3 px-3 py-2 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center justify-between">
+            <p className="text-sm text-yellow-800">
+              You have unsaved changes
+            </p>
+            <button
+              onClick={() => {
+                if (confirm('Discard unsaved changes?')) {
+                  fetchSubmissionData()
+                  setHasChanges(false)
+                }
+              }}
+              className="text-sm text-yellow-800 hover:text-yellow-900 underline"
+            >
+              Discard
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Main Content - Two Column Layout */}
       <div className="flex-1 overflow-hidden">
         <div className="h-full grid grid-cols-1 lg:grid-cols-2 gap-0">
           {/* Left Column: PDF Preview */}
-          <div className="bg-gray-100 border-r border-gray-200 flex items-center justify-center p-8">
-            <div className="text-center">
-              <div className="w-20 h-20 bg-gray-200 rounded-xl flex items-center justify-center mx-auto mb-4">
-              <div className="bg-gray-900 border-r border-gray-700 overflow-hidden">
-  <PdfPreview
-    fileUrl={`/api/submissions/${submissionId}/preview`}
-    filename={filename}
-    onDownload={() => {
-      // TODO: Implement download 
-      console.log('Download clicked')
-    }}
-  />
-</div>
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">PDF Preview</h3>
-              <p className="text-sm text-gray-600">Preview will load here</p>
-            </div>
+          <div className="bg-gray-900 border-r border-gray-700 overflow-hidden">
+            <PdfPreview
+              fileUrl={getInputPreviewUrl(submissionId)}
+              filename={filename}
+              onDownload={handleDownloadOriginal}
+            />
           </div>
 
-        {/* Right Column: Extracted Data */}
-<div className="bg-white overflow-y-auto">
-  <div className="p-8">
-    <div className="mb-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-2">Extracted Data</h3>
-      <p className="text-sm text-gray-600">
-        Review and edit the extracted information below
-      </p>
-    </div>
+          {/* Right Column: Extracted Data */}
+          <div className="bg-white overflow-y-auto">
+            <div className="p-8">
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Extracted Data</h3>
+                <p className="text-sm text-gray-600">
+                  Review and edit the extracted information below
+                </p>
+              </div>
 
-    {extractionData ? (
-      <ExtractionDataForm
-        data={extractionData}
-        isEditable={false}
-        onChange={(updatedFields) => {
-          console.log('Fields updated:', updatedFields)
-        }}
-      />
-    ) : (
-      <div className="bg-gray-50 rounded-lg p-6 text-center">
-        <p className="text-sm text-gray-600">
-          Loading extraction data...
-        </p>
-      </div>
-    )}
-  </div>
-</div>
+              {extractionData ? (
+                <ExtractionDataForm
+                  data={extractionData}
+                  isEditable={true}
+                  onChange={handleFieldsChange}
+                />
+              ) : (
+                <div className="bg-gray-50 rounded-lg p-6 text-center">
+                  <p className="text-sm text-gray-600">
+                    No extraction data available
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -112,3 +112,14 @@ export interface BatchExtractionStatus {
   created_at: string
   updated_at: string
 }
+
+// Type definitions for extracted data
+export interface ExtractedField {
+  field_name: string
+  field_value: string 
+  confidence?: number
+  field_type?: 'text' | 'number' | 'date' | 'select' | 'boolean'
+  section?: string
+  required?: boolean
+  options?: string[] // For select fields
+}

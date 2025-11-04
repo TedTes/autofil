@@ -38,6 +38,11 @@ export function DocumentsView({ onFileClick }: DocumentsViewProps) {
 
   const [sortBy, setSortBy] = useState<'date' | 'filename' | 'confidence' | 'client'>('date')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+
+  const [isBulkOperationInProgress, setIsBulkOperationInProgress] = useState(false)
+  const [bulkOperationProgress, setBulkOperationProgress] = useState({ current: 0, total: 0 })
+  const [showBulkConfirmModal, setShowBulkConfirmModal] = useState<'export' | 'delete' | null>(null)
+
   // Fetch files on mount
   useEffect(() => {
     fetchFiles()
@@ -242,23 +247,111 @@ const fetchFiles = async () => {
     })
   }
 
-  // Select all filtered files
-  const selectAll = () => {
-    setSelectedFiles(new Set(filteredFiles.map((f) => f.submission_id)))
+  // Select all filtered files (not all files, just what's currently visible)
+const selectAllFiltered = () => {
+  setSelectedFiles(new Set(filteredFiles.map((f) => f.submission_id)))
+}
+
+// Select all files (regardless of filters)
+const selectAllFiles = () => {
+  setSelectedFiles(new Set(files.map((f) => f.submission_id)))
+}
+
+// Toggle selection for all filtered files
+const toggleSelectAll = () => {
+  // Check if all filtered files are selected
+  const allFilteredSelected = filteredFiles.every((f) => 
+    selectedFiles.has(f.submission_id)
+  )
+  
+  if (allFilteredSelected) {
+    // Deselect all filtered files
+    const newSelection = new Set(selectedFiles)
+    filteredFiles.forEach((f) => newSelection.delete(f.submission_id))
+    setSelectedFiles(newSelection)
+  } else {
+    // Select all filtered files
+    selectAllFiltered()
   }
+}
 
   // Clear selection
   const clearSelection = () => {
     setSelectedFiles(new Set())
   }
 
-  const handleBulkExport = () => {
-    alert(`Exporting ${selectedFiles.size} files (functionality in Commit 15)`)
+  const handleBulkExport = async () => {
+    setShowBulkConfirmModal('export')
   }
-
-  const handleBulkDelete = () => {
-    if (confirm(`Delete ${selectedFiles.size} files?`)) {
-      alert('Bulk delete functionality in Commit 15')
+  
+  const handleBulkDelete = async () => {
+    setShowBulkConfirmModal('delete')
+  }
+  const confirmBulkExport = async () => {
+    setShowBulkConfirmModal(null)
+    setIsBulkOperationInProgress(true)
+    
+    const selectedFilesList = Array.from(selectedFiles)
+    setBulkOperationProgress({ current: 0, total: selectedFilesList.length })
+  
+    try {
+      for (let i = 0; i < selectedFilesList.length; i++) {
+        const fileId = selectedFilesList[i]
+        const file = files.find((f) => f.submission_id === fileId)
+        
+        // Simulate export (replace with real API call)
+        await new Promise((resolve) => setTimeout(resolve, 500))
+        
+        // Update progress
+        setBulkOperationProgress({ current: i + 1, total: selectedFilesList.length })
+        
+        console.log(`Exported: ${file?.filename}`)
+      }
+  
+      alert(`Successfully exported ${selectedFilesList.length} file(s)`)
+      clearSelection()
+    } catch (err) {
+      console.error('Bulk export failed:', err)
+      alert('Failed to export some files')
+    } finally {
+      setIsBulkOperationInProgress(false)
+      setBulkOperationProgress({ current: 0, total: 0 })
+    }
+  }
+  
+  const confirmBulkDelete = async () => {
+    setShowBulkConfirmModal(null)
+    setIsBulkOperationInProgress(true)
+    
+    const selectedFilesList = Array.from(selectedFiles)
+    setBulkOperationProgress({ current: 0, total: selectedFilesList.length })
+  
+    try {
+      for (let i = 0; i < selectedFilesList.length; i++) {
+        const fileId = selectedFilesList[i]
+        
+        // Simulate delete (replace with real API call)
+        await new Promise((resolve) => setTimeout(resolve, 300))
+        
+        // Update progress
+        setBulkOperationProgress({ current: i + 1, total: selectedFilesList.length })
+        
+        console.log(`Deleted: ${fileId}`)
+      }
+  
+      // Remove deleted files from state
+      setFiles((prev) => prev.filter((f) => !selectedFilesList.includes(f.submission_id)))
+      alert(`Successfully deleted ${selectedFilesList.length} file(s)`)
+      clearSelection()
+    } catch (err) {
+      console.error('Bulk delete failed:', err)
+      alert('Failed to delete some files')
+    } finally {
+      setIsBulkOperationInProgress(false)
+      setBulkOperationProgress({ current: 0, total: 0 })
+      
+      // Refresh the list
+      fetchFiles()
     }
   }
   const clearRecentSearches = () => {
@@ -692,47 +785,89 @@ const handleSort = (column: typeof sortBy) => {
   </div>
 )}
 
-      {/* Bulk Actions Bar (shows when files selected) */}
-      {selectedFiles.size > 0 && (
-        <div className="bg-blue-50 border-b border-blue-200 px-6 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={selectAll}
-                className="text-sm text-blue-700 hover:text-blue-800 font-medium"
-              >
-                Select all {filteredFiles.length}
-              </button>
-              <span className="text-gray-400">•</span>
-              <p className="text-sm font-medium text-blue-900">
-                {selectedFiles.size} selected
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleBulkExport}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm text-blue-700 hover:bg-blue-100 rounded-lg transition-colors"
-              >
-                <Download className="w-4 h-4" />
-                Export
-              </button>
-              <button
-                onClick={handleBulkDelete}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-                Delete
-              </button>
-              <button
-                onClick={clearSelection}
-                className="text-sm text-gray-600 hover:text-gray-900 ml-2"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
+{/* Bulk Actions Bar (shows when files selected) */}
+{selectedFiles.size > 0 && (
+  <div className="bg-blue-50 border-b border-blue-200 px-6 py-3">
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={filteredFiles.length > 0 && filteredFiles.every((f) => selectedFiles.has(f.submission_id))}
+            onChange={toggleSelectAll}
+            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+          />
+          <span className="text-sm text-gray-700">
+            Select all on this page
+          </span>
         </div>
-      )}
+        <span className="text-gray-400">•</span>
+        <p className="text-sm font-medium text-blue-900">
+          {selectedFiles.size} of {files.length} selected
+        </p>
+        {selectedFiles.size < files.length && selectedFiles.size === filteredFiles.length && (
+          <>
+            <span className="text-gray-400">•</span>
+            <button
+              onClick={selectAllFiles}
+              className="text-sm text-blue-700 hover:text-blue-800 font-medium underline"
+            >
+              Select all {files.length} files
+            </button>
+          </>
+        )}
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={handleBulkExport}
+          disabled={isBulkOperationInProgress}
+          className="flex items-center gap-2 px-3 py-1.5 text-sm text-blue-700 hover:bg-blue-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Download className="w-4 h-4" />
+          Export
+        </button>
+        <button
+          onClick={handleBulkDelete}
+          disabled={isBulkOperationInProgress}
+          className="flex items-center gap-2 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Trash2 className="w-4 h-4" />
+          Delete
+        </button>
+        <button
+          onClick={clearSelection}
+          disabled={isBulkOperationInProgress}
+          className="text-sm text-gray-600 hover:text-gray-900 ml-2"
+        >
+          Clear
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+{/* Bulk Operation Progress */}
+{isBulkOperationInProgress && (
+  <div className="bg-white border-b border-gray-200 px-6 py-4">
+    <div className="max-w-xl mx-auto">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-sm font-medium text-gray-900">
+          Processing files...
+        </span>
+        <span className="text-sm text-gray-600">
+          {bulkOperationProgress.current} / {bulkOperationProgress.total}
+        </span>
+      </div>
+      <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+        <div
+          className="h-2 bg-blue-600 transition-all duration-300"
+          style={{
+            width: `${(bulkOperationProgress.current / bulkOperationProgress.total) * 100}%`,
+          }}
+        />
+      </div>
+    </div>
+  </div>
+)}
 
       {/* Main Content Area */}
       <div className="flex-1 overflow-auto px-6 py-6">
@@ -744,6 +879,7 @@ const handleSort = (column: typeof sortBy) => {
           selectedFiles={selectedFiles}
           onFileClick={onFileClick}
           onToggleSelect={toggleFileSelection}
+          toggleSelectAll = {toggleSelectAll}
           sortBy={sortBy}
           sortOrder={sortOrder}
           onSort={handleSort}
@@ -757,6 +893,13 @@ const handleSort = (column: typeof sortBy) => {
           />
         )}
       </div>
+      <BulkConfirmModal
+        isOpen={showBulkConfirmModal !== null}
+        type={showBulkConfirmModal}
+        count={selectedFiles.size}
+        onConfirm={showBulkConfirmModal === 'delete' ? confirmBulkDelete : confirmBulkExport}
+        onCancel={() => setShowBulkConfirmModal(null)}
+      />
     </div>
   )
 }
@@ -767,6 +910,7 @@ function FileListView({
   selectedFiles,
   onFileClick,
   onToggleSelect,
+  toggleSelectAll,
   sortBy,
   sortOrder,
   onSort,
@@ -775,6 +919,7 @@ function FileListView({
   selectedFiles: Set<string>
   onFileClick?: (id: string, name: string) => void
   onToggleSelect: (id: string) => void
+  toggleSelectAll:() => void
   sortBy: 'date' | 'filename' | 'confidence' | 'client'
   sortOrder: 'asc' | 'desc'
   onSort: (column: typeof sortBy) => void
@@ -794,7 +939,14 @@ function FileListView({
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
       {/* Table Header with Sortable Columns */}
       <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 grid grid-cols-12 gap-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">
-        <div className="col-span-1"></div>
+      <div className="col-span-1">
+  <input
+    type="checkbox"
+    checked={files.length > 0 && files.every((f) => selectedFiles.has(f.submission_id))}
+    onChange={toggleSelectAll}
+    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+  />
+</div>
         
         <button
           onClick={() => onSort('filename')}
@@ -1064,3 +1216,93 @@ function EmptyState({ onFileClick }: { onFileClick?: (id: string, name: string) 
   )
 }
 
+// Bulk Confirmation Modal Component
+function BulkConfirmModal({
+  isOpen,
+  type,
+  count,
+  onConfirm,
+  onCancel,
+}: {
+  isOpen: boolean
+  type: 'export' | 'delete' | null
+  count: number
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  if (!isOpen || !type) return null
+
+  const isDelete = type === 'delete'
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900">
+            {isDelete ? 'Delete Files' : 'Export Files'}
+          </h3>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-6">
+          <div className="flex items-start gap-4">
+            <div
+              className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center ${
+                isDelete ? 'bg-red-100' : 'bg-blue-100'
+              }`}
+            >
+              {isDelete ? (
+                <Trash2 className="w-6 h-6 text-red-600" />
+              ) : (
+                <Download className="w-6 h-6 text-blue-600" />
+              )}
+            </div>
+            <div className="flex-1">
+              <p className="text-sm text-gray-700 mb-4">
+                {isDelete ? (
+                  <>
+                    Are you sure you want to delete <strong>{count}</strong> file
+                    {count !== 1 ? 's' : ''}? This action cannot be undone.
+                  </>
+                ) : (
+                  <>
+                    Export <strong>{count}</strong> file{count !== 1 ? 's' : ''} as filled PDFs?
+                  </>
+                )}
+              </p>
+              {isDelete && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <p className="text-xs text-red-800">
+                    <strong>Warning:</strong> Deleted files cannot be recovered. Make sure you have
+                    backups if needed.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-3">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors text-sm font-medium"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className={`px-4 py-2 text-white rounded-lg transition-colors text-sm font-medium ${
+              isDelete
+                ? 'bg-red-600 hover:bg-red-700'
+                : 'bg-blue-600 hover:bg-blue-700'
+            }`}
+          >
+            {isDelete ? 'Delete' : 'Export'} {count} file{count !== 1 ? 's' : ''}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}

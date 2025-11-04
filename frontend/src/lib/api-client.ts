@@ -1001,3 +1001,12 @@ export async function getAllSubmissions(): Promise<SubmissionListItem[]> {
   const data = await response.json()
   return data.submissions || []
 }
+
+
+export async function bulkExportSubmissions(submissionIds: string[]): Promise<void> {
+  // TODO: Implement bulk export
+}
+
+export async function bulkDeleteSubmissions(submissionIds: string[]): Promise<void> {
+  // TODO: Implement bulk delete
+}

@@ -72,8 +72,9 @@ def upload_pdf():
             else:
                 return jsonify({'error': errors[0]['error']}), 400
 
+        status = 207 if errors and results else (201 if results else 400)
         return jsonify({
-            "success": len(results) > 0,
+            "success": bool(results),
             "data": {
                 "total": len(files),
                 "successful": len(results),
@@ -82,7 +83,7 @@ def upload_pdf():
                 "errors": errors or []
             },
             "message": f"Processed {len(files)} files: {len(results)} succeeded, {len(errors)} failed"
-        }), 201 if results else 400
+        }), status
 
     except Exception as e:
         return jsonify({'error': f'Upload failed: {str(e)}'}), 500

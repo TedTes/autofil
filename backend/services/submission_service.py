@@ -52,273 +52,116 @@ class SubmissionService:
     
     def upload_and_extract(self, file, folder_id: str = None, progress_callback=None):
         """
-        Upload a document and extract data with progress.
-
-        Routes by kind:
-        - pdf_form   -> Acord126Extractor (fillable PDFs)
-        - pdf_scanned-> OCR to searchable PDF -> text payload
-        - image      -> OCR image -> text payload
-        - csv/excel  -> tabular rows payload
-        - docx/txt   -> text payload
-        - unknown    -> best-effort text payload with warning
-        """
-        import mimetypes
-        import magic
+        Upload PDF and extract data with progress tracking.
         
-
+        Args:
+            file: FileStorage object from Flask request
+            folder_id: Optional folder ID to store in
+            progress_callback: Optional callback for progress updates
+        
+        Returns:
+            Dictionary with submission_id, extracted data, and metadata
+        """
+        # Generate unique submission ID
         submission_id = str(uuid.uuid4())
-
-        def progress(pct, phase, msg):
-            if progress_callback:
-                progress_callback(submission_id, pct, phase, msg)
-
-        progress(0, 'starting', 'Initializing upload...')
-
-        # folder-aware storage
+        
+        # Progress: 0% - Starting
+        if progress_callback:
+            progress_callback(submission_id, 0, 'starting', 'Initializing upload...')
+        
+        # Determine storage path
         if folder_id:
+            # Store in folder structure
             from services.folder_service import FolderService
-            upload_dir = FolderService().get_inputs_path(folder_id)
+            folder_service = FolderService()
+            upload_dir = folder_service.get_inputs_path(folder_id)
         else:
+            # Store in legacy uploads directory
             upload_dir = self.uploads_dir
-        os.makedirs(upload_dir, exist_ok=True)
-
-        progress(10, 'uploading', 'Saving file...')
-        filename = secure_filename(file.filename or f'upload_{submission_id}')
+        # Progress: 10% - Saving file
+        if progress_callback:
+            progress_callback(submission_id, 10, 'uploading', 'Saving file...')
+        
+        # Save uploaded file
+        filename = secure_filename(file.filename)
         upload_path = os.path.join(upload_dir, f"{submission_id}_{filename}")
         file.save(upload_path)
-        progress(30, 'uploaded', 'File saved successfully')
-
-        # Build metadata early to avoid "metadata before assignment"
+        # Progress: 30% - File saved
+        if progress_callback:
+            progress_callback(submission_id, 30, 'uploaded', 'File saved successfully')
+        
+        # Progress: 40% - Starting extraction
+        if progress_callback:
+            progress_callback(submission_id, 40, 'extracting', 'Analyzing document...')
+        # Extract data
+        extraction_result = self.extractor.extract(upload_path)
+        # Progress: 70% - Extraction complete
+        if progress_callback:
+            progress_callback(submission_id, 70, 'extracting', 'Processing fields...')
+        
+        if not extraction_result.is_successful():
+            if progress_callback:
+                progress_callback(submission_id, 100, 'error', f'Extraction failed: {extraction_result.error}')
+            raise ValueError(f"Extraction failed: {extraction_result.error}")
+        
+        # Progress: 80% - Saving data
+        if progress_callback:
+            progress_callback(submission_id, 80, 'extracting', 'Saving extracted data...')
+        version_id = self.version_service.create_version(
+            submission_id=submission_id,
+            data=extraction_result.json,
+            user='system',
+            action='extract',
+            notes=f'Initial extraction from {filename}'
+        )
+        # Save extracted JSON
+        data_path = os.path.join(self.data_dir, f"{submission_id}.json")
+        with open(data_path, 'w') as f:
+            json.dump(extraction_result.json, f, indent=2)
+        
+        # Progress: 90% - Creating metadata
+        if progress_callback:
+            progress_callback(submission_id, 90, 'ready', 'Finalizing...')
+        
+        # Save submission metadata
         metadata = {
             'submission_id': submission_id,
             'folder_id': folder_id,
             'filename': filename,
             'upload_path': upload_path,
+            'data_path': data_path,
             'uploaded_at': datetime.utcnow().isoformat(),
-            'status': 'uploaded',
+            'status': 'extracted',
+            'confidence': extraction_result.confidence,
+            'warnings': extraction_result.warnings,
+            'current_version_id': version_id,
+            'field_confidence': extraction_result.field_confidence,
+            # 'field_hints': extraction_result.field_hints,
+            # 'extraction_issues': extraction_result.extraction_issues,
+            # 'suggested_fixes': extraction_result.suggested_fixes
         }
-
-        progress(40, 'detecting', 'Detecting file type...')
-        kind = self._sniff_kind(upload_path, filename)
-
-        try:
-            progress(45, 'extracting', f'Extracting as {kind}...')
-            if kind == 'pdf_form':
-                # Keep your ACORD flow
-                extraction_result = self.extractor.extract(upload_path)
-                if not extraction_result.is_successful():
-                    progress(100, 'error', f'Extraction failed: {extraction_result.error}')
-                    raise ValueError(f"Extraction failed: {extraction_result.error}")
-
-                data = extraction_result.json
-                confidence = extraction_result.confidence or 0.0
-                warnings = extraction_result.warnings or []
-                field_confidence = getattr(extraction_result, 'field_confidence', {}) or {}
-                extras = {}
-
-            elif kind == 'pdf_scanned':
-                ocred_pdf = self._ocr_pdf(upload_path)
-                text = self._read_pdf_text(ocred_pdf)
-                data, confidence, warnings, field_confidence, extras = self._text_to_payload(text, source='pdf_ocr')
-
-            elif kind == 'image':
-                text = self._ocr_image(upload_path)
-                data, confidence, warnings, field_confidence, extras = self._text_to_payload(text, source='image_ocr')
-
-            elif kind == 'csv':
-                import pandas as pd
-                df = pd.read_csv(upload_path)
-                data = {'rows': df.to_dict(orient='records')}
-                confidence, warnings, field_confidence, extras = 0.9, [], {}, {'rows_count': len(data['rows'])}
-
-            elif kind == 'excel':
-                import pandas as pd
-                df = pd.read_excel(upload_path)
-                data = {'rows': df.to_dict(orient='records')}
-                confidence, warnings, field_confidence, extras = 0.9, [], {}, {'rows_count': len(data['rows'])}
-
-            elif kind == 'docx':
-                text = self._docx_to_text(upload_path)
-                data, confidence, warnings, field_confidence, extras = self._text_to_payload(text, source='docx')
-
-            elif kind == 'txt':
-                with open(upload_path, 'r', encoding='utf-8', errors='ignore') as f:
-                    text = f.read()
-                data, confidence, warnings, field_confidence, extras = self._text_to_payload(text, source='txt')
-
-            else:
-                text = self._best_effort_text(upload_path)
-                data, confidence, warnings, field_confidence, extras = self._text_to_payload(
-                    text, source='unknown', add_warning='Unknown file type; attempted plain text extraction.'
-                )
-
-            progress(70, 'post', 'Post-processing…')
-
-            # Version + save JSON
-            version_id = self.version_service.create_version(
-                submission_id=submission_id,
-                data=data,
-                user='system',
-                action='extract',
-                notes=f'Initial extraction from {filename}'
-            )
-
-            data_path = os.path.join(self.data_dir, f"{submission_id}.json")
-            with open(data_path, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-
-            # Finalize metadata
-            metadata.update({
-                'status': 'extracted',
-                'data_path': data_path,
-                'confidence': confidence,
-                'warnings': warnings,
-                'current_version_id': version_id,
-                'field_confidence': field_confidence,
-                **extras
-            })
-
-            metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
-            with open(metadata_path, 'w', encoding='utf-8') as f:
-                json.dump(metadata, f, indent=2, ensure_ascii=False)
-
-            if folder_id:
-                from services.folder_service import FolderService
-                FolderService().add_submission(folder_id, submission_id, filename)
-
-            progress(100, 'ready', 'Extraction complete')
-
-            return {
-                'submission_id': submission_id,
-                'confidence': confidence,
-                'warnings': warnings,
-                'data': data
-            }
-
-        except Exception as e:
-            progress(100, 'error', f'Extraction failed: {e}')
-            raise
-
-    def _sniff_kind(self, path: str, filename: str) -> str:
-        """Classify file into a simple kind to choose pipeline."""
-        import mimetypes, magic
-        ext = (os.path.splitext(filename)[1] or '').lower()
-        try:
-            mime = magic.from_file(path, mime=True) or ''
-        except Exception:
-            mime = mimetypes.guess_type(filename)[0] or ''
-
-        # PDFs
-        if 'pdf' in (mime or '') or ext == '.pdf':
-            # Decide fillable vs scanned
-            try:
-                import fitz  # PyMuPDF
-                doc = fitz.open(path)
-                form = any(p.widgets() for p in doc)
-                doc.close()
-                return 'pdf_form' if form else 'pdf_scanned'
-            except Exception:
-                # Fallback heuristic with pdfplumber
-                try:
-                    import pdfplumber
-                    with pdfplumber.open(path) as pdf:
-                        text_len = sum(len((p.extract_text() or '')) for p in pdf.pages[:3])
-                    return 'pdf_form' if text_len > 120 else 'pdf_scanned'
-                except Exception:
-                    return 'pdf_scanned'
-
-        # Images
-        if any(x in (mime or '') for x in ['image/', 'tiff']) or ext in ('.png', '.jpg', '.jpeg', '.tif', '.tiff', '.bmp'):
-            return 'image'
-
-        # Tabular
-        if ext == '.csv' or mime == 'text/csv':
-            return 'csv'
-        if ext in ('.xlsx', '.xls'):
-            return 'excel'
-
-        # Docs
-        if ext == '.docx' or mime == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
-            return 'docx'
-        if ext == '.txt' or (mime or '').startswith('text/'):
-            return 'txt'
-
-        return 'unknown'
-
-
-    def _ocr_pdf(self, pdf_path: str) -> str:
-        """Return path to OCR’d (searchable) PDF."""
-        import ocrmypdf
-        out_path = pdf_path[:-4] + '_ocred.pdf' if pdf_path.lower().endswith('.pdf') else pdf_path + '_ocred.pdf'
-        ocrmypdf.ocr(pdf_path, out_path, force_ocr=True, skip_text=True, deskew=True)
-        return out_path
-
-
-    def _read_pdf_text(self, pdf_path: str) -> str:
-        try:
-            import pdfplumber
-            with pdfplumber.open(pdf_path) as pdf:
-                return "\n".join([(p.extract_text() or '') for p in pdf.pages])
-        except Exception:
-            # Fallback: rasterize first pages then OCR
-            from pdf2image import convert_from_path
-            import pytesseract
-            images = convert_from_path(pdf_path, dpi=300, first_page=1, last_page=3)
-            chunks = [pytesseract.image_to_string(im) for im in images]
-            return "\n".join(chunks)
-
-
-    def _ocr_image(self, path: str) -> str:
-        from PIL import Image
-        import pytesseract
-        im = Image.open(path)
-        return pytesseract.image_to_string(im)
-
-
-    def _docx_to_text(self, path: str) -> str:
-        import docx
-        d = docx.Document(path)
-        return "\n".join([p.text for p in d.paragraphs])
-
-
-    def _best_effort_text(self, path: str) -> str:
-        try:
-            with open(path, 'r', encoding='utf-8', errors='ignore') as f:
-                return f.read()
-        except Exception:
-            return ''
-
-
-    def _text_to_payload(self, text: str, source: str, add_warning: str | None = None):
-        """
-        Convert raw text into uniform JSON so the UI can always render something
-        even when there is no form-specific mapper.
-        """
-        warnings = []
-        if add_warning:
-            warnings.append(add_warning)
-        if not text or text.strip() == '':
-            warnings.append('No text recognized.')
-
-        # Heuristic key:value lines
-        kv = {}
-        for line in (text.splitlines() if text else []):
-            if ':' in line:
-                k, v = line.split(':', 1)
-                kv[k.strip()[:60]] = v.strip()
-
-        data = {
-            'source': source,
-            'raw_text': text,
-            'heuristic_fields': kv
+        
+        metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f, indent=2)
+        
+        # Add to folder if folder_id provided
+        if folder_id:
+            from services.folder_service import FolderService
+            folder_service = FolderService()
+            folder_service.add_submission(folder_id, submission_id, filename)
+        
+        # Progress: 100% - Complete
+        if progress_callback:
+            progress_callback(submission_id, 100, 'ready', 'Extraction complete')
+        
+        return {
+            'submission_id': submission_id,
+            'confidence': extraction_result.confidence,
+            'warnings': extraction_result.warnings,
+            'data': extraction_result.json
         }
-        L = len(text or '')
-        confidence = 0.2 if L < 100 else (0.5 if L < 800 else 0.7)
-        field_confidence = {k: 0.6 for k in kv.keys()}
-        extras = {'recognized_chars': L}
-
-        return data, confidence, warnings, field_confidence, extras
-
+    
     def get_submission(self, submission_id: str):
         """
         Get submission data.

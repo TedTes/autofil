@@ -3,14 +3,9 @@
 import { useState } from 'react'
 import { AlertCircle, Info, CheckCircle2 } from 'lucide-react'
 import { ConfidenceBar } from '@/components/ConfidenceBadge'
-import {ExtractedField} from "../types";
+import {ExtractedField,ExtractionData} from "../types";
+import {flattenObjectToFields} from "../lib";
 
-
-export interface ExtractionData {
-  fields: ExtractedField[]
-  overall_confidence?: number
-  warnings?: string[]
-}
 
 interface ExtractionDataFormProps {
   data: ExtractionData
@@ -23,7 +18,15 @@ export function ExtractionDataForm({
   isEditable = false, 
   onChange 
 }: ExtractionDataFormProps) {
-  const [fields, setFields] = useState<ExtractedField[]>(data.fields || [])
+  const [fields, setFields] = useState<ExtractedField[]>(() => {
+    if (!data.data) return []
+    
+    return flattenObjectToFields(
+      data.data, 
+      data.field_confidence, 
+      data.field_hints
+    )
+  })
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['all']))
 
   // Group fields by section
@@ -58,7 +61,7 @@ export function ExtractionDataForm({
     onChange?.(updatedFields)
   }
 
-  if (!data.fields || data.fields.length === 0) {
+  if (!data.data || Object.keys(data.data).length === 0) {
     return (
       <div className="bg-gray-50 rounded-lg p-8 text-center">
         <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-3" />
@@ -73,9 +76,9 @@ export function ExtractionDataForm({
   return (
     <div className="space-y-6">
       {/* Overall Confidence Banner */}
-      {data.overall_confidence !== undefined && (
+      {data.confidence !== undefined && (
         <ConfidenceBar 
-        confidence={data.overall_confidence} 
+        confidence={data.confidence} 
         label="Overall Extraction Confidence"
       />
       )}

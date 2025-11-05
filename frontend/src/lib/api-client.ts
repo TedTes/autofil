@@ -9,7 +9,8 @@ import type {
   FillResponse, 
   SubmissionDetail,
   Folder,
-  FillReport
+  FillReport,
+  ExtractionData
 } from '@/types'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
@@ -130,17 +131,28 @@ export async function uploadMultiplePdfs(
 /**
  * Get submission by ID.
  */
-export async function getSubmission(id: string): Promise<SubmissionDetail> {
+export async function getSubmission(id: string): Promise<ExtractionData> {
   try {
-    const response = await api.get<ApiResponse<{ submission: SubmissionDetail }>>(
+    const response = await api.get(
       `/submissions/${id}`
     )
 
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to get submission')
     }
-
-    return response.data.data!.submission
+    const submission = (response.data as { submission?: ExtractionData }).submission
+    if (!submission) {
+      throw new Error('Submission not found in response')
+    }
+    return {
+      submission_id: submission.submission_id,
+      filename: submission.filename,
+      status: submission.status,
+      uploaded_at: submission.uploaded_at,
+      confidence: submission.confidence,
+      warnings: submission.warnings,
+      data: submission.data
+    }
   } catch (error) {
     handleApiError(error)
   }

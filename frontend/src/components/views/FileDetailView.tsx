@@ -3,11 +3,11 @@
 import { useState, useEffect } from 'react'
 import { ArrowLeft, Download, Save, Loader2 } from 'lucide-react'
 import { PdfPreview } from '@/components/PdfPreview'
-import { ExtractionDataForm, type ExtractionData } from '@/components/ExtractionDataForm'
-import {type ExtractedField} from "../../types";
+import { ExtractionDataForm} from '@/components/ExtractionDataForm'
+import {type ExtractedField, type ExtractionData } from "../../types";
 import { ConfidenceBadge } from '@/components/ConfidenceBadge'
 import { getSubmission, getInputPreviewUrl,updateSubmission ,exportFilledPdf, downloadBlob } from '@/lib/api-client'
-import {transformApiFieldsToForm,transformFormFieldsToApi} from "../../lib";
+import {transformApiFieldsToForm,transformFormFieldsToApi,fieldsToNestedObject} from "../../lib";
 import {ExportModal} from "../ExportModal";
 interface FileDetailViewProps {
   submissionId: string
@@ -45,16 +45,19 @@ export function FileDetailView({ submissionId, filename, onBack }: FileDetailVie
     setError(null)
 
     try {
-      const data = await getSubmission(submissionId)
-      
-      // Transform API response to ExtractionData format
-      const transformedData: ExtractionData = {
-        overall_confidence: data.confidence || 0,
-        warnings: data.warnings || [],
-        fields: transformApiFieldsToForm(data.data || {}),
-      }
-
-      setExtractionData(transformedData)
+      const submission = await getSubmission(submissionId)
+      setExtractionData({
+        submission_id: submission.submission_id,
+        filename: submission.filename,
+        status: submission.status,
+        uploaded_at:submission.uploaded_at,
+        data: submission.data || {},                         
+        field_confidence: submission.field_confidence,  
+        confidence: submission.confidence,  
+        warnings: submission.warnings,   
+        field_hints: submission.field_hints,
+        extraction_issues: submission.extraction_issues
+      })
     } catch (err) {
       console.error('Failed to fetch submission:', err)
       setError(err instanceof Error ? err.message : 'Failed to load document')
@@ -65,10 +68,11 @@ export function FileDetailView({ submissionId, filename, onBack }: FileDetailVie
 
   const handleFieldsChange = (updatedFields: ExtractedField[]) => {
     if (!extractionData) return
+    const updatedData = fieldsToNestedObject(updatedFields)
 
     setExtractionData({
       ...extractionData,
-      fields: updatedFields,
+      data:updatedData,
     })
     setHasChanges(true)
   }
@@ -80,25 +84,18 @@ export function FileDetailView({ submissionId, filename, onBack }: FileDetailVie
     setError(null)
   
     try {
-      // Transform fields back to API format
-      const updatedData = transformFormFieldsToApi(extractionData.fields)
   
-      // Call API to update submission
-      const result = await updateSubmission(submissionId, updatedData)
+      const result = await updateSubmission(submissionId, extractionData.data ?? {})
   
       if (result.success) {
         setHasChanges(false)
         showSuccessMessage('Changes saved successfully!')
-        
-        // Optionally refetch to get server-side updates
-        // await fetchSubmissionData()
       } else {
         throw new Error(result.message || 'Save failed')
       }
     } catch (err) {
       console.error('Failed to save:', err)
-      const errorMessage = err instanceof Error ? err.message : 'Failed to save changes'
-      showErrorMessage(errorMessage)
+      showErrorMessage(err instanceof Error ? err.message : 'Failed to save changes')
     } finally {
       setIsSaving(false)
     }
@@ -181,9 +178,9 @@ export function FileDetailView({ submissionId, filename, onBack }: FileDetailVie
           <h2 className="text-lg sm:text-xl font-bold text-gray-900 truncate">
             {filename || 'Document Details'}
           </h2>
-          {extractionData?.overall_confidence !== undefined && (
+          {extractionData?.confidence !== undefined && (
             <ConfidenceBadge
-              confidence={extractionData.overall_confidence}
+              confidence={extractionData.confidence}
               variant="pill"
               showLabel={false}
               size="sm"
@@ -306,8 +303,19 @@ export function FileDetailView({ submissionId, filename, onBack }: FileDetailVie
       </div>
 
       {extractionData ? (
-        <ExtractionDataForm
-          data={extractionData}
+          <ExtractionDataForm
+          data={{
+            submission_id: extractionData.submission_id,
+            filename: extractionData.filename,
+            status: extractionData.status,
+            uploaded_at: extractionData.uploaded_at,
+            data: extractionData.data || {},                         
+            field_confidence: extractionData.field_confidence,  
+            confidence: extractionData.confidence,  
+            warnings: extractionData.warnings,   
+            field_hints: extractionData.field_hints,
+            extraction_issues: extractionData.extraction_issues
+          }}
           isEditable={true}
           onChange={handleFieldsChange}
         />

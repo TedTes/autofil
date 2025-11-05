@@ -10,7 +10,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 // Helper function to transform API data to form fields
-export function transformApiFieldsToForm(apiData: Record<string, string> | object): ExtractedField[] {
+export function transformApiFieldsToForm(apiData: Record<string, unknown>): ExtractedField[] {
   const fields: ExtractedField[] = []
 
   // Define field sections and types based on common ACORD fields
@@ -43,8 +43,8 @@ export function transformApiFieldsToForm(apiData: Record<string, string> | objec
     
     fields.push({
       field_name: key,
-      field_value: value,
-      confidence: typeof value === 'object' && value["confidence"] ? value["confidence"] : undefined,
+      field_value: String(value),
+      confidence: hasNumericConfidence(value) ? value.confidence : undefined,
       field_type: mapping.type,
       section: mapping.section,
       required: mapping.required,
@@ -60,6 +60,14 @@ export function transformApiFieldsToForm(apiData: Record<string, string> | objec
   })
 
   return fields
+}
+
+function hasNumericConfidence(value: unknown): value is { confidence: number } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as Record<string, unknown>)['confidence'] === 'number'
+  )
 }
 
 // Helper function to transform form fields back to API data
@@ -99,4 +107,79 @@ export function formatDate(isoString: string): string {
   if (diffDays < 7) return `${diffDays} days ago`
   
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+
+export function flattenObjectToFields(
+  obj: Record<string, unknown>,
+  confidences?: Record<string, number>,
+  hints?: Record<string, string>,
+  parentKey: string = ''
+): ExtractedField[] {
+  const fields: ExtractedField[] = []
+  
+  for (const [key, value] of Object.entries(obj)) {
+    const fullKey = parentKey ? `${parentKey}.${key}` : key
+    
+    if (Array.isArray(value)) {
+      value.forEach((item, idx) => {
+        if (typeof item === 'object') {
+          fields.push(...flattenObjectToFields(item, confidences, hints, `${fullKey}[${idx}]`))
+        } else {
+          fields.push({
+            field_name: `${fullKey}[${idx}]`,
+            field_value: String(item),
+            confidence: confidences?.[`${fullKey}[${idx}]`],
+            field_type: 'text',
+            section: parentKey || 'General'
+          })
+        }
+      })
+    } else if (typeof value === 'object' && value !== null) {
+      fields.push(
+        ...flattenObjectToFields(
+          value as Record<string, unknown>,
+          confidences,
+          hints,
+          fullKey
+        )
+      )
+    } else {
+      fields.push({
+        field_name: fullKey,
+        field_value: String(value),
+        confidence: confidences?.[fullKey],
+        field_type: inferFieldType(value),
+        section: parentKey || 'General'
+      })
+    }
+  }
+  
+  return fields
+}
+
+function inferFieldType(value: unknown): ExtractedField['field_type'] {
+  if (typeof value === 'boolean') return 'boolean'
+  if (typeof value === 'number') return 'number'
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) return 'date'
+  return 'text'
+}
+
+// Helper function
+export function fieldsToNestedObject(fields: ExtractedField[]): Record<string, unknown> {
+  const result: Record<string, unknown> = {}
+  
+  fields.forEach(field => {
+    const keys = field.field_name.split('.')
+    let current = result
+    
+    for (let i = 0; i < keys.length - 1; i++) {
+      if (!current[keys[i]]) current[keys[i]] = {}
+      current = current[keys[i]] as Record<string,unknown>
+    }
+    
+    current[keys[keys.length - 1]] = field.field_value
+  })
+  
+  return result
 }

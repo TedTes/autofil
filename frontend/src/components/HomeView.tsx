@@ -246,14 +246,16 @@ function EmptyDashboardState({
             rows={uploaded}
             phase={phase}
             onExtractSelected={async (selectedIds) => {
-              for (const id of selectedIds) {
-                const row = uploaded.find((r) => r.submissionId === id)
-                if (row) {
-                  const _data = await getSubmission(id)
-                  if (onGoToFile) {
-                    onGoToFile(id, row.filename)
-                  }
+              if (selectedIds.length === 1) {
+                // Single file - navigate directly
+                const row = uploaded.find((r) => r.submissionId === selectedIds[0])
+                if (row && onGoToFile) {
+                  onGoToFile(row.submissionId, row.filename)
                 }
+              } else {
+                // Multiple files - show success message
+                setMessage(`✓ Ready to view ${selectedIds.length} files`)
+                setPhase('export')
               }
             }}
             onRemove={removeFile}

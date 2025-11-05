@@ -12,7 +12,19 @@ export interface ClassificationResult {
   }>
   classified_at?: string
 }
-  
+export interface ExtractionData {
+  submission_id: string
+  filename: string
+  status: string
+  uploaded_at: string
+  confidence?: number
+  warnings?: string[]
+  data?: Record<string, unknown>           // nested object
+  field_confidence?: Record<string, number>
+  field_hints?: Record<string, string>
+  extraction_issues?: Record<string, unknown>
+}
+
 export interface ExtractionResult {
   success: boolean
   data: Record<string, unknown>

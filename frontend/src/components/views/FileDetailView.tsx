@@ -163,162 +163,164 @@ export function FileDetailView({ submissionId, filename, onBack }: FileDetailVie
 
   return (
     <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            {onBack && (
-              <button
-                onClick={onBack}
-                className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                title="Back"
-              >
-                <ArrowLeft className="w-5 h-5" />
-              </button>
-            )}
-            <div>
-              <div className="flex items-center gap-3">
-                <h2 className="text-xl font-bold text-gray-900">
-                  {filename || 'Document Details'}
-                </h2>
-                {extractionData?.overall_confidence !== undefined && (
-                  <ConfidenceBadge
-                    confidence={extractionData.overall_confidence}
-                    variant="pill"
-                    showLabel={true}
-                  />
-                )}
-              </div>
-              <p className="text-sm text-gray-500 mt-1">Submission ID: {submissionId}</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleSave}
-              disabled={!hasChanges || isSaving}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                hasChanges && !isSaving
-                  ? 'text-white bg-blue-600 hover:bg-blue-700'
-                  : 'text-gray-400 bg-gray-100 cursor-not-allowed'
-              }`}
-            >
-              {isSaving ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  Save
-                </>
-              )}
-            </button>
-            <button
-  onClick={handleExport}
-  // onClick={() => setShowExportModal(true)}
-  disabled={isExporting}
-  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-    isExporting
-      ? 'text-white bg-green-500 cursor-not-allowed'
-      : 'text-white bg-green-600 hover:bg-green-700'
-  }`}
->
-  {isExporting ? (
-    <>
-      <Loader2 className="w-4 h-4 animate-spin" />
-      Exporting...
-    </>
-  ) : (
-    <>
-      <Download className="w-4 h-4" />
-      Export PDF
-    </>
-  )}
-</button>
-          </div>
+  {/* Header - Mobile Responsive */}
+<div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4">
+  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+      {onBack && (
+        <button
+          onClick={onBack}
+          className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+          title="Back"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <h2 className="text-lg sm:text-xl font-bold text-gray-900 truncate">
+            {filename || 'Document Details'}
+          </h2>
+          {extractionData?.overall_confidence !== undefined && (
+            <ConfidenceBadge
+              confidence={extractionData.overall_confidence}
+              variant="pill"
+              showLabel={false}
+              size="sm"
+            />
+          )}
         </div>
+        <p className="text-xs sm:text-sm text-gray-500 mt-1 truncate">
+          ID: {submissionId}
+        </p>
+      </div>
+    </div>
+
+    {/* Action Buttons - Mobile Optimized */}
+    <div className="flex items-center gap-2 self-end sm:self-auto">
+      <button
+        onClick={handleSave}
+        disabled={!hasChanges || isSaving}
+        className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
+          hasChanges && !isSaving
+            ? 'text-white bg-blue-600 hover:bg-blue-700'
+            : 'text-gray-400 bg-gray-100 cursor-not-allowed'
+        }`}
+      >
+        {isSaving ? (
+          <>
+            <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
+            <span className="hidden sm:inline">Saving...</span>
+          </>
+        ) : (
+          <>
+            <Save className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span>Save</span>
+          </>
+        )}
+      </button>
+      <button
+        onClick={handleExport}
+        disabled={isExporting}
+        className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
+          isExporting
+            ? 'text-white bg-green-500 cursor-not-allowed'
+            : 'text-white bg-green-600 hover:bg-green-700'
+        }`}
+      >
+        {isExporting ? (
+          <>
+            <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
+            <span className="hidden sm:inline">Exporting...</span>
+          </>
+        ) : (
+          <>
+            <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span>Export</span>
+          </>
+        )}
+      </button>
+    </div>
+  </div>
 
         {/* Changes indicator */}
-        {hasChanges && (
-          <div className="mt-3 px-3 py-2 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center justify-between">
-            <p className="text-sm text-yellow-800">
-              You have unsaved changes
-            </p>
-            <button
-              onClick={() => {
-                if (confirm('Discard unsaved changes?')) {
-                  fetchSubmissionData()
-                  setHasChanges(false)
-                }
-              }}
-              className="text-sm text-yellow-800 hover:text-yellow-900 underline"
-            >
-              Discard
-            </button>
-          </div>
-        )}
-        {/* Success message */}
-{successMessage && (
-  <div className="mt-3 px-3 py-2 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
-    <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-    </svg>
-    <p className="text-sm text-green-800">{successMessage}</p>
-  </div>
-)}
+     {/* Messages - Mobile Optimized */}
+  {hasChanges && (
+    <div className="mt-3 px-3 py-2 bg-yellow-50 border border-yellow-200 rounded-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+      <p className="text-xs sm:text-sm text-yellow-800">
+        You have unsaved changes
+      </p>
+      <button
+        onClick={() => {
+          if (confirm('Discard unsaved changes?')) {
+            fetchSubmissionData()
+            setHasChanges(false)
+          }
+        }}
+        className="text-xs sm:text-sm text-yellow-800 hover:text-yellow-900 underline self-start sm:self-auto"
+      >
+        Discard
+      </button>
+    </div>
+  )}
+  
+  {successMessage && (
+    <div className="mt-3 px-3 py-2 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
+      <svg className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+      </svg>
+      <p className="text-xs sm:text-sm text-green-800">{successMessage}</p>
+    </div>
+  )}
 
-{/* Error message */}
-{errorMessage && (
-  <div className="mt-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-    <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-    <p className="text-sm text-red-800">{errorMessage}</p>
-  </div>
-)}
-      </div>
+  {errorMessage && (
+    <div className="mt-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+      <svg className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <p className="text-xs sm:text-sm text-red-800">{errorMessage}</p>
+    </div>
+  )}
+</div>
 
       {/* Main Content - Two Column Layout */}
-      <div className="flex-1 overflow-hidden">
-        <div className="h-full grid grid-cols-1 lg:grid-cols-2 gap-0">
-          {/* Left Column: PDF Preview */}
-          <div className="bg-gray-900 border-r border-gray-700 overflow-hidden">
-            <PdfPreview
-              fileUrl={getInputPreviewUrl(submissionId)}
-              filename={filename}
-              onDownload={handleDownloadOriginal}
-            />
-          </div>
+    {/* Main Content - Mobile: Stack Vertically, Desktop: Side by Side */}
+<div className="flex-1 overflow-hidden flex flex-col lg:grid lg:grid-cols-2 lg:gap-0">
+  {/* PDF Preview - Hidden on mobile by default, toggle button to show */}
+  <div className="hidden lg:block bg-gray-900 border-r border-gray-700 overflow-hidden lg:col-span-1">
+    <PdfPreview
+      fileUrl={getInputPreviewUrl(submissionId)}
+      filename={filename}
+      onDownload={handleDownloadOriginal}
+    />
+  </div>
 
-          {/* Right Column: Extracted Data */}
-          <div className="bg-white overflow-y-auto">
-            <div className="p-8">
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Extracted Data</h3>
-                <p className="text-sm text-gray-600">
-                  Review and edit the extracted information below
-                </p>
-              </div>
-
-              {extractionData ? (
-                <ExtractionDataForm
-                  data={extractionData}
-                  isEditable={true}
-                  onChange={handleFieldsChange}
-                />
-              ) : (
-                <div className="bg-gray-50 rounded-lg p-6 text-center">
-                  <p className="text-sm text-gray-600">
-                    No extraction data available
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+  {/* Extracted Data - Full height on mobile */}
+  <div className="flex-1 bg-white overflow-y-auto lg:col-span-1">
+    <div className="p-4 sm:p-6 lg:p-8">
+      <div className="mb-4 sm:mb-6">
+        <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">Extracted Data</h3>
+        <p className="text-xs sm:text-sm text-gray-600">
+          Review and edit the extracted information below
+        </p>
       </div>
+
+      {extractionData ? (
+        <ExtractionDataForm
+          data={extractionData}
+          isEditable={true}
+          onChange={handleFieldsChange}
+        />
+      ) : (
+        <div className="bg-gray-50 rounded-lg p-6 text-center">
+          <p className="text-sm text-gray-600">
+            No extraction data available
+          </p>
+        </div>
+      )}
+    </div>
+  </div>
+</div>
       <ExportModal
   isOpen={showExportModal}
   onClose={() => setShowExportModal(false)}

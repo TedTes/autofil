@@ -516,43 +516,39 @@ const handleSort = (column: typeof sortBy) => {
             <span className="text-sm font-medium">Refresh</span>
           </button>
         </div>
-
-        {/* Search and Filters Row */}
-        <div className="flex flex-col sm:flex-row gap-3">
-          {/* Search */}
-          {/* Enhanced Search */}
-<div className="flex-1 relative">
-  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-  <input
-    ref={searchInputRef}
-    type="text"
-    placeholder="Search by filename, client, or policy number..."
-    value={searchQuery}
-    onChange={(e) => setSearchQuery(e.target.value)}
-    onFocus={() => setShowSearchSuggestions(true)}
-    className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
-  />
-  
-  {/* Loading indicator while debouncing */}
-  {searchQuery && searchQuery !== debouncedSearchQuery && (
-    <div className="absolute right-10 top-1/2 -translate-y-1/2">
-      <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
-    </div>
-  )}
-  
-  {/* Clear button */}
-  {searchQuery && (
-    <button
-      onClick={() => {
-        setSearchQuery('')
-        setDebouncedSearchQuery('')
-        searchInputRef.current?.focus()
-      }}
-      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-    >
-      <X className="w-4 h-4" />
-    </button>
-  )}
+{/* Search and Filters Row - Mobile Responsive */}
+<div className="flex flex-col gap-3">
+  {/* Search - Full width on mobile */}
+  <div className="flex-1 relative">
+    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+    <input
+      ref={searchInputRef}
+      type="text"
+      placeholder="Search files..."
+      value={searchQuery}
+      onChange={(e) => setSearchQuery(e.target.value)}
+      onFocus={() => setShowSearchSuggestions(true)}
+      className="w-full pl-10 pr-10 py-2.5 sm:py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
+    />
+    
+    {searchQuery && searchQuery !== debouncedSearchQuery && (
+      <div className="absolute right-10 top-1/2 -translate-y-1/2">
+        <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
+      </div>
+    )}
+    
+    {searchQuery && (
+      <button
+        onClick={() => {
+          setSearchQuery('')
+          setDebouncedSearchQuery('')
+          searchInputRef.current?.focus()
+        }}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+      >
+        <X className="w-4 h-4" />
+      </button>
+    )}
 
   {/* Search Suggestions Dropdown */}
   {showSearchSuggestions && (searchSuggestions.length > 0 || recentSearches.length > 0) && (
@@ -615,107 +611,82 @@ const handleSort = (column: typeof sortBy) => {
 </div>
 
       
-  {/* Filters and View Toggle */}
-<div className="flex items-center gap-2">
-  {/* Status Filter */}
-  <select
-    value={selectedFilter}
-    onChange={(e) => setSelectedFilter(e.target.value as ISelected)}
-    className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-500 bg-white"
-  >
-    <option value="all">All Files ({files.length})</option>
-    <option value="ready">Ready ({files.filter(f => f.status === 'ready').length})</option>
-    <option value="extracted">Extracted ({files.filter(f => f.status === 'extracted').length})</option>
-    <option value="filled">Filled ({files.filter(f => f.status === 'filled').length})</option>
-  </select>
-
-  {/* Advanced Filters Toggle */}
-  <button
-    onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-    className={`flex items-center gap-2 px-4 py-2 border rounded-lg text-sm font-medium transition-colors ${
-      showAdvancedFilters || hasActiveAdvancedFilters
-        ? 'border-blue-500 bg-blue-50 text-blue-700'
-        : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
-    }`}
-  >
-    <Sliders className="w-4 h-4" />
-    Filters
-    {hasActiveAdvancedFilters && (
-      <span className="flex items-center justify-center w-5 h-5 bg-blue-600 text-white text-xs rounded-full">
-        {[
-          confidenceRange[0] > 0 || confidenceRange[1] < 100,
-          dateRange.start !== '',
-          dateRange.end !== '',
-          selectedClient !== 'all',
-        ].filter(Boolean).length}
-      </span>
-    )}
-  </button>
-{/* Advanced Filters Toggle */}
-<button
-  onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-  className={`flex items-center gap-2 px-4 py-2 border rounded-lg text-sm font-medium transition-colors ${
-    showAdvancedFilters || hasActiveAdvancedFilters
-      ? 'border-blue-500 bg-blue-50 text-blue-700'
-      : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
-  }`}
->
-  <Sliders className="w-4 h-4" />
-  Filters
-  {hasActiveAdvancedFilters && (
-    <span className="flex items-center justify-center w-5 h-5 bg-blue-600 text-white text-xs rounded-full">
-      {[
-        confidenceRange[0] > 0 || confidenceRange[1] < 100,
-        dateRange.start !== '',
-        dateRange.end !== '',
-        selectedClient !== 'all',
-      ].filter(Boolean).length}
-    </span>
-  )}
-</button>
-
-{/* Sort Dropdown */}
-<select
-  value={`${sortBy}-${sortOrder}`}
-  onChange={(e) => {
-    const [newSortBy, newSortOrder] = e.target.value.split('-') as [typeof sortBy, typeof sortOrder]
-    setSortBy(newSortBy)
-    setSortOrder(newSortOrder)
-  }}
-  className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-500 bg-white"
->
-  <option value="date-desc">Newest First</option>
-  <option value="date-asc">Oldest First</option>
-  <option value="filename-asc">Name (A-Z)</option>
-  <option value="filename-desc">Name (Z-A)</option>
-  <option value="confidence-desc">Confidence (High-Low)</option>
-  <option value="confidence-asc">Confidence (Low-High)</option>
-  <option value="client-asc">Client (A-Z)</option>
-  <option value="client-desc">Client (Z-A)</option>
-</select>
-  {/* View Mode Toggle */}
-  <div className="flex items-center border border-gray-300 rounded-lg">
-    <button
-      onClick={() => setViewMode('list')}
-      className={`p-2 ${
-        viewMode === 'list' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:text-gray-900'
-      } rounded-l-lg transition-colors`}
-      title="List view"
+  {/* Filters Row - Stack on mobile */}
+  <div className="flex flex-wrap items-center gap-2">
+    {/* Status Filter */}
+    <select
+      value={selectedFilter}
+      onChange={(e) => setSelectedFilter(e.target.value as ISelected)}
+      className="flex-1 min-w-[120px] px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-500 bg-white"
     >
-      <List className="w-4 h-4" />
-    </button>
-    <button
-      onClick={() => setViewMode('grid')}
-      className={`p-2 ${
-        viewMode === 'grid' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:text-gray-900'
-      } rounded-r-lg transition-colors border-l border-gray-300`}
-      title="Grid view"
+      <option value="all">All ({files.length})</option>
+      <option value="ready">Ready ({files.filter(f => f.status === 'ready').length})</option>
+      <option value="extracted">Extracted ({files.filter(f => f.status === 'extracted').length})</option>
+      <option value="filled">Filled ({files.filter(f => f.status === 'filled').length})</option>
+    </select>
+
+    {/* Sort - Mobile friendly */}
+    <select
+      value={`${sortBy}-${sortOrder}`}
+      onChange={(e) => {
+        const [newSortBy, newSortOrder] = e.target.value.split('-') as [typeof sortBy, typeof sortOrder]
+        setSortBy(newSortBy)
+        setSortOrder(newSortOrder)
+      }}
+      className="flex-1 min-w-[140px] px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-500 bg-white"
     >
-      <Grid3x3 className="w-4 h-4" />
+      <option value="date-desc">Newest First</option>
+      <option value="date-asc">Oldest First</option>
+      <option value="filename-asc">Name (A-Z)</option>
+      <option value="filename-desc">Name (Z-A)</option>
+      <option value="confidence-desc">High Confidence</option>
+      <option value="confidence-asc">Low Confidence</option>
+    </select>
+      {/* Advanced Filters Toggle */}
+      <button
+      onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+      className={`flex items-center gap-2 px-3 py-2 border rounded-lg text-sm font-medium transition-colors ${
+        showAdvancedFilters || hasActiveAdvancedFilters
+          ? 'border-blue-500 bg-blue-50 text-blue-700'
+          : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+      }`}
+    >
+      <Sliders className="w-4 h-4" />
+      <span className="hidden sm:inline">Filters</span>
+      {hasActiveAdvancedFilters && (
+        <span className="flex items-center justify-center w-5 h-5 bg-blue-600 text-white text-xs rounded-full">
+          {[
+            confidenceRange[0] > 0 || confidenceRange[1] < 100,
+            dateRange.start !== '',
+            dateRange.end !== '',
+            selectedClient !== 'all',
+          ].filter(Boolean).length}
+        </span>
+      )}
     </button>
+   {/* View Mode Toggle - Hidden on small screens */}
+   <div className="hidden sm:flex items-center border border-gray-300 rounded-lg">
+      <button
+        onClick={() => setViewMode('list')}
+        className={`p-2 ${
+          viewMode === 'list' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:text-gray-900'
+        } rounded-l-lg transition-colors`}
+        title="List view"
+      >
+        <List className="w-4 h-4" />
+      </button>
+      <button
+        onClick={() => setViewMode('grid')}
+        className={`p-2 ${
+          viewMode === 'grid' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:text-gray-900'
+        } rounded-r-lg transition-colors border-l border-gray-300`}
+        title="Grid view"
+      >
+        <Grid3x3 className="w-4 h-4" />
+      </button>
+    </div>
   </div>
 </div>
-        </div>
         {/* Advanced Filters Panel */}
         {showAdvancedFilters && (
           <div className="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
@@ -1016,6 +987,7 @@ const handleSort = (column: typeof sortBy) => {
 }
 
 // File List View (Table-like with sortable headers)
+// Mobile-friendly file list - hide some columns on small screens
 function FileListView({
   files,
   selectedFiles,
@@ -1030,7 +1002,7 @@ function FileListView({
   selectedFiles: Set<string>
   onFileClick?: (id: string, name: string) => void
   onToggleSelect: (id: string) => void
-  toggleSelectAll:() => void
+  toggleSelectAll: () => void
   sortBy: 'date' | 'filename' | 'confidence' | 'client'
   sortOrder: 'asc' | 'desc'
   onSort: (column: typeof sortBy) => void
@@ -1048,16 +1020,9 @@ function FileListView({
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-      {/* Table Header with Sortable Columns */}
-      <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 grid grid-cols-12 gap-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">
-      <div className="col-span-1">
-  <input
-    type="checkbox"
-    checked={files.length > 0 && files.every((f) => selectedFiles.has(f.submission_id))}
-    onChange={toggleSelectAll}
-    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-  />
-</div>
+      {/* Table Header - Responsive */}
+      <div className="hidden md:grid bg-gray-50 border-b border-gray-200 px-4 py-3 grid-cols-12 gap-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+        <div className="col-span-1"></div>
         
         <button
           onClick={() => onSort('filename')}
@@ -1094,64 +1059,100 @@ function FileListView({
         </button>
       </div>
 
-      {/* File Rows */}
+      {/* File Rows - Mobile Optimized */}
       <div className="divide-y divide-gray-100">
         {files.map((file) => (
           <div
             key={file.submission_id}
-            className={`px-4 py-3 grid grid-cols-12 gap-4 items-center hover:bg-gray-50 transition-colors ${
-              selectedFiles.has(file.submission_id) ? 'bg-blue-50' : ''
+            className={`px-4 py-3 transition-colors ${
+              selectedFiles.has(file.submission_id) ? 'bg-blue-50' : 'hover:bg-gray-50'
             }`}
           >
-            {/* Checkbox */}
-            <div className="col-span-1">
-              <input
-                type="checkbox"
-                checked={selectedFiles.has(file.submission_id)}
-                onChange={() => onToggleSelect(file.submission_id)}
-                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-              />
-            </div>
+            {/* Desktop Layout */}
+            <div className="hidden md:grid grid-cols-12 gap-4 items-center">
+              <div className="col-span-1">
+                <input
+                  type="checkbox"
+                  checked={selectedFiles.has(file.submission_id)}
+                  onChange={() => onToggleSelect(file.submission_id)}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+              </div>
 
-            {/* Filename */}
-            <div className="col-span-4">
-              <button
-                onClick={() => onFileClick?.(file.submission_id, file.filename)}
-                className="flex items-center gap-3 text-left hover:text-blue-600 transition-colors group"
-              >
-                <FileText className="w-5 h-5 text-gray-400 group-hover:text-blue-600 flex-shrink-0" />
-                <span className="text-sm font-medium text-gray-900 group-hover:text-blue-600 truncate">
-                  {file.filename}
+              <div className="col-span-4">
+                <button
+                  onClick={() => onFileClick?.(file.submission_id, file.filename)}
+                  className="flex items-center gap-3 text-left hover:text-blue-600 transition-colors group w-full"
+                >
+                  <FileText className="w-5 h-5 text-gray-400 group-hover:text-blue-600 flex-shrink-0" />
+                  <span className="text-sm font-medium text-gray-900 group-hover:text-blue-600 truncate">
+                    {file.filename}
+                  </span>
+                </button>
+              </div>
+
+              <div className="col-span-2">
+                <span className="text-sm text-gray-600 truncate block">
+                  {file.client_name || '—'}
                 </span>
-              </button>
+              </div>
+
+              <div className="col-span-2">
+                <StatusBadge status={file.status} />
+              </div>
+
+              <div className="col-span-1">
+                {file.confidence !== undefined ? (
+                  <ConfidenceBadgeCompact confidence={file.confidence} />
+                ) : (
+                  <span className="text-sm text-gray-400">—</span>
+                )}
+              </div>
+
+              <div className="col-span-2">
+                <span className="text-sm text-gray-600">
+                  {formatDate(file.uploaded_at)}
+                </span>
+              </div>
             </div>
 
-            {/* Client */}
-            <div className="col-span-2">
-              <span className="text-sm text-gray-600 truncate block">
-                {file.client_name || '—'}
-              </span>
-            </div>
-
-            {/* Status */}
-            <div className="col-span-2">
-              <StatusBadge status={file.status} />
-            </div>
-
-            {/* Confidence */}
-            <div className="col-span-1">
-              {file.confidence !== undefined ? (
-                <ConfidenceBadgeCompact confidence={file.confidence} />
-              ) : (
-                <span className="text-sm text-gray-400">—</span>
-              )}
-            </div>
-
-            {/* Uploaded */}
-            <div className="col-span-2">
-              <span className="text-sm text-gray-600">
-                {formatDate(file.uploaded_at)}
-              </span>
+            {/* Mobile Layout - Simplified */}
+            <div className="md:hidden">
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={selectedFiles.has(file.submission_id)}
+                  onChange={() => onToggleSelect(file.submission_id)}
+                  className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mt-0.5 flex-shrink-0"
+                />
+                
+                <button
+                  onClick={() => onFileClick?.(file.submission_id, file.filename)}
+                  className="flex-1 text-left min-w-0"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <FileText className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                    <span className="text-sm font-medium text-gray-900 truncate">
+                      {file.filename}
+                    </span>
+                  </div>
+                  
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                    {file.confidence !== undefined && (
+                      <ConfidenceBadgeCompact confidence={file.confidence} />
+                    )}
+                    <StatusBadge status={file.status} />
+                    <span>•</span>
+                    <span>{formatDate(file.uploaded_at)}</span>
+                  </div>
+                  
+                  {file.client_name && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Client: {file.client_name}
+                    </p>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         ))}

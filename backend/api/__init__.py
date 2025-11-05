@@ -14,6 +14,16 @@ def create_app():
         Configured Flask app
     """
     app = Flask(__name__)
+    # Register blueprints
+    from .routes  import (submission_bp,folder_bp, health_bp,extraction_bp,client_bp)
+
+   
+    app.register_blueprint(submission_bp, url_prefix='/api/submissions')
+    app.register_blueprint(folder_bp, url_prefix='/api/folders')
+    app.register_blueprint(extraction_bp, url_prefix='/api/extraction')
+    app.register_blueprint(health_bp, url_prefix='/api/health')
+    app.register_blueprint(client_bp, url_prefix='/api/clients')
+    
     # Enable CORS for frontend
     CORS(app, resources={
         r"/api/*": {
@@ -33,15 +43,7 @@ def create_app():
     os.makedirs('storage/data', exist_ok=True)
     os.makedirs('storage/folders', exist_ok=True)
     
-    # Register blueprints
-    from .routes  import (submission_bp,folder_bp, health_bp,extraction_bp,client_bp)
-
-   
-    app.register_blueprint(submission_bp, url_prefix='/api')
-    app.register_blueprint(folder_bp, url_prefix='/api')
-    app.register_blueprint(extraction_bp, url_prefix='/api/extraction')
-    app.register_blueprint(health_bp, url_prefix='/api')
-    app.register_blueprint(client_bp, url_prefix='/api')
+ 
     @app.route('/')
     def index():
         return {

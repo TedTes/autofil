@@ -113,7 +113,7 @@ export async function getSubmission(id: string): Promise<ExtractionData> {
     throw new Error(response.data.error || 'Failed to get submission')
   }
 
-  const submission = response.data.submission
+  const submission = response.data
   if (!submission) throw new Error('Submission not found in response')
 
   return {

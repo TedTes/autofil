@@ -13,7 +13,7 @@ folder_service = FolderService()
 submission_service = SubmissionService()
 
 
-@folder_bp.route('/folders', methods=['GET'])
+@folder_bp.route('/', methods=['GET'])
 def list_folders():
     """
     List all folders.
@@ -34,7 +34,7 @@ def list_folders():
         return jsonify({'error': str(e)}), 500
 
 
-@folder_bp.route('/folders', methods=['POST'])
+@folder_bp.route('/', methods=['POST'])
 def create_folder():
     """
     Create a new folder.
@@ -69,7 +69,7 @@ def create_folder():
         return jsonify({'error': str(e)}), 500
 
 
-@folder_bp.route('/folders/<folder_id>', methods=['GET'])
+@folder_bp.route('/<folder_id>', methods=['GET'])
 def get_folder(folder_id):
     """
     Get folder by ID with all submissions.
@@ -106,7 +106,7 @@ def get_folder(folder_id):
         return jsonify({'error': str(e)}), 500
 
 
-@folder_bp.route('/folders/<folder_id>', methods=['PUT'])
+@folder_bp.route('/<folder_id>', methods=['PUT'])
 def update_folder(folder_id):
     """
     Update folder name.
@@ -148,7 +148,7 @@ def update_folder(folder_id):
         return jsonify({'error': str(e)}), 500
 
 
-@folder_bp.route('/folders/<folder_id>', methods=['DELETE'])
+@folder_bp.route('/<folder_id>', methods=['DELETE'])
 def delete_folder(folder_id):
     """
     Delete a folder.

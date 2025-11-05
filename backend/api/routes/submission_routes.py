@@ -15,7 +15,7 @@ submission_bp = Blueprint('submissions', __name__)
 submission_service = SubmissionService()
 
 
-@submission_bp.route('/submissions/upload', methods=['POST'])
+@submission_bp.route('/upload', methods=['POST'])
 def upload_pdf():
     """
     Upload document(s) and extract data.
@@ -89,7 +89,7 @@ def upload_pdf():
 
 
 
-@submission_bp.route('/submissions/batch-fill', methods=['POST'])
+@submission_bp.route('/batch-fill', methods=['POST'])
 def batch_fill_pdfs():
     """
     Fill multiple PDFs with extracted data.
@@ -126,7 +126,7 @@ def batch_fill_pdfs():
                         'skipped': fill_report['skipped'],
                         'warnings': fill_report.get('notes', [])
                     },
-                    'download_url': f'/api/submissions/{submission_id}/download'
+                    'download_url': f'/api/{submission_id}/download'
                 })
             except Exception as e:
                 errors.append({
@@ -150,7 +150,7 @@ def batch_fill_pdfs():
         return jsonify({'error': str(e)}), 500
 
 
-@submission_bp.route('/submissions/<submission_id>', methods=['GET'])
+@submission_bp.route('/<submission_id>', methods=['GET'])
 def get_submission(submission_id):
     """
     Get submission data with field-level confidence and guidance.
@@ -193,7 +193,7 @@ def get_submission(submission_id):
         return jsonify({'error': str(e)}), 500
 
 
-@submission_bp.route('/submissions/<submission_id>', methods=['PUT'])
+@submission_bp.route('/<submission_id>', methods=['PUT'])
 def update_submission(submission_id):
     """
     Update submission data.
@@ -208,13 +208,16 @@ def update_submission(submission_id):
         JSON with updated submission
     """
     try:
+        print("kkkkkkk1")
+        print(submission_id)
         data = request.get_json()
         
         if not data:
             return jsonify({'error': 'No data provided'}), 400
         
         result = submission_service.update_data(submission_id, data)
-        
+        print("kkkkkkk")
+        print(result)
         return jsonify({
             "success": True,
             "data": result,
@@ -227,7 +230,7 @@ def update_submission(submission_id):
         return jsonify({'error': str(e)}), 500
 
 
-@submission_bp.route('/submissions/<submission_id>/fill', methods=['POST'])
+@submission_bp.route('/<submission_id>/fill', methods=['POST'])
 def fill_pdf(submission_id):
     """
     Fill PDF with extracted data.
@@ -247,7 +250,7 @@ def fill_pdf(submission_id):
                 "written": result['written'],
                 "skipped": result['skipped'],
                 "warnings": result.get('notes', []),
-                "download_url": f'/api/submissions/{submission_id}/download'
+                "download_url": f'/api/{submission_id}/download'
             },
             "message": "PDF filled successfully"
         }), 200
@@ -258,7 +261,7 @@ def fill_pdf(submission_id):
         return jsonify({'error': f'Fill failed: {str(e)}'}), 500
 
 
-@submission_bp.route('/submissions/<submission_id>/download', methods=['GET'])
+@submission_bp.route('/<submission_id>/download', methods=['GET'])
 def download_pdf(submission_id):
     """
     Download filled PDF.
@@ -290,7 +293,7 @@ def download_pdf(submission_id):
         return jsonify({'error': str(e)}), 500
 
 
-@submission_bp.route('/submissions/batch-download', methods=['POST'])
+@submission_bp.route('/batch-download', methods=['POST'])
 def batch_download_pdfs():
     """
     Download multiple filled PDFs as a ZIP file.
@@ -348,7 +351,7 @@ def batch_download_pdfs():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@submission_bp.route('/submissions/<submission_id>', methods=['DELETE'])
+@submission_bp.route('/<submission_id>', methods=['DELETE'])
 def delete_submission(submission_id):
     """
     Delete a submission and its files.
@@ -418,7 +421,7 @@ def delete_submission(submission_id):
 
 
 
-@submission_bp.route('/submissions/<submission_id>/preview-input', methods=['GET'])
+@submission_bp.route('/<submission_id>/preview-input', methods=['GET'])
 def preview_input_pdf(submission_id):
     """
     Preview input PDF (for iframe).
@@ -475,7 +478,7 @@ def preview_input_pdf(submission_id):
         return jsonify({'error': str(e)}), 500
 
 
-@submission_bp.route('/submissions/<submission_id>/preview-output', methods=['GET'])
+@submission_bp.route('/<submission_id>/preview-output', methods=['GET'])
 def preview_output_pdf(submission_id):
     """
     Preview output PDF (for iframe).
@@ -520,7 +523,7 @@ def preview_output_pdf(submission_id):
 
 
 
-@submission_bp.route('/submissions/<submission_id>/versions', methods=['GET'])
+@submission_bp.route('/<submission_id>/versions', methods=['GET'])
 def get_version_history(submission_id):
     """
     Get version history for a submission.
@@ -548,7 +551,7 @@ def get_version_history(submission_id):
         return jsonify({'error': str(e)}), 500
 
 
-@submission_bp.route('/submissions/<submission_id>/versions/<version_id>', methods=['GET'])
+@submission_bp.route('/<submission_id>/versions/<version_id>', methods=['GET'])
 def get_specific_version(submission_id, version_id):
     """
     Get a specific version of submission data.
@@ -575,7 +578,7 @@ def get_specific_version(submission_id, version_id):
         return jsonify({'error': str(e)}), 500
 
 
-@submission_bp.route('/submissions/<submission_id>/audit-trail', methods=['GET'])
+@submission_bp.route('/<submission_id>/audit-trail', methods=['GET'])
 def get_audit_trail(submission_id):
     """
     Get audit trail for a submission.
@@ -603,7 +606,7 @@ def get_audit_trail(submission_id):
         return jsonify({'error': str(e)}), 500
 
 
-@submission_bp.route('/submissions/<submission_id>/versions/compare', methods=['POST'])
+@submission_bp.route('/<submission_id>/versions/compare', methods=['POST'])
 def compare_versions(submission_id):
     """
     Compare two versions.
@@ -643,7 +646,7 @@ def compare_versions(submission_id):
         return jsonify({'error': str(e)}), 500
 
 
-@submission_bp.route('/submissions/<submission_id>/versions/<version_id>/rollback', methods=['POST'])
+@submission_bp.route('/<submission_id>/versions/<version_id>/rollback', methods=['POST'])
 def rollback_to_version(submission_id, version_id):
     """
     Rollback to a specific version.
@@ -703,15 +706,11 @@ def rollback_to_version(submission_id, version_id):
         return jsonify({'error': str(e)}), 400
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
-
-
-
 # ============================================
 #  DATA COMPARISON & CONFLICT RESOLUTION
 # ============================================
 
-@submission_bp.route('/submissions/<submission_id>/compare', methods=['POST'])
+@submission_bp.route('/<submission_id>/compare', methods=['POST'])
 def compare_data(submission_id):
     """
     Compare data from two sources.
@@ -754,7 +753,7 @@ def compare_data(submission_id):
         return jsonify({'error': str(e)}), 500
 
 
-@submission_bp.route('/submissions/<submission_id>/compare-with-original', methods=['GET'])
+@submission_bp.route('/<submission_id>/compare-with-original', methods=['GET'])
 def compare_with_original(submission_id):
     """
     Compare current data with original extraction.
@@ -779,7 +778,7 @@ def compare_with_original(submission_id):
         return jsonify({'error': str(e)}), 500
 
 
-@submission_bp.route('/submissions/<submission_id>/conflicts/<field>/suggest', methods=['POST'])
+@submission_bp.route('/<submission_id>/conflicts/<field>/suggest', methods=['POST'])
 def suggest_resolution(submission_id, field):
     """
     Get resolution suggestion for a conflict.
@@ -823,7 +822,7 @@ def suggest_resolution(submission_id, field):
         return jsonify({'error': str(e)}), 500
 
 
-@submission_bp.route('/submissions/<submission_id>/conflicts/resolve', methods=['POST'])
+@submission_bp.route('/<submission_id>/conflicts/resolve', methods=['POST'])
 def resolve_conflicts(submission_id):
     """
     Resolve conflicts and apply changes.
@@ -898,7 +897,7 @@ def resolve_conflicts(submission_id):
 
 
 
-@submission_bp.route('/submissions/<submission_id>/form', methods=['GET'])
+@submission_bp.route('/<submission_id>/form', methods=['GET'])
 def get_submission_form(submission_id):
     """
     Get dynamic form for a submission.
@@ -978,7 +977,7 @@ def get_form_template(template_id):
 
 
 
-@submission_bp.route('/submissions/export/csv', methods=['POST'])
+@submission_bp.route('/export/csv', methods=['POST'])
 def export_to_csv():
     """
     Export submissions to CSV.
@@ -1024,7 +1023,7 @@ def export_to_csv():
         return jsonify({'error': str(e)}), 500
 
 
-@submission_bp.route('/submissions/export/json', methods=['POST'])
+@submission_bp.route('/export/json', methods=['POST'])
 def export_to_json():
     """
     Export submissions to JSON.
@@ -1069,7 +1068,7 @@ def export_to_json():
         return jsonify({'error': str(e)}), 500
 
 
-@submission_bp.route('/submissions/export/package', methods=['POST'])
+@submission_bp.route('/export/package', methods=['POST'])
 def export_package():
     """
     Export complete package as ZIP.
@@ -1116,7 +1115,7 @@ def export_package():
         return jsonify({'error': str(e)}), 500
 
 
-@submission_bp.route('/submissions/export/webhook', methods=['POST'])
+@submission_bp.route('/export/webhook', methods=['POST'])
 def send_to_webhook():
     """
     Send submission data to webhook endpoint.
@@ -1175,7 +1174,7 @@ def send_to_webhook():
         return jsonify({'error': str(e)}), 500
 
 
-@submission_bp.route('/submissions/list', methods=['GET'])
+@submission_bp.route('/list', methods=['GET'])
 def list_all_submissions():
     """
     List all submissions with basic info.
@@ -1235,7 +1234,7 @@ def list_all_submissions():
         return jsonify({'error': str(e)}), 500
 
 
-@submission_bp.route('/submissions/stats', methods=['GET'])
+@submission_bp.route('/stats', methods=['GET'])
 def get_submissions_stats():
     """
     Get statistics about submissions.
@@ -1276,21 +1275,19 @@ def get_submissions_stats():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
-
-
-@submission_bp.post("/submissions/{submission_id}/export")
+@submission_bp.route("/<submission_id>/export",methods=['POST'])
 async def export_filled_pdf(submission_id: str):
+
     # 1. Get submission data
     submission = get_submission_from_db(submission_id)
     
-    # 2. Get the template PDF (or original uploaded file)
+    # # 2. Get the template PDF (or original uploaded file)
     template_path = get_template_for_submission(submission)
     
-    # 3. Fill the PDF with extracted data
+    # # 3. Fill the PDF with extracted data
     filled_pdf = fill_pdf_fields(template_path, submission.data)
     
-    # 4. Return as downloadable file
+    # # 4. Return as downloadable file
     return FileResponse(
         filled_pdf,
         media_type="application/pdf",
@@ -1298,7 +1295,7 @@ async def export_filled_pdf(submission_id: str):
     )
 
 
-@submission_bp.post("/submissions/bulk/export")
+@submission_bp.route("/bulk/export",methods=['POST'])
 async def bulk_export_submissions(submission_ids: list[str]):
     """
     Export multiple submissions as a ZIP file
@@ -1314,7 +1311,7 @@ async def bulk_export_submissions(submission_ids: list[str]):
         filename=f"bulk_export_{datetime.now().strftime('%Y%m%d')}.zip"
     )
 
-@submission_bp.delete("/submissions/bulk/delete")
+@submission_bp.route("/bulk/delete",methods=['DELETE'])
 async def bulk_delete_submissions(submission_ids: list[str]):
     """
     Delete multiple submissions

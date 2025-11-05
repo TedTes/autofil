@@ -86,7 +86,7 @@ export function FileDetailView({ submissionId, filename, onBack }: FileDetailVie
     try {
   
       const result = await updateSubmission(submissionId, extractionData.data ?? {})
-  
+      
       if (result.success) {
         setHasChanges(false)
         showSuccessMessage('Changes saved successfully!')

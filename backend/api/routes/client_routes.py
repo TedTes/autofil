@@ -13,7 +13,7 @@ client_service = ClientService()
 submission_service = SubmissionService()
 
 
-@client_bp.route('/clients', methods=['GET'])
+@client_bp.route('/', methods=['GET'])
 def list_clients():
     """
     List all clients with their submissions.
@@ -46,7 +46,7 @@ def list_clients():
         return jsonify({'error': str(e)}), 500
 
 
-@client_bp.route('/clients', methods=['POST'])
+@client_bp.route('/', methods=['POST'])
 def create_client():
     """
     Create a new client.
@@ -82,7 +82,7 @@ def create_client():
         return jsonify({'error': str(e)}), 500
 
 
-@client_bp.route('/clients/<client_id>', methods=['GET'])
+@client_bp.route('/<client_id>', methods=['GET'])
 def get_client(client_id):
     """
     Get client by ID with all submissions.
@@ -118,7 +118,7 @@ def get_client(client_id):
         return jsonify({'error': str(e)}), 500
 
 
-@client_bp.route('/clients/<client_id>', methods=['PUT'])
+@client_bp.route('/<client_id>', methods=['PUT'])
 def update_client(client_id):
     """
     Update client name.
@@ -160,7 +160,7 @@ def update_client(client_id):
         return jsonify({'error': str(e)}), 500
 
 
-@client_bp.route('/clients/<client_id>', methods=['DELETE'])
+@client_bp.route('/<client_id>', methods=['DELETE'])
 def delete_client(client_id):
     """
     Delete a client and all its submissions.
@@ -186,7 +186,7 @@ def delete_client(client_id):
         return jsonify({'error': str(e)}), 500
 
 
-@client_bp.route('/clients/<client_id>/submissions', methods=['POST'])
+@client_bp.route('/<client_id>/submissions', methods=['POST'])
 def create_submission(client_id):
     """
     Create a submission under a client.

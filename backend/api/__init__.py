@@ -21,7 +21,7 @@ def create_app():
     app.register_blueprint(submission_bp, url_prefix='/api/submissions')
     app.register_blueprint(folder_bp, url_prefix='/api/folders')
     app.register_blueprint(extraction_bp, url_prefix='/api/extraction')
-    app.register_blueprint(health_bp, url_prefix='/api/health')
+    app.register_blueprint(health_bp, url_prefix='/api')
     app.register_blueprint(client_bp, url_prefix='/api/clients')
     
     # Enable CORS for frontend

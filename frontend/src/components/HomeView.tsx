@@ -89,29 +89,57 @@ function EmptyDashboardState({
     setError(null)
     setMessage(null)
     setProgress({})
-
     try {
       const rows: UploadedRow[] = []
-
+      const errors: Array<{ filename: string; error: string }> = []
       for (let i = 0; i < files.length; i++) {
-        const res = await uploadPdf(files[i], (p) => {
-          setProgress((prev) => ({ ...prev, [i]: p }))
-        })
-        rows.push({
-          submissionId: res.submission_id,
-          filename: files[i].name,
-          uploadedAt: new Date().toISOString(),
-          fileType: getFileType(files[i].name),
-          fileSize: files[i].size,
-        })
+        try {
+          console.log(`📤 Uploading ${i + 1}/${files.length}: ${files[i].name}`)
+          
+          const res = await uploadPdf(files[i], (p) => {
+            setProgress((prev) => ({ ...prev, [i]: p }))
+          })
+          
+          console.log(`✅ Success ${i + 1}`)
+          
+          rows.push({
+            submissionId: res.submission_id,
+            filename: files[i].name,
+            uploadedAt: new Date().toISOString(),
+            fileType: getFileType(files[i].name),
+            fileSize: files[i].size,
+          })
+        } catch (e: unknown) {
+          // ✅ Log error ,then CONTINUE to next file
+          const errorMessage = e instanceof Error ? e.message : 'Upload failed'
+          console.error(`❌ Failed ${i + 1}: ${files[i].name}`, errorMessage)
+          
+          errors.push({
+            filename: files[i].name,
+            error: errorMessage
+          })
+        }
       }
+        // Update state after ALL files processed
+        if (rows.length > 0) {
+          setUploaded((prev) => [...rows, ...prev])
+          onUploadComplete?.(rows.length)
+          setPhase('extract')
+          
+          if (errors.length > 0) {
+            setMessage(
+              `✓ Uploaded ${rows.length}/${files.length} files. ${errors.length} failed: ${errors.map(e => e.filename).join(', ')}`
+            )
+          } else {
+            setMessage(`✓ Uploaded ${rows.length} file${rows.length > 1 ? 's' : ''} successfully.`)
+          }
+        } else {
+          setError(`All ${files.length} uploads failed`)
+        }
 
-      setUploaded((prev) => [...rows, ...prev])
-      setMessage(`Uploaded ${rows.length} file${rows.length > 1 ? 's' : ''} successfully.`)
-      onUploadComplete?.(rows.length)
-
-      // Advance to EXTRACT view
-      setPhase('extract')
+        setIsUploading(false)
+        if (fileInputRef.current) fileInputRef.current.value = ''
+        setTimeout(() => setMessage(null), 3000)
     } catch (e: unknown) {
       const errorMessage = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Upload failed'
       setError(errorMessage)

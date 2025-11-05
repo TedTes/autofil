@@ -33,7 +33,6 @@ def upload_pdf():
             files = request.files.getlist('files')
         elif 'files[]' in request.files:
             files = request.files.getlist('files[]')
-
         if not files:
             return jsonify({'error': 'No files provided'}), 400
 

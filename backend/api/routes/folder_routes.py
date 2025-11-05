@@ -26,7 +26,8 @@ def list_folders():
         
         return jsonify({
             'success': True,
-            'folders': folders
+            'data': folders
+            
         }), 200
         
     except Exception as e:
@@ -61,7 +62,7 @@ def create_folder():
         
         return jsonify({
             'success': True,
-            'folder': folder
+            'data': folder
         }), 201
         
     except Exception as e:
@@ -97,7 +98,8 @@ def get_folder(folder_id):
         
         return jsonify({
             'success': True,
-            'folder': folder
+            'data':  folder
+          
         }), 200
         
     except Exception as e:
@@ -138,7 +140,8 @@ def update_folder(folder_id):
         
         return jsonify({
             'success': True,
-            'folder': folder
+            'data':  folder
+            
         }), 200
         
     except Exception as e:

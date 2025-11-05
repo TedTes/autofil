@@ -375,7 +375,7 @@ def batch_extract():
         
         return jsonify({
             'success': True,
-            'results': results
+            'data': results
         }), 200
         
     except Exception as e:

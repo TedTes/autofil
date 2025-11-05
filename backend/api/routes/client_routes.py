@@ -38,7 +38,8 @@ def list_clients():
         
         return jsonify({
             'success': True,
-            'clients': clients
+            'data':  clients
+            
         }), 200
         
     except Exception as e:
@@ -73,7 +74,8 @@ def create_client():
         
         return jsonify({
             'success': True,
-            'client': client
+            'data':  client
+            
         }), 201
         
     except Exception as e:
@@ -108,7 +110,8 @@ def get_client(client_id):
         
         return jsonify({
             'success': True,
-            'client': client
+            'data':  client
+            
         }), 200
         
     except Exception as e:
@@ -149,7 +152,8 @@ def update_client(client_id):
         
         return jsonify({
             'success': True,
-            'client': client
+            'data':  client
+            
         }), 200
         
     except Exception as e:
@@ -225,7 +229,7 @@ def create_submission(client_id):
         
         return jsonify({
             'success': True,
-            'submission': submission
+            'data': submission
         }), 201
         
     except Exception as e:
@@ -248,7 +252,7 @@ def list_templates():
         
         return jsonify({
             'success': True,
-            'templates': templates
+            'data': templates
         }), 200
         
     except Exception as e:

@@ -73,12 +73,15 @@ def upload_pdf():
                 return jsonify({'error': errors[0]['error']}), 400
 
         return jsonify({
-            'success': len(results) > 0,
-            'total': len(files),
-            'successful': len(results),
-            'failed': len(errors),
-            'results': results,
-            'errors': errors or None
+            "success": len(results) > 0,
+            "data": {
+                "total": len(files),
+                "successful": len(results),
+                "failed": len(errors),
+                "results": results,
+                "errors": errors or []
+            },
+            "message": f"Processed {len(files)} files: {len(results)} succeeded, {len(errors)} failed"
         }), 201 if results else 400
 
     except Exception as e:
@@ -132,12 +135,15 @@ def batch_fill_pdfs():
                 })
         
         return jsonify({
-            'success': len(results) > 0,
-            'total': len(submission_ids),
-            'successful': len(results),
-            'failed': len(errors),
-            'results': results,
-            'errors': errors if errors else None
+            "success": len(results) > 0,
+            "data": {
+                "total": len(submission_ids),
+                "successful": len(results),
+                "failed": len(errors),
+                "results": results,
+                "errors": errors or []
+            },
+            "message": f"Batch fill completed: {len(results)} succeeded, {len(errors)} failed"
         }), 200
         
     except Exception as e:
@@ -173,16 +179,16 @@ def get_submission(submission_id):
                 suggested_fixes = metadata.get('suggested_fixes', {})
         
         return jsonify({
-            'success': True,
-            'submission': {
-                **submission,
-                'field_confidence': field_confidence,
-                'field_hints': field_hints,
-                'extraction_issues': extraction_issues,
-                'suggested_fixes': suggested_fixes,
-            }
+            "success": True,
+            "data": {
+                    **submission,
+                    "field_confidence": field_confidence,
+                    "field_hints": field_hints,
+                    "extraction_issues": extraction_issues,
+                    "suggested_fixes": suggested_fixes
+            },
+            "message": "Submission retrieved successfully"
         }), 200
-        
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -210,8 +216,9 @@ def update_submission(submission_id):
         result = submission_service.update_data(submission_id, data)
         
         return jsonify({
-            'success': True,
-            'submission': result
+            "success": True,
+            "data": result,
+            "message": "Submission retrieved successfully"
         }), 200
         
     except ValueError as e:
@@ -235,13 +242,14 @@ def fill_pdf(submission_id):
         result = submission_service.fill_pdf(submission_id)
         
         return jsonify({
-            'success': True,
-            'fill_report': {
-                'written': result['written'],
-                'skipped': result['skipped'],
-                'warnings': result.get('notes', [])
+            "success": True,
+            "data": {
+                "written": result['written'],
+                "skipped": result['skipped'],
+                "warnings": result.get('notes', []),
+                "download_url": f'/api/submissions/{submission_id}/download'
             },
-            'download_url': f'/api/submissions/{submission_id}/download'
+            "message": "PDF filled successfully"
         }), 200
         
     except ValueError as e:
@@ -527,12 +535,15 @@ def get_version_history(submission_id):
         versions = submission_service.get_version_history(submission_id)
         
         return jsonify({
-            'success': True,
-            'submission_id': submission_id,
-            'versions': versions,
-            'total_versions': len(versions)
+            "success": True,
+            "data": {
+                "submission_id": submission_id,
+                "versions": versions,
+                "total_versions": len(versions)
+            },
+            "message": "Version history retrieved successfully"
         }), 200
-        
+                
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -579,10 +590,13 @@ def get_audit_trail(submission_id):
         audit_trail = submission_service.get_audit_trail(submission_id)
         
         return jsonify({
-            'success': True,
-            'submission_id': submission_id,
-            'audit_trail': audit_trail,
-            'total_entries': len(audit_trail)
+            "success": True,
+            "data": {
+                "submission_id": submission_id,
+                "audit_trail": audit_trail,
+                "total_entries": len(audit_trail)
+            },
+            "message": "Audit trail retrieved successfully"
         }), 200
         
     except Exception as e:
@@ -620,7 +634,7 @@ def compare_versions(submission_id):
         
         return jsonify({
             'success': True,
-            'comparison': comparison
+            'data': comparison
         }), 200
         
     except ValueError as e:
@@ -674,13 +688,15 @@ def rollback_to_version(submission_id, version_id):
         )
         
         return jsonify({
-            'success': True,
-            'new_version_id': new_version_id,
-            'rolled_back_to': {
-                'version_id': version_id,
-                'version_number': target_version['version_number']
+            "success": True,
+            "data": {
+                "new_version_id": new_version_id,
+                "rolled_back_to": {
+                    "version_id": version_id,
+                    "version_number": target_version['version_number']
+                }
             },
-            'message': 'Successfully rolled back'
+            "message": "Successfully rolled back"
         }), 200
         
     except ValueError as e:
@@ -731,7 +747,7 @@ def compare_data(submission_id):
         
         return jsonify({
             'success': True,
-            'comparison': comparison
+            'data': comparison
         }), 200
         
     except Exception as e:
@@ -754,7 +770,7 @@ def compare_with_original(submission_id):
         
         return jsonify({
             'success': True,
-            'comparison': comparison
+            'data': comparison
         }), 200
         
     except ValueError as e:
@@ -800,7 +816,7 @@ def suggest_resolution(submission_id, field):
         
         return jsonify({
             'success': True,
-            'suggestion': suggestion
+            'data': suggestion
         }), 200
         
     except Exception as e:
@@ -874,7 +890,7 @@ def resolve_conflicts(submission_id):
         return jsonify({
             'success': True,
             'message': f'Resolved {len(resolutions)} conflict(s)',
-            'resolutions': recorded_resolutions
+            'data': recorded_resolutions
         }), 200
         
     except Exception as e:
@@ -903,7 +919,7 @@ def get_submission_form(submission_id):
         
         return jsonify({
             'success': True,
-            'form': form
+            'data': form
         }), 200
         
     except ValueError as e:
@@ -927,7 +943,7 @@ def list_form_templates():
         
         return jsonify({
             'success': True,
-            'templates': templates
+            'data': templates
         }), 200
         
     except Exception as e:
@@ -952,7 +968,7 @@ def get_form_template(template_id):
         
         return jsonify({
             'success': True,
-            'template': template.to_dict()
+            'data': template.to_dict()
         }), 200
         
     except ValueError as e:
@@ -1152,7 +1168,7 @@ def send_to_webhook():
         
         return jsonify({
             'success': response['success'],
-            'webhook_response': response
+            'data': response
         }), 200 if response['success'] else 500
         
     except Exception as e:
@@ -1205,11 +1221,14 @@ def list_all_submissions():
         ]
         
         return jsonify({
-            'success': True,
-            'total': total,
-            'limit': limit,
-            'offset': offset,
-            'submissions': submission_list
+            "success": True,
+            "data": {
+                "submissions": submission_list,
+                "total": total,
+                "limit": limit,
+                "offset": offset
+            },
+            "message": "Submissions retrieved successfully"
         }), 200
         
     except Exception as e:
@@ -1246,7 +1265,7 @@ def get_submissions_stats():
         
         return jsonify({
             'success': True,
-            'stats': {
+            'data': {
                 'total_submissions': total,
                 'by_status': by_status,
                 'average_confidence': round(avg_confidence, 2),

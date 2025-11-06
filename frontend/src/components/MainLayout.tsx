@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Menu,
   X,
+ Save,  Loader2 ,
   TrendingUp,
   FolderPlus,
 } from 'lucide-react'
@@ -378,13 +379,21 @@ export default function MainLayout({ children }: MainLayoutProps) {
               </div>
 
               <div className="flex items-center gap-2">
-                <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
-                  <Settings className="w-5 h-5" />
-                </button>
-                <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
-                  <HelpCircle className="w-5 h-5" />
-                </button>
-              </div>
+  {/* ✅ Show action buttons when in FileDetailView */}
+  {currentView.type === 'file-detail' && currentView.data && (
+    <FileDetailActions
+      submissionId={currentView.data.submissionId}
+      filename={currentView.data.filename}
+    />
+  )}
+  
+  <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
+    <Settings className="w-5 h-5" />
+  </button>
+  <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
+    <HelpCircle className="w-5 h-5" />
+  </button>
+</div>
             </div>
           </div>
         </header>
@@ -459,5 +468,81 @@ export default function MainLayout({ children }: MainLayoutProps) {
         </main>
       </div>
     </div>
+  )
+}
+
+// File Detail Action Buttons Component
+function FileDetailActions({ 
+  submissionId, 
+  filename 
+}: { 
+  submissionId: string
+  filename?: string 
+}) {
+  const [isSaving, setIsSaving] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
+  
+  // You'll need to access the FileDetailView state somehow
+  // For now, using simple local state
+  const [hasChanges, setHasChanges] = useState(false)
+  
+  const handleSave = async () => {
+    setIsSaving(true)
+    // TODO: Call save API
+    setTimeout(() => setIsSaving(false), 1000)
+  }
+  
+  const handleExport = async () => {
+    setIsExporting(true)
+    // TODO: Call export API
+    setTimeout(() => setIsExporting(false), 1000)
+  }
+  
+  return (
+    <>
+      <button
+        onClick={handleSave}
+        disabled={!hasChanges || isSaving}
+        className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+          hasChanges && !isSaving
+            ? 'text-white bg-blue-600 hover:bg-blue-700'
+            : 'text-gray-400 bg-gray-100 cursor-not-allowed'
+        }`}
+      >
+        {isSaving ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span className="hidden sm:inline">Saving...</span>
+          </>
+        ) : (
+          <>
+            <Save className="w-4 h-4" />
+            <span className="hidden sm:inline">Save</span>
+          </>
+        )}
+      </button>
+      
+      <button
+        onClick={handleExport}
+        disabled={isExporting}
+        className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+          isExporting
+            ? 'text-white bg-green-500'
+            : 'text-white bg-green-600 hover:bg-green-700'
+        }`}
+      >
+        {isExporting ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span className="hidden sm:inline">Exporting...</span>
+          </>
+        ) : (
+          <>
+            <Download className="w-4 h-4" />
+            <span className="hidden sm:inline">Export</span>
+          </>
+        )}
+      </button>
+    </>
   )
 }

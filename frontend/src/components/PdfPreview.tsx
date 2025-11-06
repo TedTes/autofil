@@ -129,32 +129,30 @@ export function PdfPreview({ fileUrl, filename, onDownload }: PdfPreviewProps) {
       </div>
 
       {/* PDF Viewer */}
-      <div className="flex-1 relative overflow-auto bg-gray-900">
-        {isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-gray-900 z-10">
-            <div className="text-center">
-              <Loader2 className="w-8 h-8 text-blue-500 animate-spin mx-auto mb-3" />
-              <p className="text-sm text-gray-400">Loading PDF...</p>
-            </div>
-          </div>
-        )}
-
-        <div className="p-4 flex justify-center">
-          <iframe
-            src={`${fileUrl}#view=FitH`}
-            className="bg-white shadow-2xl"
-            style={{
-              width: `${zoom}%`,
-              minWidth: '600px',
-              height: '900px',
-              border: 'none',
-            }}
-            onLoad={handleLoad}
-            onError={handleError}
-            title={filename || 'PDF Preview'}
-          />
-        </div>
+<div className="flex-1 relative bg-white" style={{ minHeight: '100%' }}>
+  {isLoading && (
+    <div className="absolute inset-0 flex items-center justify-center bg-white z-10">
+      <div className="text-center">
+        <Loader2 className="w-8 h-8 text-blue-500 animate-spin mx-auto mb-3" />
+        <p className="text-sm text-gray-400">Loading PDF...</p>
       </div>
+    </div>
+  )}
+  <iframe
+    src={`${fileUrl}#view=FitH&toolbar=0&navpanes=0&scrollbar=0`}
+    className="w-full shadow-2xl"
+    style={{
+      width: `${zoom}%`,
+      height: '100%',
+      minHeight: '600px',
+      border: 'none',
+      display: 'block',
+    }}
+    onLoad={handleLoad}
+    onError={handleError}
+    title={filename || 'PDF Preview'}
+  />
+</div>
     </div>
   )
 }

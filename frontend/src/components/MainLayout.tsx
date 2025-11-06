@@ -62,12 +62,11 @@ interface MainLayoutProps {
 export default function MainLayout({ children }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
-
+  const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(false) // ✅ NEW
   const [currentView, setCurrentView] = useState<ViewState>({
     type: 'home',
     breadcrumbs: ['Home'],
   })
-
   // Navigation history for back button
   const [viewHistory, setViewHistory] = useState<ViewState[]>([])
 
@@ -100,6 +99,13 @@ export default function MainLayout({ children }: MainLayoutProps) {
       data: data as ViewStateData,
       breadcrumbs: breadcrumbs || [type.charAt(0).toUpperCase() + type.slice(1)],
     })
+
+    if (type === 'file-detail') {
+      setDesktopSidebarCollapsed(true)
+    } else if (desktopSidebarCollapsed) {
+      // Auto-expand when leaving file detail view
+      setDesktopSidebarCollapsed(false)
+    }
   }
 
   // Navigate back to previous view
@@ -163,44 +169,33 @@ export default function MainLayout({ children }: MainLayoutProps) {
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
-      <aside
-        className={`
-          hidden lg:flex flex-col
-          bg-white border-r border-gray-200
-          transition-all duration-300 ease-in-out
-          ${sidebarOpen ? 'w-80' : 'w-16'}
-        `}
-      >
+      <aside className={`hidden lg:flex lg:flex-col bg-white border-r border-gray-200 transition-all duration-300 ease-in-out ${
+  desktopSidebarCollapsed ? 'lg:w-0 lg:overflow-hidden' : 'lg:w-64'
+}`}>
         {/* Sidebar Header */}
-        <div className="h-16 border-b border-gray-200 flex items-center justify-between px-4">
-          {sidebarOpen ? (
-            <>
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                  <TrendingUp className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-sm font-bold text-gray-900 leading-tight">AutoFil</h1>
-                  <p className="text-[10px] text-gray-500 leading-tight">Smart Form Automation</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setSidebarOpen(false)}
-                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="w-full p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
-            >
-              <ChevronRight className="w-5 h-5 mx-auto" />
-            </button>
-          )}
-        </div>
-
+   
+<div className="h-16 border-b border-gray-200 flex items-center justify-between px-4">
+  <div className="flex items-center gap-2.5">
+    <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+      <TrendingUp className="w-5 h-5 text-white" />
+    </div>
+    <div>
+      <h1 className="text-sm font-bold text-gray-900 leading-tight">AutoFil</h1>
+      <p className="text-[10px] text-gray-500 leading-tight">Smart Form Automation</p>
+    </div>
+  </div>
+  
+  {/* ✅ Collapse Button (desktop only) */}
+  <button
+    onClick={() => setDesktopSidebarCollapsed(true)}
+    className="hidden lg:block p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+    title="Collapse sidebar"
+  >
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+    </svg>
+  </button>
+</div>
         {/* Sidebar Content */}
         <div className="flex-1 overflow-y-auto p-4">
           {sidebarOpen ? (
@@ -345,7 +340,16 @@ export default function MainLayout({ children }: MainLayoutProps) {
                 >
                   <Menu className="w-5 h-5" />
                 </button>
-
+  {/* Desktop Sidebar Toggle (shown when collapsed) */}
+  {desktopSidebarCollapsed && (
+    <button
+      onClick={() => setDesktopSidebarCollapsed(false)}
+      className="hidden lg:block p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+      title="Show sidebar"
+    >
+      <Menu className="w-5 h-5" />
+    </button>
+  )}
                 {/* Breadcrumbs */}
                 <nav className="hidden lg:flex items-center gap-2 text-sm">
                   {currentView.breadcrumbs.map((crumb, idx) => (

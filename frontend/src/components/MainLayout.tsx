@@ -33,7 +33,7 @@ import {
   createFolder,
 } from '@/lib/api-client'
 
-import type { Folder, ViewType } from '@/types'
+import type { Folder, ViewType,  FileDetailActions } from '@/types'
 
 // Type mapping for view data based on view type
 type ViewDataMap = {
@@ -63,7 +63,8 @@ interface MainLayoutProps {
 export default function MainLayout({ children }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
-  const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(false) // ✅ NEW
+  const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(false)
+  const [fileDetailActions, setFileDetailActions] = useState<FileDetailActions | null>(null) 
   const [currentView, setCurrentView] = useState<ViewState>({
     type: 'home',
     breadcrumbs: ['Home'],
@@ -378,13 +379,11 @@ export default function MainLayout({ children }: MainLayoutProps) {
                 </nav>
               </div>
 
-              <div className="flex items-center gap-2">
-  {/* ✅ Show action buttons when in FileDetailView */}
-  {currentView.type === 'file-detail' && currentView.data && (
-    <FileDetailActions
-      submissionId={currentView.data.submissionId}
-      filename={currentView.data.filename}
-    />
+          
+  <div className="flex items-center gap-2">
+  {/* Show action buttons when in FileDetailView */}
+  {currentView.type === 'file-detail' && fileDetailActions && (
+    <FileDetailActions actions={fileDetailActions} />
   )}
   
   <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
@@ -430,12 +429,13 @@ export default function MainLayout({ children }: MainLayoutProps) {
               />
             )}
 
-            {/* File Detail View - CORRECTED: Pass correct props */}
+            {/* File Detail View  */}
             {currentView.type === 'file-detail' && currentView.data && (
               <FileDetailView
                 submissionId={currentView.data.submissionId}
                 filename={currentView.data.filename}
                 onBack={navigateBack}
+                onActionsReady={setFileDetailActions}
               />
             )}
 
@@ -473,37 +473,20 @@ export default function MainLayout({ children }: MainLayoutProps) {
 
 // File Detail Action Buttons Component
 function FileDetailActions({ 
-  submissionId, 
-  filename 
+  actions
 }: { 
-  submissionId: string
-  filename?: string 
+  actions: FileDetailActions
 }) {
-  const [isSaving, setIsSaving] = useState(false)
-  const [isExporting, setIsExporting] = useState(false)
+  if (!actions) return null
   
-  // You'll need to access the FileDetailView state somehow
-  // For now, using simple local state
-  const [hasChanges, setHasChanges] = useState(false)
-  
-  const handleSave = async () => {
-    setIsSaving(true)
-    // TODO: Call save API
-    setTimeout(() => setIsSaving(false), 1000)
-  }
-  
-  const handleExport = async () => {
-    setIsExporting(true)
-    // TODO: Call export API
-    setTimeout(() => setIsExporting(false), 1000)
-  }
+  const { hasChanges, isSaving, isExporting, handleSave, handleExport } = actions
   
   return (
     <>
       <button
         onClick={handleSave}
         disabled={!hasChanges || isSaving}
-        className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+        className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
           hasChanges && !isSaving
             ? 'text-white bg-blue-600 hover:bg-blue-700'
             : 'text-gray-400 bg-gray-100 cursor-not-allowed'
@@ -525,9 +508,9 @@ function FileDetailActions({
       <button
         onClick={handleExport}
         disabled={isExporting}
-        className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+        className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
           isExporting
-            ? 'text-white bg-green-500'
+            ? 'text-white bg-green-500 cursor-not-allowed'
             : 'text-white bg-green-600 hover:bg-green-700'
         }`}
       >

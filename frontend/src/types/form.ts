@@ -60,3 +60,11 @@ export interface FormField {
     suggested_forms: string[]
     expected_fields: string[]
   }
+
+  export interface FileDetailActions {
+    hasChanges?: boolean
+    isSaving?: boolean
+    isExporting?: boolean
+    handleSave?: () => Promise<void>
+    handleExport?: () => Promise<void>
+  }

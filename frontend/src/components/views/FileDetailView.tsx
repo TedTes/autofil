@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { ArrowLeft, Download, Save, Loader2 } from 'lucide-react'
 import { PdfPreview } from '@/components/PdfPreview'
 import { ExtractionDataForm} from '@/components/ExtractionDataForm'
-import {type ExtractedField, type ExtractionData } from "../../types";
+import {type ExtractedField, type ExtractionData,type FileDetailActions } from "../../types";
 import { ConfidenceBadge } from '@/components/ConfidenceBadge'
 import { getSubmission, getInputPreviewUrl,updateSubmission ,exportFilledPdf, downloadBlob } from '@/lib/api-client'
 import {transformApiFieldsToForm,transformFormFieldsToApi,fieldsToNestedObject} from "../../lib";
@@ -13,9 +13,11 @@ interface FileDetailViewProps {
   submissionId: string
   filename?: string
   onBack?: () => void
+  onActionsReady?: (actions: FileDetailActions | null) => void
 }
 
-export function FileDetailView({ submissionId, filename, onBack }: FileDetailViewProps) {
+
+export function FileDetailView({ submissionId, filename, onBack,onActionsReady }: FileDetailViewProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [extractionData, setExtractionData] = useState<ExtractionData | null>(null)
@@ -30,6 +32,25 @@ export function FileDetailView({ submissionId, filename, onBack }: FileDetailVie
     fetchSubmissionData()
   }, [submissionId])
 
+  // Expose actions to parent (MainLayout) for header buttons
+useEffect(() => {
+  if (onActionsReady) {
+    onActionsReady({
+      hasChanges,
+      isSaving,
+      isExporting,
+      handleSave,
+      handleExport
+    })
+  }
+  
+  // Cleanup when unmounting
+  return () => {
+    if (onActionsReady) {
+      onActionsReady(null)
+    }
+  }
+}, [hasChanges, isSaving, isExporting, onActionsReady])
   const showSuccessMessage = (message: string) => {
     setSuccessMessage(message)
     setTimeout(() => setSuccessMessage(null), 3000)
@@ -183,11 +204,10 @@ export function FileDetailView({ submissionId, filename, onBack }: FileDetailVie
   </div>
 )}
 
-      {/* Main Content - Two Column Layout */}
-    {/* Main Content - Mobile: Stack Vertically, Desktop: Side by Side */}
+    {/* Main Content - Two Column Layout -- Mobile: Stack Vertically, Desktop: Side by Side */}
 <div className="flex-1 overflow-hidden flex flex-col lg:grid lg:grid-cols-2 lg:gap-0">
   {/* PDF Preview - Hidden on mobile by default, toggle button to show */}
-  <div className="hidden lg:block bg-gray-900 border-r border-gray-700 overflow-hidden lg:col-span-1">
+  <div className="h-full overflow-hidden bg-gray-900 border-r border-gray-700">
     <PdfPreview
       fileUrl={getInputPreviewUrl(submissionId)}
       filename={filename}
@@ -195,38 +215,37 @@ export function FileDetailView({ submissionId, filename, onBack }: FileDetailVie
     />
   </div>
 
-  {/* Extracted Data - Full height on mobile */}
-  <div className="flex-1 bg-white overflow-y-auto lg:col-span-1">
-    <div className="p-4 sm:p-6 lg:p-8">
-      <div className="mb-4 sm:mb-6">
-        <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">Extracted Data</h3>
-        <p className="text-xs sm:text-sm text-gray-600">
-          Review and edit the extracted information below
-        </p>
-      </div>
+ 
+    {/* Data - 40% width, scrollable */}
+    <div className="h-full bg-white overflow-y-auto">
+        <div className="p-4 sm:p-6">
+          <div className="mb-4">
+            <h3 className="text-base font-semibold text-gray-900 mb-1">Extracted Data</h3>
+            <p className="text-xs text-gray-600">
+              Review and edit the extracted information below
+            </p>
+          </div>
 
       {extractionData ? (
-          <ExtractionDataForm
-          data={{
-            submission_id: extractionData.submission_id,
-            filename: extractionData.filename,
-            status: extractionData.status,
-            uploaded_at: extractionData.uploaded_at,
-            data: extractionData.data || {},                         
-            field_confidence: extractionData.field_confidence,  
-            confidence: extractionData.confidence,  
-            warnings: extractionData.warnings,   
-            field_hints: extractionData.field_hints,
-            extraction_issues: extractionData.extraction_issues
-          }}
-          isEditable={true}
-          onChange={handleFieldsChange}
-        />
+           <ExtractionDataForm
+           data={{
+             submission_id: extractionData.submission_id,
+             filename: extractionData.filename,
+             status: extractionData.status,
+             uploaded_at: extractionData.uploaded_at,
+             data: extractionData.data || {},                         
+             field_confidence: extractionData.field_confidence,  
+             confidence: extractionData.confidence,  
+             warnings: extractionData.warnings,   
+             field_hints: extractionData.field_hints,
+             extraction_issues: extractionData.extraction_issues
+           }}
+           isEditable={true}
+           onChange={handleFieldsChange}
+         />
       ) : (
         <div className="bg-gray-50 rounded-lg p-6 text-center">
-          <p className="text-sm text-gray-600">
-            No extraction data available
-          </p>
+          <p className="text-sm text-gray-600">No extraction data available</p>
         </div>
       )}
     </div>

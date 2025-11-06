@@ -163,35 +163,7 @@ export function FileDetailView({ submissionId, filename, onBack }: FileDetailVie
   {/* Header - Mobile Responsive */}
 <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4">
   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-    <div className="flex items-center gap-2 sm:gap-4 min-w-0">
-      {onBack && (
-        <button
-          onClick={onBack}
-          className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
-          title="Back"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-      )}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 flex-wrap">
-          <h2 className="text-lg sm:text-xl font-bold text-gray-900 truncate">
-            {filename || 'Document Details'}
-          </h2>
-          {extractionData?.confidence !== undefined && (
-            <ConfidenceBadge
-              confidence={extractionData.confidence}
-              variant="pill"
-              showLabel={false}
-              size="sm"
-            />
-          )}
-        </div>
-        <p className="text-xs sm:text-sm text-gray-500 mt-1 truncate">
-          ID: {submissionId}
-        </p>
-      </div>
-    </div>
+   
 
     {/* Action Buttons - Mobile Optimized */}
     <div className="flex items-center gap-2 self-end sm:self-auto">

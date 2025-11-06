@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { uploadPdf, getSubmission, downloadPdf } from '@/lib/api-client'
 import { ConfidenceBadgeCompact } from '@/components/ConfidenceBadge'
-
+import {formatDate,formatFileSize, formatFileType} from "../lib/utils";
 type Phase = 'upload' | 'extract' | 'export'
 
 type UploadedRow = {
@@ -282,20 +282,87 @@ function EmptyDashboardState({
             rows={uploaded}
             phase={phase}
             onExtractSelected={async (selectedIds) => {
-              if (selectedIds.length === 1) {
-                // Single file - navigate directly
-                const row = uploaded.find((r) => r.submissionId === selectedIds[0])
-                if (row && onGoToFile) {
-                  onGoToFile(row.submissionId, row.filename)
+              setMessage(null)
+              setError(null)
+              
+              let successCount = 0
+              let errorCount = 0
+              
+              // Process each file sequentially with status updates
+              for (let i = 0; i < selectedIds.length; i++) {
+                const submissionId = selectedIds[i]
+                
+                try {
+                  //  Update status to 'extracting'
+                  setUploaded(prev =>
+                    prev.map(row =>
+                      row.submissionId === submissionId
+                        ? { ...row, extractionStatus: 'extracting', extractionProgress: 0 }
+                        : row
+                    )
+                  )
+                  
+                  // Simulate progress (optional - for visual feedback)
+                  for (let progress = 20; progress <= 80; progress += 20) {
+                    await new Promise(resolve => setTimeout(resolve, 100))
+                    setUploaded(prev =>
+                      prev.map(row =>
+                        row.submissionId === submissionId
+                          ? { ...row, extractionProgress: progress }
+                          : row
+                      )
+                    )
+                  }
+                  
+                  // Fetch extraction data to confirm it's ready
+                  const data = await getSubmission(submissionId)
+                  
+                  //  Update status to 'extracted' with confidence
+                  setUploaded(prev =>
+                    prev.map(row =>
+                      row.submissionId === submissionId
+                        ? { 
+                            ...row, 
+                            extractionStatus: 'extracted',
+                            extractionProgress: 100,
+                            confidence: data.confidence || row.confidence
+                          }
+                        : row
+                    )
+                  )
+                  
+                  successCount++
+                  
+                } catch (err) {
+                  console.error(`Extraction failed for ${submissionId}:`, err)
+                  
+                  //  Update status to 'error'
+                  setUploaded(prev =>
+                    prev.map(row =>
+                      row.submissionId === submissionId
+                        ? { 
+                            ...row, 
+                            extractionStatus: 'error',
+                            extractionError: err instanceof Error ? err.message : 'Extraction failed'
+                          }
+                        : row
+                    )
+                  )
+                  
+                  errorCount++
                 }
+              }
+              
+              //  Show summary message
+              if (errorCount === 0) {
+                setMessage(`✓ Successfully extracted ${successCount} file${successCount > 1 ? 's' : ''}`)
               } else {
-                // Multiple files - show success message
-                setMessage(`✓ Ready to view ${selectedIds.length} files`)
-                setPhase('export')
+                setMessage(`Extracted ${successCount} file${successCount > 1 ? 's' : ''}, ${errorCount} failed`)
               }
             }}
             onRemove={removeFile}
             onUploadMore={triggerFilePicker}
+            onGoToFile={onGoToFile} 
           />
         )}
       </div>
@@ -338,41 +405,7 @@ function EmptyDashboardState({
   )
 }
 
-/* ===================== */
-/*  Mini Steps (in box)  */
-/* ===================== */
-function MiniStep({ 
-  active, 
-  complete, 
-  label 
-}: { 
-  active: boolean
-  complete: boolean
-  label: string 
-}) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <div
-        className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold transition-all ${
-          complete
-            ? 'bg-blue-600 text-white'
-            : active
-            ? 'bg-blue-100 text-blue-600'
-            : 'bg-gray-100 text-gray-400'
-        }`}
-      >
-        {complete ? <Check className="w-3 h-3" /> : label.charAt(0)}
-      </div>
-      <span
-        className={`text-xs font-medium ${
-          active || complete ? 'text-gray-700' : 'text-gray-400'
-        }`}
-      >
-        {label}
-      </span>
-    </div>
-  )
-}
+
 
 /* ===================== */
 /*  Extract Panel with Toast-like Files */
@@ -383,12 +416,14 @@ function ExtractPanel({
   onExtractSelected,
   onRemove,
   onUploadMore,
+  onGoToFile,
 }: {
   rows: UploadedRow[]
   phase: Phase
   onExtractSelected: (selectedIds: string[]) => Promise<void>
   onRemove: (submissionId: string) => void
-  onUploadMore: () => void
+  onUploadMore: () => void,
+  onGoToFile?: (submissionId: string, filename: string) => void
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [isExtracting, setIsExtracting] = useState(false)
@@ -494,15 +529,16 @@ function ExtractPanel({
       {/* Toast-like file list */}
       <div className="px-4 py-3 max-h-96 overflow-y-auto">
         <div className="space-y-2">
-          {rows.map((row) => (
-            <FileToast
-              key={row.submissionId}
-              row={row}
-              isSelected={selectedIds.has(row.submissionId)}
-              onToggleSelect={() => toggleSelect(row.submissionId)}
-              onRemove={() => onRemove(row.submissionId)}
-            />
-          ))}
+        {rows.map((row) => (
+  <FileToast
+    key={row.submissionId}
+    row={row}
+    isSelected={selectedIds.has(row.submissionId)}
+    onToggleSelect={() => toggleSelect(row.submissionId)}
+    onRemove={() => onRemove(row.submissionId)}
+    onView={onGoToFile} 
+  />
+))}
         </div>
       </div>
       <div className="px-4 pb-4 pt-2">
@@ -511,124 +547,131 @@ function ExtractPanel({
   )
 }
 
+
+/* ===================== */
+/*  File Toast Component */
+/* ===================== */
 function FileToast({
   row,
   isSelected,
   onToggleSelect,
   onRemove,
+  onView,
 }: {
   row: UploadedRow
   isSelected: boolean
   onToggleSelect: () => void
   onRemove: () => void
+  onView?: (submissionId: string, filename: string) => void
 }) {
-  const FileIcon = getFileIcon(row.fileType)
-  const fileColor = getFileColor(row.fileType)
+  // Determine status display
+  const getStatusDisplay = () => {
+    switch (row.extractionStatus) {
+      case 'extracting':
+        return (
+          <div className="flex items-center gap-2 text-blue-600 mt-1">
+            <div className="w-3.5 h-3.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            <span className="text-xs font-medium">
+              Extracting... {row.extractionProgress || 0}%
+            </span>
+          </div>
+        )
+      
+      case 'extracted':
+        return (
+          <div className="flex items-center gap-2 mt-1">
+            <div className="flex items-center gap-1.5 text-green-600">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span className="text-xs font-medium">Extracted</span>
+            </div>
+            {row.confidence !== undefined && (
+              <ConfidenceBadgeCompact confidence={row.confidence} />
+            )}
+            {onView && (
+              <button
+                onClick={() => onView(row.submissionId, row.filename)}
+                className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors ml-1"
+              >
+                <Eye className="w-3 h-3" />
+                View
+              </button>
+            )}
+          </div>
+        )
+      
+      case 'error':
+        return (
+          <div className="flex items-center gap-2 text-red-600 mt-1">
+            <X className="w-3.5 h-3.5" />
+            <span className="text-xs font-medium">
+              {row.extractionError || 'Failed'}
+            </span>
+          </div>
+        )
+      
+      default: // 'pending'
+        return (
+          <div className="flex items-center gap-2 text-gray-400 mt-1">
+            <Clock className="w-3.5 h-3.5" />
+            <span className="text-xs font-medium">Ready to extract</span>
+          </div>
+        )
+    }
+  }
 
   return (
-    <div
-      className={`flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer hover:shadow-sm group ${
-        isSelected ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-200 hover:border-gray-300'
-      }`}
-      onClick={onToggleSelect}
-    >
+    <div className="flex items-start gap-3 p-3 bg-white border border-gray-200 rounded-lg hover:shadow-sm transition-shadow">
       {/* Checkbox */}
-      <div
-        className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+      <button
+        onClick={onToggleSelect}
+        className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors mt-0.5 ${
           isSelected
             ? 'bg-blue-600 border-blue-600'
-            : 'border-gray-300 group-hover:border-blue-400'
+            : 'border-gray-300 hover:border-blue-400'
         }`}
+        disabled={row.extractionStatus === 'extracting'}
       >
         {isSelected && <Check className="w-3 h-3 text-white" />}
-      </div>
-
-      {/* File icon */}
-      <div className={`w-10 h-10 ${fileColor.bg} rounded-lg flex items-center justify-center flex-shrink-0`}>
-        <FileIcon className={`w-5 h-5 ${fileColor.text}`} />
-      </div>
-
-      {/* File info */}
-      <div className="flex-1 min-w-0">
-        <div>
-        <h4 className="text-sm font-semibold text-gray-900 truncate" title={row.filename}>
-          {row.filename}
-        </h4>
-        {row.confidence && <ConfidenceBadgeCompact confidence={row.confidence} />}
-        </div>
-       
-        <div className="flex items-center gap-2 text-xs text-gray-500">
-          <span className={`font-medium ${fileColor.text}`}>
-            {row.fileType?.toUpperCase() || 'FILE'}
-          </span>
-          <span>•</span>
-          <span>{formatFileSize(row.fileSize)}</span>
-          <span>•</span>
-          <span>{formatTimeAgo(row.uploadedAt)}</span>
-        </div>
-      </div>
-
-      {/* Remove button */}
-      <button
-        onClick={(e) => {
-          e.stopPropagation()
-          onRemove()
-        }}
-        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors opacity-0 group-hover:opacity-100"
-      >
-        <X className="w-4 h-4" />
       </button>
+
+      {/* File Icon */}
+      <div className="flex-shrink-0 mt-0.5">
+        {row.extractionStatus === 'extracted' ? (
+          <FileText className="w-5 h-5 text-green-600" />
+        ) : row.extractionStatus === 'error' ? (
+          <FileText className="w-5 h-5 text-red-600" />
+        ) : row.extractionStatus === 'extracting' ? (
+          <FileText className="w-5 h-5 text-blue-600" />
+        ) : (
+          <FileText className="w-5 h-5 text-gray-400" />
+        )}
+      </div>
+
+      {/* File Info */}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-gray-900 truncate">
+          {row.filename}
+        </p>
+        <p className="text-xs text-gray-500 mt-0.5">
+          {formatFileType(row.fileType)} • {formatFileSize(row.fileSize)} • {formatDate(row.uploadedAt)}
+        </p>
+        
+        {/* Status Display */}
+        {getStatusDisplay()}
+      </div>
+
+      {/* Remove Button - Hide during extraction */}
+      {row.extractionStatus !== 'extracting' && (
+        <button
+          onClick={onRemove}
+          className="flex-shrink-0 p-1 text-gray-400 hover:text-red-600 transition-colors mt-0.5"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      )}
     </div>
   )
 }
-
-/* ===================== */
-/*  Helper functions     */
-/* ===================== */
-function getFileIcon(type?: UploadedRow['fileType']) {
-  switch (type) {
-    case 'pdf':
-      return FileText
-    case 'excel':
-      return FileSpreadsheet
-    case 'csv':
-      return FileSpreadsheet
-    default:
-      return File
-  }
-}
-
-function getFileColor(type?: UploadedRow['fileType']) {
-  switch (type) {
-    case 'pdf':
-      return { bg: 'bg-red-50', text: 'text-red-600' }
-    case 'excel':
-      return { bg: 'bg-green-50', text: 'text-green-600' }
-    case 'csv':
-      return { bg: 'bg-blue-50', text: 'text-blue-600' }
-    default:
-      return { bg: 'bg-gray-50', text: 'text-gray-600' }
-  }
-}
-
-function formatFileSize(bytes?: number): string {
-  if (!bytes) return '0 KB'
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
-}
-
-function formatTimeAgo(isoString: string): string {
-  const date = new Date(isoString)
-  const now = new Date()
-  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000)
-
-  if (seconds < 60) return 'Just now'
-  if (seconds < 3600) return Math.floor(seconds / 60) + 'm ago'
-  if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ago'
-  return Math.floor(seconds / 86400) + 'd ago'
-}
-
 /* ===================== */
 /*  Presentational bits  */
 /* ===================== */

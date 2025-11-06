@@ -16,7 +16,11 @@ type UploadedRow = {
   uploadedAt: string
   fileType?: 'pdf' | 'excel' | 'csv' | 'other'
   fileSize?: number
-  confidence?:number
+  confidence?: number
+  //Extraction status tracking
+  extractionStatus?: 'pending' | 'extracting' | 'extracted' | 'error'
+  extractionProgress?: number  // 0-100
+  extractionError?: string
 }
 
 type HomeViewProps = {
@@ -108,6 +112,10 @@ function EmptyDashboardState({
             uploadedAt: new Date().toISOString(),
             fileType: getFileType(files[i].name),
             fileSize: files[i].size,
+            confidence: res.extraction.confidence,
+            // Set initial extraction status
+            extractionStatus: 'pending',  // Files uploaded but not yet "viewed" as extracted
+            extractionProgress: 0
           })
         } catch (e: unknown) {
           // ✅ Log error ,then CONTINUE to next file

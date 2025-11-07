@@ -8,7 +8,10 @@ import json
 from typing import Optional,Dict,Any,List
 from datetime import datetime
 from werkzeug.utils import secure_filename
-from extraction.extractors import Acord126Extractor
+from extraction.extractors import extractor_registry
+from extraction.classifiers import DocumentClassifier
+from extraction.core.readers.pdf_reader import PdfReader
+from extraction.core.document import Document
 from filling.fillers import Acord126Filler
 from services.client_service import ClientService
 from lib.submission_templates import get_template, TEMPLATES
@@ -43,8 +46,7 @@ class SubmissionService:
         os.makedirs(self.data_dir, exist_ok=True)
         os.makedirs(self.folders_dir, exist_ok=True)
         # Initialize extractor and filler
-        self.extractor = Acord126Extractor()
-        self.filler = Acord126Filler()
+ 
         self.version_service = VersionService(self.storage_dir)
         self.comparison_service = ComparisonService(self.storage_dir)
         self.form_generator = FormGenerator()
@@ -62,105 +64,124 @@ class SubmissionService:
         Returns:
             Dictionary with submission_id, extracted data, and metadata
         """
-        # Generate unique submission ID
-        submission_id = str(uuid.uuid4())
-        
-        # Progress: 0% - Starting
-        if progress_callback:
-            progress_callback(submission_id, 0, 'starting', 'Initializing upload...')
-        
-        # Determine storage path
-        if folder_id:
-            # Store in folder structure
-            from services.folder_service import FolderService
-            folder_service = FolderService()
-            upload_dir = folder_service.get_inputs_path(folder_id)
-        else:
-            # Store in legacy uploads directory
-            upload_dir = self.uploads_dir
-        # Progress: 10% - Saving file
-        if progress_callback:
-            progress_callback(submission_id, 10, 'uploading', 'Saving file...')
-        
-        # Save uploaded file
-        filename = secure_filename(file.filename)
-        upload_path = os.path.join(upload_dir, f"{submission_id}_{filename}")
-        file.save(upload_path)
-        # Progress: 30% - File saved
-        if progress_callback:
-            progress_callback(submission_id, 30, 'uploaded', 'File saved successfully')
-        
-        # Progress: 40% - Starting extraction
-        if progress_callback:
-            progress_callback(submission_id, 40, 'extracting', 'Analyzing document...')
-        # Extract data
-        extraction_result = self.extractor.extract(upload_path)
-        # Progress: 70% - Extraction complete
-        if progress_callback:
-            progress_callback(submission_id, 70, 'extracting', 'Processing fields...')
-        
-        if not extraction_result.is_successful():
+        try:
+            # Generate unique submission ID
+            submission_id = str(uuid.uuid4())
+            
+            # Progress: 0% - Starting
             if progress_callback:
-                progress_callback(submission_id, 100, 'error', f'Extraction failed: {extraction_result.error}')
-            raise ValueError(f"Extraction failed: {extraction_result.error}")
+                progress_callback(submission_id, 0, 'starting', 'Initializing upload...')
+            
+            # Determine storage path
+            if folder_id:
+                # Store in folder structure
+                from services.folder_service import FolderService
+                folder_service = FolderService()
+                upload_dir = folder_service.get_inputs_path(folder_id)
+            else:
+                # Store in legacy uploads directory
+                upload_dir = self.uploads_dir
+            # Progress: 10% - Saving file
+            if progress_callback:
+                progress_callback(submission_id, 10, 'uploading', 'Saving file...')
+            
+            # Save uploaded file
+            filename = secure_filename(file.filename)
+            upload_path = os.path.join(upload_dir, f"{submission_id}_{filename}")
+            file.save(upload_path)
+            # Progress: 30% - File saved
+            if progress_callback:
+                progress_callback(submission_id, 30, 'uploaded', 'File saved successfully')
+            
+            # Progress: 40% - Starting extraction
+            if progress_callback:
+                progress_callback(submission_id, 40, 'extracting', 'Analyzing document...')
+
+            # READ + CLASSIFY
+            doc = Document(file_path=upload_path, file_name=filename)
+            reader = PdfReader()
+            reader.read(upload_path, doc)
+            
+            DocumentClassifier.classify(doc)
+
+            extractor = extractor_registry.get_extractor_for_document(doc)
+            if not extractor:
+              raise ValueError(f"No extractor for {doc.document_type}")
+            # Extract data
+            extraction_result = extractor.extract(doc)
+
+            # Progress: 70% - Extraction complete
+            if progress_callback:
+                progress_callback(submission_id, 70, 'extracting', 'Processing fields...')
         
-        # Progress: 80% - Saving data
-        if progress_callback:
-            progress_callback(submission_id, 80, 'extracting', 'Saving extracted data...')
-        version_id = self.version_service.create_version(
-            submission_id=submission_id,
-            data=extraction_result.json,
-            user='system',
-            action='extract',
-            notes=f'Initial extraction from {filename}'
-        )
-        # Save extracted JSON
-        data_path = os.path.join(self.data_dir, f"{submission_id}.json")
-        with open(data_path, 'w') as f:
-            json.dump(extraction_result.json, f, indent=2)
+            # # ── sanity check (optional – some extractors may not implement it) ───
+            if hasattr(extraction_result, "is_successful") and not extraction_result.is_successful():
+                err = getattr(extraction_result, "error", "Unknown extraction error")
+                if progress_callback:
+                    progress_callback(submission_id, 100, "error", f"Extraction failed: {err}")
+                raise ValueError(f"Extraction failed: {err}")
+            
         
-        # Progress: 90% - Creating metadata
-        if progress_callback:
-            progress_callback(submission_id, 90, 'ready', 'Finalizing...')
-        
-        # Save submission metadata
-        metadata = {
-            'submission_id': submission_id,
-            'folder_id': folder_id,
-            'filename': filename,
-            'upload_path': upload_path,
-            'data_path': data_path,
-            'uploaded_at': datetime.utcnow().isoformat(),
-            'status': 'extracted',
-            'confidence': extraction_result.confidence,
-            'warnings': extraction_result.warnings,
-            'current_version_id': version_id,
-            'field_confidence': extraction_result.field_confidence,
-            # 'field_hints': extraction_result.field_hints,
-            # 'extraction_issues': extraction_result.extraction_issues,
-            # 'suggested_fixes': extraction_result.suggested_fixes
-        }
-        
-        metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
-        with open(metadata_path, 'w') as f:
-            json.dump(metadata, f, indent=2)
-        
-        # Add to folder if folder_id provided
-        if folder_id:
-            from services.folder_service import FolderService
-            folder_service = FolderService()
-            folder_service.add_submission(folder_id, submission_id, filename)
-        
-        # Progress: 100% - Complete
-        if progress_callback:
-            progress_callback(submission_id, 100, 'ready', 'Extraction complete')
-        
-        return {
-            'submission_id': submission_id,
-            'confidence': extraction_result.confidence,
-            'warnings': extraction_result.warnings,
-            'data': extraction_result.json
-        }
+            # ── 80% – persist extracted JSON & version ───────────────────────────
+            if progress_callback:
+                progress_callback(submission_id, 80, "extracting", "Saving extracted data...")
+
+            # JSON-compatible dict (handles datetime, UUID, etc.)
+            json_data = extraction_result.model_dump(mode="json")
+
+            version_id = self.version_service.create_version(
+                submission_id=submission_id,
+                data=json_data,
+                user="system",
+                action="extract",
+                notes=f"Initial extraction from {filename}",
+            )
+          
+            # Save extracted JSON
+            data_path = os.path.join(self.data_dir, f"{submission_id}.json")
+            with open(data_path, "w") as f:
+                json.dump(json_data, f, indent=2)
+
+            # ── 90% – write metadata ─────────────────────────────────────────────
+            if progress_callback:
+                progress_callback(submission_id, 90, "ready", "Finalizing...")
+            
+            # Save submission metadata
+            metadata = {
+                "submission_id": submission_id,
+                "folder_id": folder_id,
+                "filename": filename,
+                "upload_path": upload_path,
+                "data_path": data_path,
+                "uploaded_at": datetime.utcnow().isoformat(),
+                "status": "extracted",
+                "confidence": extraction_result.confidence,
+                "warnings": extraction_result.warnings,
+                "current_version_id": version_id,
+                "field_confidence": extraction_result.field_confidence,
+            }
+            
+            metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
+            with open(metadata_path, 'w') as f:
+                json.dump(metadata, f, indent=2)
+           
+            # ── link to folder (if any) ─────────────────────────────────────────
+            if folder_id:
+                from services.folder_service import FolderService
+                FolderService().add_submission(folder_id, submission_id, filename)
+
+            # ── 100% – done ───────────────────────────────────────────────────────
+            if progress_callback:
+                progress_callback(submission_id, 100, "ready", "Extraction complete")
+            
+            return {
+                "submission_id": submission_id,
+                "confidence": extraction_result.confidence,
+                "warnings": extraction_result.warnings,
+                "data": json_data,
+            }
+        except e as Exception:
+            print("upload and extract error: ${e}")
     
     def get_submission(self, submission_id: str):
         """

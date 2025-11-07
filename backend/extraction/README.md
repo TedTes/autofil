@@ -73,7 +73,7 @@ File → Load → Classify → Extract → Result
 
 | Document Type | Extractor | Confidence |
 |---------------|-----------|------------|
-| ACORD 126 | Acord126Extractor | High (0.8-0.95) |
+| ACORD 126 | ACORD126Extractor | High (0.8-0.95) |
 | Loss Run | LossRunExtractor | High (0.75-0.9) |
 | SOV | SovExtractor | High (0.75-0.9) |
 | Financial Statement | FinancialStatementExtractor | Medium (0.7-0.85) |

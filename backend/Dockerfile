@@ -59,15 +59,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Create storage directories with proper permissions
-# RUN mkdir -p storage/uploads storage/outputs storage/data storage/folders && \
-#     chmod -R 755 storage
+RUN mkdir -p storage/uploads storage/outputs storage/data storage/folders && \
+    chmod -R 755 storage
 
 # Expose port (Railway will set $PORT dynamically)
 EXPOSE 8000
-
-# # Health check
-# HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-#     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/health').read()" || exit 1
 
 # Run with gunicorn
 CMD gunicorn --bind 0.0.0.0:${PORT:-8000} \

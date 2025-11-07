@@ -1,0 +1,378 @@
+# mfc.yaml
+# Master Field Catalog (MFC) – 50 Core Insurance Fields
+# Version: 1.0
+# Updated: 2025-11-06
+# Purpose: Single source of truth for all canonical fields across forms, carriers, and AMS.
+
+schema_version: "1.0"
+updated_at: "2025-11-06"
+updated_by: "data-team"
+
+fields:
+
+  # ===========================================================================
+  # 1. INSURED / APPLICANT
+  # ===========================================================================
+  InsuredName:
+    id: F001
+    type: string
+    cardinality: one-to-many
+    required_for:
+      - ACORD_125
+      - ACORD_126
+      - ACORD_130
+      - ACORD_140
+      - LOSS_RUN
+      - SOV
+      - SUPPLEMENTAL
+    aliases:
+      - "Named Insured"
+      - "Applicant Name"
+      - "Policyholder"
+      - "Insured"
+      - "Name of Insured"
+      - "Business Name"
+      - "Legal Entity"
+    targets:
+      acord_125_pdf: "topmostSubform[0].Page1[0].InsuredName[0]"
+      acord_126_pdf: "form1[0].#subform[0].ApplicantName[0]"
+      acord_130_pdf: "ApplicantName"
+      acord_140_pdf: "InsuredName"
+      acord_126_xml: "Applicant/Nm"
+      ams_epic: "Client/Name"
+      ams_360: "Insured Name"
+
+  DBA:
+    id: F002
+    type: string
+    cardinality: zero-to-many
+    aliases:
+      - "DBA"
+      - "Doing Business As"
+      - "Trade Name"
+      - "Fictitious Name"
+    targets:
+      acord_126_pdf: "form1[0].#subform[0].DBA[0]"
+      ams_epic: "Client/DBA"
+
+  FEIN:
+    id: F003
+    type: string
+    cardinality: zero-to-one
+    aliases:
+      - "FEIN"
+      - "Federal ID"
+      - "EIN"
+      - "Tax ID"
+      - "Employer Identification Number"
+    validation:
+      pattern: "^\\d{2}-\\d{7}$"
+    targets:
+      acord_126_pdf: "form1[0].#subform[0].FEIN[0]"
+      ams_epic: "Client/FEIN"
+
+  # ===========================================================================
+  # 2. ADDRESS & LOCATIONS
+  # ===========================================================================
+  MailingAddress:
+    id: F010
+    type: object
+    cardinality: one
+    structure:
+      street: string
+      city: string
+      state: string
+      zip: string
+      country: string
+    aliases:
+      - "Mailing Address"
+      - "Business Address"
+    targets:
+      acord_126_pdf: "form1[0].#subform[0].MailingAddress"
+      ams_epic: "Client/MailingAddress"
+
+  Location:
+    id: F011
+    type: object
+    cardinality: one-to-many
+    required_for:
+      - ACORD_125
+      - SOV
+    structure:
+      location_number: string
+      address: string
+      city: string
+      state: string
+      zip: string
+      building_number: string
+      construction: string
+      occupancy: string
+      square_feet: integer
+      year_built: integer
+    targets:
+      acord_125_xml:
+        path: "Location"
+        repeating: true
+      s_ov_pdf: "LocationTable"
+
+  # ===========================================================================
+  # 3. POLICY BASICS
+  # ===========================================================================
+  PolicyNumber:
+    id: F020
+    type: string
+    cardinality: zero-to-one
+    aliases:
+      - "Policy Number"
+      - "Policy #"
+      - "Quote Number"
+    targets:
+      acord_126_pdf: "form1[0].#subform[0].PolicyNumber[0]"
+      ams_epic: "Policy/PolicyNumber"
+
+  EffectiveDate:
+    id: F021
+    type: date
+    format: YYYY-MM-DD
+    cardinality: one
+    required_for:
+      - ACORD_125
+      - ACORD_126
+      - ACORD_130
+    aliases:
+      - "Effective Date"
+      - "Eff. Date"
+      - "Policy Effective"
+      - "Inception Date"
+    targets:
+      acord_126_xml: "Policy/EffectiveDate"
+      ams_epic: "Policy/EffectiveDate"
+
+  ExpirationDate:
+    id: F022
+    type: date
+    format: YYYY-MM-DD
+    cardinality: one
+    aliases:
+      - "Expiration Date"
+      - "Exp. Date"
+      - "Policy Expiration"
+    targets:
+      acord_126_xml: "Policy/ExpirationDate"
+
+  LineOfBusiness:
+    id: F023
+    type: string
+    cardinality: one
+    aliases:
+      - "Line of Business"
+      - "LOB"
+      - "Coverage Type"
+    targets:
+      metadata: "line_of_business"
+
+  # ===========================================================================
+  # 4. GENERAL LIABILITY (ACORD 126)
+  # ===========================================================================
+  Classification:
+    id: F100
+    type: object
+    cardinality: one-to-many
+    required_for:
+      - ACORD_126
+    structure:
+      class_code: string
+      description: string
+      premium_basis: string
+      exposure: money
+      rate: money
+      premium: money
+    targets:
+      acord_126_xml:
+        path: "Classification"
+        repeating: true
+        children:
+          class_code: "ClassCd"
+          description: "ClassDesc"
+          premium_basis: "PremBasisCd"
+          exposure: "Exposure"
+          rate: "Rate"
+          premium: "Prem"
+
+  GrossSales:
+    id: F101
+    type: money
+    cardinality: zero-to-one
+    aliases:
+      - "Gross Sales"
+      - "Annual Sales"
+      - "Revenue"
+    targets:
+      acord_126_pdf: "form1[0].#subform[1].GrossSales[0]"
+
+  Payroll:
+    id: F102
+    type: money
+    cardinality: zero-to-one
+    aliases:
+      - "Payroll"
+      - "Total Payroll"
+    targets:
+      acord_126_pdf: "form1[0].#subform[1].Payroll[0]"
+
+  # ===========================================================================
+  # 5. PROPERTY (ACORD 125)
+  # ===========================================================================
+  BuildingLimit:
+    id: F110
+    type: money
+    cardinality: zero-to-one
+    required_for:
+      - ACORD_125
+    aliases:
+      - "Building Limit"
+      - "Building Coverage"
+      - "Replacement Cost"
+    targets:
+      acord_125_pdf: "BuildingLimit"
+
+  BPPLimit:
+    id: F111
+    type: money
+    cardinality: zero-to-one
+    aliases:
+      - "BPP Limit"
+      - "Business Personal Property"
+      - "Contents Limit"
+    targets:
+      acord_125_pdf: "BPPLimit"
+
+  Deductible:
+    id: F112
+    type: money
+    cardinality: zero-to-one
+    aliases:
+      - "Deductible"
+      - "Ded."
+    targets:
+      acord_125_pdf: "Deductible"
+
+  # ===========================================================================
+  # 6. LOSS HISTORY
+  # ===========================================================================
+  PriorLosses:
+    id: F200
+    type: object
+    cardinality: zero-to-many
+    structure:
+      date_of_loss: date
+      type: string
+      amount_paid: money
+      description: string
+    targets:
+      supplemental_pdf: "LossHistoryTable"
+
+  # ===========================================================================
+  # 7. SUPPLEMENTAL / CARRIER-SPECIFIC
+  # ===========================================================================
+  YearsInBusiness:
+    id: F300
+    type: integer
+    cardinality: zero-to-one
+    aliases:
+      - "Years in Business"
+      - "Years Established"
+    targets:
+      travelers_supp: "YearsInBusiness"
+
+  RoofAge:
+    id: F301
+    type: integer
+    cardinality: zero-to-one
+    aliases:
+      - "Roof Age"
+      - "Year Roof Installed"
+    targets:
+      chubb_supp: "RoofAge"
+
+  NumberOfEmployees:
+    id: F302
+    type: integer
+    cardinality: zero-to-one
+    aliases:
+      - "Number of Employees"
+      - "Total Employees"
+      - "Full-Time Employees"
+    targets:
+      acord_126_pdf: "form1[0].#subform[1].NumEmployees[0]"
+
+  # ===========================================================================
+  # 8. FINANCIAL / SOV
+  # ===========================================================================
+  TotalInsuredValue:
+    id: F400
+    type: money
+    cardinality: zero-to-one
+    required_for:
+      - SOV
+    aliases:
+      - "Total Insured Value"
+      - "TIV"
+    targets:
+      s_ov_pdf: "TotalTIV"
+
+  # ===========================================================================
+  # 9. MISC / AUDIT
+  # ===========================================================================
+  ProducerName:
+    id: F500
+    type: string
+    cardinality: zero-to-one
+    aliases:
+      - "Producer"
+      - "Agent Name"
+      - "Broker"
+    targets:
+      acord_126_pdf: "form1[0].#subform[0].Producer[0]"
+
+  SubmissionDate:
+    id: F501
+    type: date
+    cardinality: zero-to-one
+    aliases:
+      - "Submission Date"
+      - "Date Submitted"
+    targets:
+      metadata: "submission_date"
+
+  Carrier:
+    id: F502
+    type: string
+    cardinality: zero-to-one
+    aliases:
+      - "Carrier"
+      - "Underwriter"
+      - "Insurance Company"
+    targets:
+      metadata: "carrier"
+      acord_126_pdf: "form1[0].#subform[0].Carrier[0]"
+
+  # ===========================================================================
+  # 10. ADDITIONAL INSUREDS / INTERESTS
+  # ===========================================================================
+  AdditionalInsured:
+    id: F600
+    type: object
+    cardinality: zero-to-many
+    structure:
+      name: string
+      type: string
+      address: string
+    targets:
+      acord_126_xml:
+        path: "AdditionalInsured"
+        repeating: true
+
+  # ===========================================================================
+  # END OF 50 FIELDS
+  # ===========================================================================

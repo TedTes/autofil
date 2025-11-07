@@ -9,7 +9,7 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-
+import uuid
 
 class DocumentType(Enum):
     """Enumeration of supported document types."""
@@ -139,6 +139,7 @@ class Document:
             file_extension: File extension (optional)
         """
         self.id: Optional[str] = None
+        self.job_id: str = str(uuid.uuid4())
         self.file_path: str = file_path
         self.file_name: str = file_name
         self.mime_type: Optional[str] = mime_type

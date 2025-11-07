@@ -6,180 +6,98 @@ based on document type.
 """
 
 from typing import Dict, Type, Optional, List
-from ..interfaces.extractor import IExtractor
 from ..core.document import Document, DocumentType
+
+# Import all extractors explicitly
+from ..extractors.acord_125_extractor import ACORD125Extractor
+from ..extractors.acord_126_extractor import ACORD126Extractor
+from ..extractors.acord_130_extractor import ACORD130Extractor
+from ..extractors.acord_140_extractor import ACORD140Extractor
+from ..extractors.loss_run_extractor import LossRunExtractor
+from ..extractors.sov_extractor import SovExtractor
+from ..extractors.financial_statement_extractor import FinancialStatementExtractor
+from ..extractors.supplemental_extractor import SupplementalExtractor
+from ..extractors.generic_extractor import GenericExtractor
 
 
 class ExtractorRegistry:
     """
     Registry for document extractors.
     
-    Maps document types to appropriate extractors and provides
-    factory methods for creating extractor instances.
+    Maps DocumentType → Extractor class.
+    Single source of truth. No decorators. No try/except.
     """
     
-    def __init__(self):
-        """Initialize extractor registry."""
-        self._extractors: Dict[DocumentType, Type[IExtractor]] = {}
-        self._register_default_extractors()
-    
-    def _register_default_extractors(self):
-        """Register default extractors."""
-        try:
-            from .acord_126_extractor import Acord126Extractor
-            self.register(DocumentType.ACORD_126, Acord126Extractor)
-        except ImportError:
-            pass
-        
-        try:
-            from .loss_run_extractor import LossRunExtractor
-            self.register(DocumentType.LOSS_RUN, LossRunExtractor)
-        except ImportError:
-            pass
-        
-        try:
-            from .sov_extractor import SovExtractor
-            self.register(DocumentType.SOV, SovExtractor)
-        except ImportError:
-            pass
-        
-        try:
-            from .financial_statement_extractor import FinancialStatementExtractor
-            self.register(DocumentType.FINANCIAL_STATEMENT, FinancialStatementExtractor)
-        except ImportError:
-            pass
-        
-        try:
-            from .supplemental_extractor import SupplementalExtractor
-            self.register(DocumentType.SUPPLEMENTAL, SupplementalExtractor)
-        except ImportError:
-            pass
-        
-        try:
-            from .generic_extractor import GenericExtractor
-            self.register(DocumentType.GENERIC, GenericExtractor)
-            self.register(DocumentType.UNKNOWN, GenericExtractor)
-        except ImportError:
-            pass
+    _registry: Dict[DocumentType, Type] = {}
 
-        try:
-            from .acord_125_extractor import Acord125Extractor
-            self.register(DocumentType.ACORD_125, Acord125Extractor)
-        except ImportError:
-            pass
-    
-        try:
-            from .acord_130_extractor import Acord130Extractor
-            self.register(DocumentType.ACORD_130, Acord130Extractor)
-        except ImportError:
-            pass
-    
-        try:
-            from .acord_140_extractor import Acord140Extractor
-            self.register(DocumentType.ACORD_140, Acord140Extractor)
-        except ImportError:
-            pass
-    
-    def register(self, document_type: DocumentType, extractor_class: Type[IExtractor]):
-        """
-        Register an extractor for a document type.
-        
-        Args:
-            document_type: Document type
-            extractor_class: Extractor class
-        """
-        self._extractors[document_type] = extractor_class
-    
-    def get(self, document_type: DocumentType) -> Optional[Type[IExtractor]]:
-        """
-        Get extractor class for document type.
-        
-        Args:
-            document_type: Document type
-            
-        Returns:
-            Extractor class or None if not found
-        """
-        return self._extractors.get(document_type)
-    
-    def get_extractor(self, document_type: DocumentType) -> Optional[IExtractor]:
-        """
-        Get extractor instance for document type.
-        
-        Args:
-            document_type: Document type
-            
-        Returns:
-            Extractor instance or None if not found
-        """
-        extractor_class = self.get(document_type)
-        if extractor_class:
-            return extractor_class()
-        return None
-    
-    def get_extractor_for_document(self, document: Document) -> Optional[IExtractor]:
-        """
-        Get appropriate extractor for a document.
-        
-        Args:
-            document: Document object
-            
-        Returns:
-            Extractor instance or Generic extractor as fallback
-        """
-        # Try to get specific extractor
-        extractor = self.get_extractor(document.document_type)
-        
-        if extractor and extractor.can_extract(document):
+    @classmethod
+    def _register_defaults(cls):
+        """Register all known extractors."""
+        cls._registry.update({
+            DocumentType.ACORD_125: ACORD125Extractor,
+            DocumentType.ACORD_126: ACORD126Extractor,
+            DocumentType.ACORD_130: ACORD130Extractor,
+            DocumentType.ACORD_140: ACORD140Extractor,
+            DocumentType.LOSS_RUN: LossRunExtractor,
+            DocumentType.SOV: SovExtractor,
+            DocumentType.FINANCIAL_STATEMENT: FinancialStatementExtractor,
+            DocumentType.SUPPLEMENTAL: SupplementalExtractor,
+            DocumentType.GENERIC: GenericExtractor,
+            DocumentType.UNKNOWN: GenericExtractor,
+        })
+
+    @classmethod
+    def register(cls, document_type: DocumentType, extractor_class: Type):
+        """Register an extractor."""
+        cls._registry[document_type] = extractor_class
+
+    @classmethod
+    def get(cls, document_type: DocumentType) -> Optional[Type]:
+        """Get extractor class."""
+        return cls._registry.get(document_type)
+
+    @classmethod
+    def get_extractor(cls, document_type: DocumentType) -> Optional[object]:
+        """Get extractor instance."""
+        extractor_class = cls.get(document_type)
+        return extractor_class() if extractor_class else None
+
+    @classmethod
+    def get_extractor_for_document(cls, document: Document) -> object:
+        """Get best extractor for a document."""
+        extractor = cls.get_extractor(document.document_type)
+        if extractor and getattr(extractor, "can_extract", lambda d: True)(document):
             return extractor
-        
-        # Fallback to generic extractor
-        from .generic_extractor import GenericExtractor
         return GenericExtractor()
-    
-    def has_extractor(self, document_type: DocumentType) -> bool:
-        """
-        Check if extractor is registered for document type.
-        
-        Args:
-            document_type: Document type
-            
-        Returns:
-            True if extractor is available
-        """
-        return document_type in self._extractors
-    
-    def list_extractors(self) -> List[DocumentType]:
-        """
-        Get list of document types with registered extractors.
-        
-        Returns:
-            List of DocumentType values
-        """
-        return list(self._extractors.keys())
-    
-    def get_extractor_info(self) -> Dict[str, Dict[str, any]]:
-        """
-        Get information about all registered extractors.
-        
-        Returns:
-            Dictionary with extractor information
-        """
-        info = {}
-        
-        for doc_type, extractor_class in self._extractors.items():
-            info[doc_type.value] = {
-                'document_type': doc_type.value,
-                'extractor_class': extractor_class.__name__,
-                'supported_types': [t.value for t in extractor_class().get_supported_types()],
+
+    @classmethod
+    def has_extractor(cls, document_type: DocumentType) -> bool:
+        """Check if extractor exists."""
+        return document_type in cls._registry
+
+    @classmethod
+    def list_extractors(cls) -> List[DocumentType]:
+        """List all registered types."""
+        return list(cls._registry.keys())
+
+    @classmethod
+    def get_info(cls) -> Dict[str, Dict]:
+        """Get registry metadata."""
+        return {
+            dt.value: {
+                "extractor": cls._registry[dt].__name__,
+                "supports": [t.value for t in cls._registry[dt]().get_supported_types()]
             }
-        
-        return info
-    
-    def __repr__(self) -> str:
-        """String representation."""
-        return f"ExtractorRegistry(extractors={len(self._extractors)})"
+            for dt in cls._registry
+        }
+
+    @classmethod
+    def __repr__(cls):
+        return f"ExtractorRegistry({len(cls._registry)} extractors)"
 
 
-# Global extractor registry instance
-extractor_registry = ExtractorRegistry()
+# Initialize registry at import time
+ExtractorRegistry._register_defaults()
+
+# Global instance
+extractor_registry = ExtractorRegistry

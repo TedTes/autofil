@@ -12,7 +12,7 @@ from ..models.extraction_result import ExtractionResult
 from ..parsers import PdfFieldParser, TableParser
 
 
-class Acord130Extractor(IExtractor):
+class ACORD130Extractor(IExtractor):
     """
     Extractor for ACORD 130 Workers Compensation Application forms.
     

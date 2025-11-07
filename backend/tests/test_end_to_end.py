@@ -9,7 +9,7 @@ Tests:
 
 import os
 import json
-from extraction.extractors import Acord126Extractor
+from extraction.extractors import ACORD126Extractor
 from filling.fillers import Acord126Filler
 
 
@@ -36,7 +36,7 @@ def test_extract_and_fill():
     print("\n[STEP 1] Extracting data from filled PDF...")
     print(f"Input: {input_pdf}")
     
-    extractor = Acord126Extractor()
+    extractor = ACORD126Extractor()
     extraction_result = extractor.extract(input_pdf)
     
     if not extraction_result.is_successful():

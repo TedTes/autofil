@@ -12,7 +12,7 @@ from ..models.extraction_result import ExtractionResult
 from ..parsers import PdfFieldParser, TableParser
 
 
-class Acord140Extractor(IExtractor):
+class ACORD140Extractor(IExtractor):
     """
     Extractor for ACORD 140 Property Section forms.
     

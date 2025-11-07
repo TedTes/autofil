@@ -17,10 +17,10 @@ from .interfaces.classifier import IClassifier, ClassificationResult, CompositeC
 from .models.extraction_result import ExtractionResult
 from .strategies import FusionStrategy, DocumentGroup
 from .extractors import ( 
-    Acord126Extractor,
-    Acord125Extractor,
-    Acord130Extractor,
-    Acord140Extractor,
+    ACORD126Extractor,
+    ACORD125Extractor,
+    ACORD130Extractor,
+    ACORD140Extractor,
     LossRunExtractor,
     SovExtractor,
     FinancialStatementExtractor,
@@ -69,10 +69,10 @@ __all__ = [
     'CompositeClassifier',
     
     # Extractors
-    'Acord126Extractor',
-    'Acord125Extractor',
-    'Acord130Extractor',
-    'Acord140Extractor',
+    'ACORD126Extractor',
+    'ACORD125Extractor',
+    'ACORD130Extractor',
+    'ACORD140Extractor',
     'LossRunExtractor',
     'SovExtractor',
     'FinancialStatementExtractor',

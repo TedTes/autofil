@@ -259,7 +259,7 @@ def extract_document():
                 "warnings": [],
                 "errors": [],
                 "metadata": {
-                    "extractor_used": "Acord126Extractor",
+                    "extractor_used": "ACORD126Extractor",
                     "document_type": "acord_126",
                     "extraction_date": "2025-01-15T10:30:00Z"
                 }

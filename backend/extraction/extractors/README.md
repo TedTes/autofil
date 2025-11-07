@@ -4,7 +4,7 @@
 
 | Extractor | Document Type | Description |
 |-----------|---------------|-------------|
-| Acord126Extractor | ACORD_126 | Commercial General Liability forms |
+| ACORD126Extractor | ACORD_126 | Commercial General Liability forms |
 | LossRunExtractor | LOSS_RUN | Insurance claim history |
 | SovExtractor | SOV | Schedule of Values (property schedules) |
 | FinancialStatementExtractor | FINANCIAL_STATEMENT | Balance sheets, income statements |

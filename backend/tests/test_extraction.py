@@ -1,7 +1,7 @@
-from extraction.extractors import Acord126Extractor
+from extraction.extractors import ACORD126Extractor
 import json
 # Create extractor
-extractor = Acord126Extractor()
+extractor = ACORD126Extractor()
 
 # Extract from PDF
 result = extractor.extract("tests/fixtures/ACORD_126_filled.pdf")

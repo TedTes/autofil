@@ -173,4 +173,4 @@ class ACORD130Extractor(IExtractor):
         return mapped
     
     def __repr__(self) -> str:
-        return "Acord130Extractor()"
+        return "ACORD130Extractor()"

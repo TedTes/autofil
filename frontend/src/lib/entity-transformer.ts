@@ -14,6 +14,10 @@
 
 import type { EntityValue, CanonicalOutput,NestedData,MailingAddress, ProducerInfo,DeductibleStructure,GrossSalesStructure} from '@/types'
 import { getFieldMapping, hasCustomTransformer } from './mfc-mapping'
+import {logger, DEBUG_TRANSFORM} from "./logger"
+
+
+
 
 
 /**
@@ -43,29 +47,42 @@ export interface TransformationResult {
 export function transformEntities(
   entities: Record<string, EntityValue[]>
 ): TransformationResult {
+  logger.group('Starting entity transformation')
+  logger.info(`Processing ${Object.keys(entities).length} entity types`)
+  
   const data: NestedData = {}
   const field_confidence: Record<string, number> = {}
   const warnings: string[] = []
   const all_confidences: number[] = []
   
+  let processedCount = 0
+  let unmappedCount = 0
+  let transformedCount = 0
+  
   // Process each entity from backend
   for (const [fieldId, entityValues] of Object.entries(entities) as [string, EntityValue[]][]) {
     if (!entityValues || entityValues.length === 0) {
+      logger.info(`Skipping empty field: ${fieldId}`)
       continue
     }
-    
+    processedCount++
+    logger.info(`[${processedCount}/${Object.keys(entities).length}] Processing: ${fieldId}`, {
+      valueCount: entityValues.length,
+      avgConfidence: (entityValues.reduce((sum, ev) => sum + ev.confidence, 0) / entityValues.length).toFixed(2)
+    })
     // Get mapping for this field
     const mapping = getFieldMapping(fieldId)
     
     if (!mapping) {
       // Unmapped field - store in 'other' section
-      console.warn(`⚠️ Unmapped field: ${fieldId}`)
+      unmappedCount++
+      logger.warn(`Unmapped field: ${fieldId} (storing in 'other')`)
       if (!data.other) data.other = {}
       const otherObj = data.other as Record<string, unknown>
       otherObj[fieldId.toLowerCase()] = entityValues[0].value
       continue
     }
-    
+    logger.info(`  → Mapped to: ${mapping.path} (cardinality: ${mapping.cardinality})`)
     // Extract raw values from EntityValues
     const values = entityValues.map(ev => ev.value)
     const confidences = entityValues.map(ev => ev.confidence)
@@ -75,15 +92,18 @@ export function transformEntities(
     
     if (hasCustomTransformer(fieldId)) {
       // Use custom transformer
+      logger.info(`  → Using custom transformer: ${mapping.transformer}`)
       transformedValue = applyCustomTransformer(fieldId, values, mapping.cardinality)
+      transformedCount++
     } else {
       // Default transformation based on cardinality
+      logger.info(`  → Using default transformer (${mapping.cardinality})`)
       transformedValue = transformByCardinality(values, mapping.cardinality)
     }
     
     // Set value in nested structure
     setNestedValue(data, mapping.path, transformedValue)
-    
+    logger.info(`  → Set value at: ${mapping.path}`)
     // Calculate and store field confidence
     const avgConfidence = confidences.reduce((sum, c) => sum + c, 0) / confidences.length
     field_confidence[mapping.path] = avgConfidence
@@ -100,6 +120,24 @@ export function transformEntities(
     ? all_confidences.reduce((sum, c) => sum + c, 0) / all_confidences.length
     : 0
   
+      // Log transformation summary
+  logger.success('Transformation complete')
+  logger.info('Summary:', {
+    totalFields: Object.keys(entities).length,
+    processed: processedCount,
+    unmapped: unmappedCount,
+    customTransformers: transformedCount,
+    overallConfidence: `${(overall_confidence * 100).toFixed(1)}%`,
+    warnings: warnings.length,
+    dataStructure: Object.keys(data)
+  })
+  
+  if (DEBUG_TRANSFORM) {
+    logger.info('Transformed data structure:', data)
+    logger.info('Field confidences:', field_confidence)
+  }
+  
+  logger.groupEnd()
   return {
     data,
     field_confidence,
@@ -182,15 +220,20 @@ function applyCustomTransformer(
  * MailingAddress: [street, city, state, zip, country] → object
  */
 function transformMailingAddress(values: unknown[]): MailingAddress {
+  logger.info(`    Transforming MailingAddress: ${values.length} values`)
   if (values.length >= 5) {
-    return {
+    const result =  {
       street: values[0] || '',
       city: values[1] || '',
       state: values[2] || '',
       zip: values[3] || '',
       country: values[4] || ''
     } as MailingAddress
+    logger.info(`    → Address: ${result.street}, ${result.city}, ${result.state}`)
+    return result
   }
+
+  logger.warn(`    → Incomplete address data (${values.length} values)`)
   // Partial data - return what we have
   return {
     street: values[0] || '',
@@ -299,21 +342,26 @@ function transformLineOfBusiness(values: unknown[]): string {
  * @param value - Value to set
  */
 function setNestedValue(obj: NestedData, path: string, value: unknown): void {
-  const keys = path.split('.')
-  let current: Record<string, unknown> = obj
-  
-  // Navigate to parent
-  for (let i = 0; i < keys.length - 1; i++) {
-    const key = keys[i]
-    if (!(key in current)) {
-      current[key] = {}
+  try {
+    const keys = path.split('.')
+    let current: Record<string, unknown> = obj
+    
+    // Navigate to parent
+    for (let i = 0; i < keys.length - 1; i++) {
+      const key = keys[i]
+      if (!(key in current)) {
+        current[key] = {}
+      }
+      current = current[key] as Record<string, unknown>
     }
-    current = current[key] as Record<string, unknown>
+    
+    // Set final value
+    const lastKey = keys[keys.length - 1]
+    current[lastKey] = value
+  } catch (error) {
+    logger.error(`Failed to set nested value at path: ${path}`, error)
+    throw error
   }
-  
-  // Set final value
-  const lastKey = keys[keys.length - 1]
-  current[lastKey] = value
 }
 
 /**
@@ -531,3 +579,4 @@ export function checkExtractionQuality(
     issues
   }
 }
+

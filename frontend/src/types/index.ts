@@ -7,3 +7,4 @@ export * from "./version";
 export * from "./comparison"; 
 export * from "./form"; 
 export * from "./export";
+export * from './canonical'

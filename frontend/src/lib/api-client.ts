@@ -9,8 +9,11 @@ import type {
   SubmissionDetail,
   Folder,
   FillReport,
-  ExtractionData,
+  ExtractionData
 } from '@/types'
+
+import { transformEntities } from './entity-transformer'
+import {isCanonicalOutput} from "../lib/utils";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
 
@@ -107,23 +110,68 @@ export async function uploadMultiplePdfs(
 /**
  * Get submission by ID.
  */
-export async function getSubmission(id: string): Promise<ExtractionData> {
-  const response = await api.get(`/submissions/${id}`)
-  if (!response.data.success) {
-    throw new Error(response.data.error || 'Failed to get submission')
-  }
-
-  const submission = response.data
-  if (!submission) throw new Error('Submission not found in response')
-
-  return {
-    submission_id: submission.submission_id,
-    filename: submission.filename,
-    status: submission.status,
-    uploaded_at: submission.uploaded_at,
-    confidence: submission.confidence,
-    warnings: submission.warnings,
-    data: submission.data,
+export async function getSubmission(
+  submissionId: string
+): Promise<{
+  submission_id: string
+  filename: string
+  status: string
+  uploaded_at: string
+  data: Record<string, unknown>
+  confidence: number
+  field_confidence: Record<string, number>
+  warnings: string[]
+  field_hints?: Record<string, string>
+  extraction_issues?: Record<string, unknown>
+}> {
+  try {
+    const response = await api.get(`/submissions/${submissionId}`)
+    
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to get submission')
+    }
+    
+    const rawData = response.data.data
+    
+    // ✅ CHECK: Is this CanonicalOutput format?
+    if (isCanonicalOutput(rawData)) {
+      console.log('📦 Detected CanonicalOutput format, transforming...')
+      
+      // Transform entities to nested structure
+      const transformed = transformEntities(rawData.entities)
+      
+      return {
+        submission_id: rawData.job_id,
+        filename: rawData.source.file_name,
+        status: 'extracted',
+        uploaded_at: rawData.source.extracted_at,
+        data: transformed.data,
+        confidence: transformed.overall_confidence,
+        field_confidence: transformed.field_confidence,
+        warnings: transformed.warnings,
+        field_hints: {},
+        extraction_issues: {}
+      }
+    }
+    
+    // ✅ FALLBACK: Legacy format (existing backend response)
+    console.log('📦 Using legacy format')
+    const s = rawData
+    return {
+      submission_id: s.submission_id || submissionId,
+      filename: s.filename || 'document.pdf',
+      status: s.status || 'extracted',
+      uploaded_at: s.uploaded_at || new Date().toISOString(),
+      data: s.data || {},
+      confidence: s.confidence || 0,
+      field_confidence: s.field_confidence || {},
+      warnings: s.warnings || [],
+      field_hints: s.field_hints || {},
+      extraction_issues: s.extraction_issues || {}
+    }
+    
+  } catch (error) {
+    handleApiError(error)
   }
 }
 

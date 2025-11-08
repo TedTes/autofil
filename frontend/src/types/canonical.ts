@@ -20,7 +20,7 @@ export interface SourceRef {
    * Single extracted value with confidence and source
    */
   export interface EntityValue {
-    value: any  // Can be string, number, object, array, etc.
+    value: unknown  // Can be string, number, object, array, etc.
     confidence: number  // 0.0 to 1.0
     source: SourceRef
     tags: string[]  // e.g. ["primary", "dba", "fillable_pdf"]
@@ -56,13 +56,13 @@ export interface SourceRef {
     source: SourceInfo
     entities: Record<string, EntityValue[]>  // Field ID → Array of EntityValues
     metadata: Metadata
-    raw?: Record<string, any>  // Optional raw extraction data
+    raw?: Record<string, unknown>  // Optional raw extraction data
   }
   
   /**
    * Type guard to check if response is CanonicalOutput format
    */
-  export function isCanonicalOutput(data: any): data is CanonicalOutput {
+  export function isCanonicalOutput(data: CanonicalOutput) {
     return (
       data &&
       typeof data === 'object' &&
@@ -77,7 +77,7 @@ export interface SourceRef {
   /**
    * Helper to validate EntityValue structure
    */
-  export function isEntityValue(value: any): value is EntityValue {
+  export function isEntityValue(value: EntityValue) {
     return (
       value &&
       typeof value === 'object' &&
@@ -141,7 +141,7 @@ export interface SourceRef {
   export function getPrimaryValue(
     entities: Record<string, EntityValue[]>,
     fieldId: string
-  ): any {
+  ): unknown {
     const values = getEntityValues(entities, fieldId)
     return values.length > 0 ? values[0].value : null
   }
@@ -152,7 +152,7 @@ export interface SourceRef {
   export function getAllValues(
     entities: Record<string, EntityValue[]>,
     fieldId: string
-  ): any[] {
+  ): unknown[] {
     const entityValues = getEntityValues(entities, fieldId)
     return entityValues.map(ev => ev.value)
   }
@@ -160,7 +160,7 @@ export interface SourceRef {
   /**
    * Helper to filter out empty/null values
    */
-  export function filterEmptyValues(values: any[]): any[] {
+  export function filterEmptyValues(values: unknown[]): unknown[] {
     return values.filter(v => 
       v !== null && 
       v !== undefined && 

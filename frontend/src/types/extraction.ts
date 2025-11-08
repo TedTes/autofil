@@ -135,3 +135,32 @@ export interface ExtractedField {
   required?: boolean
   options?: string[] // For select fields
 }
+export interface MailingAddress {
+  street: string
+  city: string
+  state: string
+  zip: string
+  country: string
+}
+export interface ProducerInfo {
+  name: string
+  location_code: string
+  hazard_code: string
+  license_number: string
+  fein: string
+}
+export interface DeductibleStructure {
+  property_damage: number
+  bodily_injury: number
+  general_aggregate: number
+}
+export interface GrossSalesStructure {
+  current: number
+  projected: number
+}
+/**
+ * Nested data structure that can contain objects, arrays, primitives
+ */
+export type NestedData = {
+  [key: string]: string | number | boolean | null | NestedData | NestedData[] | unknown[]
+}

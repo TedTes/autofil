@@ -4,7 +4,7 @@
 
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
-import {ExtractedField} from "../types";
+import {ExtractedField,CanonicalOutput} from "../types";
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
@@ -198,3 +198,14 @@ export function fieldsToNestedObject(fields: ExtractedField[]): Record<string, u
   return result
 }
 
+export function isCanonicalOutput(data: CanonicalOutput) {
+  return (
+    data &&
+    typeof data === 'object' &&
+    'job_id' in data &&
+    'source' in data &&
+    'entities' in data &&
+    'metadata' in data &&
+    typeof data.entities === 'object'
+  )
+}

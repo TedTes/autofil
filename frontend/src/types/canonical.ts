@@ -62,18 +62,6 @@ export interface SourceRef {
   /**
    * Type guard to check if response is CanonicalOutput format
    */
-  export function isCanonicalOutput(data: CanonicalOutput) {
-    return (
-      data &&
-      typeof data === 'object' &&
-      'job_id' in data &&
-      'source' in data &&
-      'entities' in data &&
-      'metadata' in data &&
-      typeof data.entities === 'object'
-    )
-  }
-  
   /**
    * Helper to validate EntityValue structure
    */

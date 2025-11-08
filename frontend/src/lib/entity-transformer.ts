@@ -12,15 +12,16 @@
  * 5. Extracts confidence scores for each field
  */
 
-import type { EntityValue, CanonicalOutput } from '@/types/canonical'
+import type { EntityValue, CanonicalOutput,NestedData,MailingAddress, ProducerInfo,DeductibleStructure,GrossSalesStructure} from '@/types'
 import { getFieldMapping, hasCustomTransformer } from './mfc-mapping'
+
 
 /**
  * Transformation result returned to api-client
  */
 export interface TransformationResult {
   /** Nested data structure for frontend */
-  data: Record<string, any>
+  data: NestedData
   
   /** Field confidence scores (path → confidence) */
   field_confidence: Record<string, number>
@@ -42,13 +43,13 @@ export interface TransformationResult {
 export function transformEntities(
   entities: Record<string, EntityValue[]>
 ): TransformationResult {
-  const data: Record<string, any> = {}
+  const data: NestedData = {}
   const field_confidence: Record<string, number> = {}
   const warnings: string[] = []
   const all_confidences: number[] = []
   
   // Process each entity from backend
-  for (const [fieldId, entityValues] of Object.entries(entities)) {
+  for (const [fieldId, entityValues] of Object.entries(entities) as [string, EntityValue[]][]) {
     if (!entityValues || entityValues.length === 0) {
       continue
     }
@@ -60,7 +61,8 @@ export function transformEntities(
       // Unmapped field - store in 'other' section
       console.warn(`⚠️ Unmapped field: ${fieldId}`)
       if (!data.other) data.other = {}
-      data.other[fieldId.toLowerCase()] = entityValues[0].value
+      const otherObj = data.other as Record<string, unknown>
+      otherObj[fieldId.toLowerCase()] = entityValues[0].value
       continue
     }
     
@@ -69,7 +71,7 @@ export function transformEntities(
     const confidences = entityValues.map(ev => ev.confidence)
     
     // Apply transformation based on field type
-    let transformedValue: any
+    let transformedValue: unknown
     
     if (hasCustomTransformer(fieldId)) {
       // Use custom transformer
@@ -113,7 +115,7 @@ export function transformEntities(
  * @param cardinality - 'one' or 'many'
  * @returns Single value or filtered array
  */
-function transformByCardinality(values: any[], cardinality: 'one' | 'many'): any {
+function transformByCardinality(values: unknown[], cardinality: 'one' | 'many'): unknown | unknown[] {
   if (cardinality === 'many') {
     // Return array, filter out empty values
     return values.filter(v => 
@@ -139,9 +141,9 @@ function transformByCardinality(values: any[], cardinality: 'one' | 'many'): any
  */
 function applyCustomTransformer(
   fieldId: string, 
-  values: any[], 
+  values: unknown[], 
   cardinality: 'one' | 'many'
-): any {
+): unknown {
   switch (fieldId) {
     case 'MailingAddress':
       return transformMailingAddress(values)
@@ -176,11 +178,10 @@ function applyCustomTransformer(
 // ============================================================================
 // CUSTOM TRANSFORMERS
 // ============================================================================
-
 /**
  * MailingAddress: [street, city, state, zip, country] → object
  */
-function transformMailingAddress(values: any[]): any {
+function transformMailingAddress(values: unknown[]): MailingAddress {
   if (values.length >= 5) {
     return {
       street: values[0] || '',
@@ -188,7 +189,7 @@ function transformMailingAddress(values: any[]): any {
       state: values[2] || '',
       zip: values[3] || '',
       country: values[4] || ''
-    }
+    } as MailingAddress
   }
   // Partial data - return what we have
   return {
@@ -197,24 +198,25 @@ function transformMailingAddress(values: any[]): any {
     state: values[2] || '',
     zip: values[3] || '',
     country: values[4] || ''
-  }
+  } as MailingAddress
 }
 
 /**
  * InsuredName: [company, DBA, contact, date] → take first as company name
  * Other values can be accessed separately if needed
  */
-function transformInsuredName(values: any[]): any {
+function transformInsuredName(values: unknown[]): string {
   // Return first value as primary company name
   // Filter out N/A values
   const filtered = values.filter(v => v && v !== 'N/A')
-  return filtered[0] || ''
+  return filtered[0] as string || ''
 }
+
 
 /**
  * ProducerName: [name, location_code, hazard_code, license, FEIN] → object
  */
-function transformProducerName(values: any[]): any {
+function transformProducerName(values: unknown[]): ProducerInfo | string {
   if (values.length >= 5) {
     return {
       name: values[0] || '',
@@ -222,24 +224,24 @@ function transformProducerName(values: any[]): any {
       hazard_code: values[2] || '',
       license_number: values[3] || '',
       fein: values[4] || ''
-    }
+    } as ProducerInfo
   }
   // Fallback: just return name
-  return values[0] || ''
+  return values[0] as string || ''
 }
 
 /**
  * Deductible: [property_damage, bodily_injury, general_aggregate] → object
  */
-function transformDeductible(values: any[]): any {
+function transformDeductible(values: unknown[]): DeductibleStructure | number | unknown[] {
   if (values.length === 3) {
     return {
       property_damage: values[0] || 0,
       bodily_injury: values[1] || 0,
       general_aggregate: values[2] || 0
-    }
+    } as DeductibleStructure
   } else if (values.length === 1) {
-    return values[0]
+    return values[0] as number
   }
   // Return array as-is
   return values
@@ -248,40 +250,40 @@ function transformDeductible(values: any[]): any {
 /**
  * GrossSales: [current, projected] → object or single value
  */
-function transformGrossSales(values: any[]): any {
+function transformGrossSales(values: unknown[]): GrossSalesStructure | number {
   if (values.length >= 2) {
     return {
       current: values[0] || 0,
       projected: values[1] || 0
-    }
+    } as GrossSalesStructure
   }
-  return values[0] || 0
+  return values[0] as number || 0 
 }
 
 /**
  * Classification: Filter out empty objects
  */
-function transformClassification(values: any[]): any[] {
+function transformClassification(values: unknown[]): Record<string, unknown>[] {
   return values.filter(v => 
     v && 
     typeof v === 'object' && 
     !Array.isArray(v) &&
     Object.keys(v).length > 0
-  )
+  ) as Record<string, unknown>[]
 }
 
 /**
  * EffectiveDate: Take first value (ignore review info)
  */
-function transformEffectiveDate(values: any[]): any {
-  return values[0] || null
+function transformEffectiveDate(values: unknown[]): string | null {
+  return values[0] as string || null
 }
 
 /**
  * LineOfBusiness: Take first value (code)
  */
-function transformLineOfBusiness(values: any[]): any {
-  return values[0] || ''
+function transformLineOfBusiness(values: unknown[]): string {
+  return values[0] as string || ''
 }
 
 // ============================================================================
@@ -296,9 +298,9 @@ function transformLineOfBusiness(values: any[]): any {
  * @param path - Dot-notation path (e.g., 'applicant.name')
  * @param value - Value to set
  */
-function setNestedValue(obj: Record<string, any>, path: string, value: any): void {
+function setNestedValue(obj: NestedData, path: string, value: unknown): void {
   const keys = path.split('.')
-  let current = obj
+  let current: Record<string, unknown> = obj
   
   // Navigate to parent
   for (let i = 0; i < keys.length - 1; i++) {
@@ -306,7 +308,7 @@ function setNestedValue(obj: Record<string, any>, path: string, value: any): voi
     if (!(key in current)) {
       current[key] = {}
     }
-    current = current[key]
+    current = current[key] as Record<string, unknown>
   }
   
   // Set final value
@@ -322,13 +324,13 @@ function setNestedValue(obj: Record<string, any>, path: string, value: any): voi
  * @param path - Dot-notation path
  * @returns Value at path or undefined
  */
-export function getNestedValue(obj: Record<string, any>, path: string): any {
+export function getNestedValue(obj: NestedData, path: string): unknown {
   const keys = path.split('.')
   let current = obj
   
   for (const key of keys) {
     if (current && typeof current === 'object' && key in current) {
-      current = current[key]
+      current = current[key] as NestedData
     } else {
       return undefined
     }

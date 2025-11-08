@@ -338,3 +338,196 @@ export function getNestedValue(obj: NestedData, path: string): unknown {
   
   return current
 }
+
+/**
+ * Extract individual field confidences from entities
+ * Maps each field to its average confidence score
+ * 
+ * @param entities - Backend entities
+ * @returns Map of field path → confidence score
+ */
+export function extractFieldConfidences(
+  entities: Record<string, EntityValue[]>
+): Record<string, number> {
+  const confidences: Record<string, number> = {}
+  
+  for (const [fieldId, entityValues] of Object.entries(entities)) {
+    if (!entityValues || entityValues.length === 0) continue
+    
+    const mapping = getFieldMapping(fieldId)
+    if (!mapping) continue
+    
+    // Calculate average confidence for this field
+    const fieldConfidences = entityValues.map(ev => ev.confidence)
+    const avgConfidence = fieldConfidences.reduce((sum, c) => sum + c, 0) / fieldConfidences.length
+    
+    confidences[mapping.path] = avgConfidence
+  }
+  
+  return confidences
+}
+
+/**
+ * Calculate overall confidence from all entity values
+ * 
+ * @param entities - Backend entities
+ * @returns Overall confidence score (0-1)
+ */
+export function calculateOverallConfidence(
+  entities: Record<string, EntityValue[]>
+): number {
+  const allConfidences: number[] = []
+  
+  for (const entityValues of Object.values(entities)) {
+    if (entityValues && entityValues.length > 0) {
+      allConfidences.push(...entityValues.map(ev => ev.confidence))
+    }
+  }
+  
+  if (allConfidences.length === 0) return 0
+  
+  return allConfidences.reduce((sum, c) => sum + c, 0) / allConfidences.length
+}
+
+/**
+ * Generate warnings for low confidence fields
+ * 
+ * @param entities - Backend entities
+ * @param threshold - Confidence threshold (default 0.7)
+ * @returns Array of warning messages
+ */
+export function generateConfidenceWarnings(
+  entities: Record<string, EntityValue[]>,
+  threshold: number = 0.7
+): string[] {
+  const warnings: string[] = []
+  
+  for (const [fieldId, entityValues] of Object.entries(entities)) {
+    if (!entityValues || entityValues.length === 0) continue
+    
+    const avgConfidence = entityValues.reduce((sum, ev) => sum + ev.confidence, 0) / entityValues.length
+    
+    if (avgConfidence < threshold) {
+      const mapping = getFieldMapping(fieldId)
+      const displayName = mapping ? mapping.path : fieldId
+      warnings.push(`Low confidence for ${displayName}: ${Math.round(avgConfidence * 100)}%`)
+    }
+  }
+  
+  return warnings
+}
+
+/**
+ * Get confidence distribution statistics
+ * Useful for quality metrics and reporting
+ * 
+ * @param entities - Backend entities
+ * @returns Confidence statistics
+ */
+export function getConfidenceStats(
+  entities: Record<string, EntityValue[]>
+): {
+  min: number
+  max: number
+  avg: number
+  median: number
+  count: number
+} {
+  const allConfidences: number[] = []
+  
+  for (const entityValues of Object.values(entities)) {
+    if (entityValues && entityValues.length > 0) {
+      allConfidences.push(...entityValues.map(ev => ev.confidence))
+    }
+  }
+  
+  if (allConfidences.length === 0) {
+    return { min: 0, max: 0, avg: 0, median: 0, count: 0 }
+  }
+  
+  const sorted = [...allConfidences].sort((a, b) => a - b)
+  const min = sorted[0]
+  const max = sorted[sorted.length - 1]
+  const avg = allConfidences.reduce((sum, c) => sum + c, 0) / allConfidences.length
+  const median = sorted.length % 2 === 0
+    ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
+    : sorted[Math.floor(sorted.length / 2)]
+  
+  return {
+    min,
+    max,
+    avg,
+    median,
+    count: allConfidences.length
+  }
+}
+
+/**
+ * Get fields with confidence below threshold
+ * Useful for highlighting fields that need review
+ * 
+ * @param entities - Backend entities
+ * @param threshold - Confidence threshold (default 0.7)
+ * @returns Array of field paths with low confidence
+ */
+export function getLowConfidenceFields(
+  entities: Record<string, EntityValue[]>,
+  threshold: number = 0.7
+): Array<{ field: string; confidence: number }> {
+  const lowConfidenceFields: Array<{ field: string; confidence: number }> = []
+  
+  for (const [fieldId, entityValues] of Object.entries(entities)) {
+    if (!entityValues || entityValues.length === 0) continue
+    
+    const avgConfidence = entityValues.reduce((sum, ev) => sum + ev.confidence, 0) / entityValues.length
+    
+    if (avgConfidence < threshold) {
+      const mapping = getFieldMapping(fieldId)
+      lowConfidenceFields.push({
+        field: mapping ? mapping.path : fieldId,
+        confidence: avgConfidence
+      })
+    }
+  }
+  
+  // Sort by confidence (lowest first)
+  return lowConfidenceFields.sort((a, b) => a.confidence - b.confidence)
+}
+
+/**
+ * Check if extraction meets minimum quality standards
+ * 
+ * @param entities - Backend entities
+ * @param minOverallConfidence - Minimum overall confidence (default 0.6)
+ * @param maxLowConfidenceFields - Maximum allowed low confidence fields (default 5)
+ * @returns Quality check result
+ */
+export function checkExtractionQuality(
+  entities: Record<string, EntityValue[]>,
+  minOverallConfidence: number = 0.6,
+  maxLowConfidenceFields: number = 5
+): {
+  passed: boolean
+  overallConfidence: number
+  lowConfidenceCount: number
+  issues: string[]
+} {
+  const overallConfidence = calculateOverallConfidence(entities)
+  const lowConfidenceFields = getLowConfidenceFields(entities, 0.7)
+  const issues: string[] = []
+  
+  if (overallConfidence < minOverallConfidence) {
+    issues.push(`Overall confidence too low: ${Math.round(overallConfidence * 100)}%`)
+  }
+  
+  if (lowConfidenceFields.length > maxLowConfidenceFields) {
+    issues.push(`Too many low confidence fields: ${lowConfidenceFields.length}`)
+  }
+  
+  return {
+    passed: issues.length === 0,
+    overallConfidence,
+    lowConfidenceCount: lowConfidenceFields.length,
+    issues
+  }
+}

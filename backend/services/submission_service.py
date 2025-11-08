@@ -155,12 +155,12 @@ class SubmissionService:
                 "data_path": data_path,
                 "uploaded_at": datetime.utcnow().isoformat(),
                 "status": "extracted",
-                "confidence": extraction_result.confidence,
-                "warnings": extraction_result.warnings,
+                # "confidence": extraction_result.confidence,
+                # "warnings": extraction_result.warnings,
                 "current_version_id": version_id,
-                "field_confidence": extraction_result.field_confidence,
+                # "field_confidence": extraction_result.field_confidence,
             }
-            
+           
             metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
             with open(metadata_path, 'w') as f:
                 json.dump(metadata, f, indent=2)
@@ -169,19 +169,19 @@ class SubmissionService:
             if folder_id:
                 from services.folder_service import FolderService
                 FolderService().add_submission(folder_id, submission_id, filename)
-
+           
             # ── 100% – done ───────────────────────────────────────────────────────
             if progress_callback:
                 progress_callback(submission_id, 100, "ready", "Extraction complete")
             
             return {
                 "submission_id": submission_id,
-                "confidence": extraction_result.confidence,
-                "warnings": extraction_result.warnings,
+                # "confidence": extraction_result.confidence,
+                # "warnings": extraction_result.warnings,
                 "data": json_data,
             }
-        except e as Exception:
-            print("upload and extract error: ${e}")
+        except Exception as e:
+            print("upload and extract error:", str(e))
     
     def get_submission(self, submission_id: str):
         """

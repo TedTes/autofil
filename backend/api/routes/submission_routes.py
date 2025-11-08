@@ -52,12 +52,13 @@ def upload_pdf():
                     'filename': file.filename,
                     'submission_id': result['submission_id'],
                     'extraction': {
-                        'confidence': result['confidence'],
-                        'warnings': result['warnings'],
+                        # 'confidence': result['confidence'],
+                        # 'warnings': result['warnings'],
                         'data': result['data']
                     }
                 })
             except Exception as e:
+                print("input file processing error:",str(e))
                 errors.append({'index': idx, 'filename': file.filename, 'error': str(e)})
 
         if len(files) == 1:
@@ -208,8 +209,6 @@ def update_submission(submission_id):
         JSON with updated submission
     """
     try:
-        print("kkkkkkk1")
-        print(submission_id)
         data = request.get_json()
         
         if not data:

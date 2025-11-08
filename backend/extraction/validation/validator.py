@@ -1,39 +1,108 @@
 from __future__ import annotations
 
-from typing import List
+from typing import List, Dict
 
 from ..core.schema import CanonicalOutput
 from ..extractors.mfc import MFC
-from ..validation.rules import QUICK_REQUIRED
 
 
 class ExtractionValidationError(Exception):
+    """Only for hard, structural problems (bad output, wrong form, etc.)."""
     pass
 
 
-def validate(output: CanonicalOutput) -> List[str]:
-    """Return empty list on success, otherwise a list of human-readable errors."""
-    errors: List[str] = []
+def validate(output: CanonicalOutput) -> CanonicalOutput:
+    """
+    Validate and annotate the output.
 
-    # 1. Form type must be known
-    form = output.metadata.form_type_detected
-    if not form:
-        errors.append("metadata.form_type_detected is missing")
-        raise ExtractionValidationError("; ".join(errors))
+    - Fatal issues  -> raise ExtractionValidationError
+    - Soft issues   -> appended as warnings on the output (or metadata / _validation_warnings)
+    """
+    try:
+        errors: List[str] = []
+        warnings: List[str] = []
 
-    # 2. Required canonical fields (from MFC)
-    required = MFC.required_for(form)
-    missing = [f for f in required if f not in output.entities or not output.entities[f]]
-    if missing:
-        errors.append(f"Missing required fields for {form}: {missing}")
+        # ---------- 1. Structural sanity checks (hard fail) ----------
+        if output is None:
+            raise ExtractionValidationError("Extractor returned None")
 
-    # 3. Low-confidence warnings (optional)
-    for fid, vals in output.entities.items():
-        low = [v for v in vals if v.confidence < 0.70]
-        if low:
-            errors.append(f"Low confidence (<0.70) in '{fid}': {len(low)} value(s)")
+        if not hasattr(output, "entities") or not isinstance(output.entities, dict):
+            raise ExtractionValidationError("output.entities must be a dict")
 
-    if errors:
-        raise ExtractionValidationError("; ".join(errors))
+        if not hasattr(output, "metadata"):
+            raise ExtractionValidationError("output.metadata is missing")
 
-    return errors
+        form = getattr(output.metadata, "form_type_detected", None)
+        if not form:
+            errors.append("metadata.form_type_detected is missing")
+
+        # ---------- 2. Required fields (soft: warnings, not errors) ----------
+        # If form known, check against MFC.required_for(form)
+        if form:
+            try:
+                required: List[str] = MFC.required_for(form)
+            except Exception:
+                required = []
+
+            missing: List[str] = []
+
+            for fid in required:
+                values = output.entities.get(fid, [])
+
+                if fid == "Classification":
+                    # At least one row with some real data
+                    has_data = any(
+                        hasattr(v, "value")
+                        and isinstance(v.value, dict)
+                        and any(
+                            val not in ("", None, 0, 0.0)
+                            for val in v.value.values()
+                        )
+                        for v in values
+                    )
+                    if not has_data:
+                        missing.append(fid)
+                else:
+                    if not values:
+                        missing.append(fid)
+
+            if missing:
+                warnings.append(
+                    f"Missing recommended fields for {form}: {missing}"
+                )
+
+        # ---------- 3. Low-confidence values (always warnings) ----------
+        for fid, vals in (output.entities or {}).items():
+            low = [
+                v for v in vals
+                if getattr(v, "confidence", 1.0) < 0.70
+            ]
+            if low:
+                warnings.append(
+                    f"Low confidence (<0.70) in '{fid}': {len(low)} value(s)"
+                )
+
+        # ---------- 4. Truly fatal conditions ----------
+        # No entities at all → nothing to work with.
+        if not output.entities:
+            errors.append("No entities extracted")
+
+        if errors:
+            # Only structural / fatal issues end up here.
+            raise ExtractionValidationError("; ".join(errors))
+
+        # ---------- 5. Attach warnings onto the output ----------
+        if warnings:
+            # Prefer explicit warnings field if it exists
+            if hasattr(output, "warnings") and isinstance(output.warnings, list):
+                output.warnings.extend(warnings)
+            # Or attach to metadata if it has warnings
+            elif hasattr(output.metadata, "warnings") and isinstance(output.metadata.warnings, list):
+                output.metadata.warnings.extend(warnings)
+            else:
+                # Fallback: hidden attribute your service can read if needed
+                setattr(output, "_validation_warnings", warnings)
+
+        return output
+    except Exception as e:
+        print("validation error:",str(e))

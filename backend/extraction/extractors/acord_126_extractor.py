@@ -258,10 +258,10 @@ class ACORD126Extractor(BaseExtractor):
         except Exception as e:
             print("_safe_get",str(e))
 
-    def _map_pdf_field_to_canonical(self, pdf_name: str) -> str | None:
+    def _map_pdf_field_to_canonical(self, field_name: str) -> str | None:
         try:
             # Remove suffix _A, _B
-            normalized = re.sub(r'_[A-Z0-9]+$', '', pdf_name)
+            normalized = re.sub(r'_[A-Z0-9]+$', '', field_name)
             # Split camelCase
             normalized = re.sub(r'(?<!^)(?=[A-Z])', ' ', normalized)
             lower = normalized.lower()

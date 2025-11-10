@@ -18,3 +18,12 @@ export {
   CompactExtractionResults
 } from './ExtractionResults'
 export { default as BatchExtractionPanel } from './BatchExtractionPanel'
+
+
+/**
+ * Extraction components barrel export
+ */
+
+export { ExtractionReviewPanel } from './ExtractionReviewPanel'
+export { ExtractedFileCard } from './ExtractedFileCard'
+export { InlineFieldEditor, ClickableFieldValue } from './InlineFieldEditor'

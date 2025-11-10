@@ -9,7 +9,7 @@ import { ChevronDown, ChevronUp, Save, X, AlertTriangle, CheckCircle2, File, Fil
 import type { WorkflowFile } from '@/types/workflow'
 import { ConfidenceBadgeCompact } from '../ConfidenceBadge'
 import { formatFileSize } from '@/lib/utils'
-
+import { ClickableFieldValue } from './InlineFieldEditor'
 interface ExtractedFileCardProps {
   file: WorkflowFile
   isExpanded: boolean
@@ -231,7 +231,7 @@ function DataSection({
 
 /**
  * Data Field Component
- * Renders a single field with inline editing
+ * Renders a single field with inline editing using ClickableFieldValue
  */
 function DataField({
   fieldPath,
@@ -244,35 +244,39 @@ function DataField({
   value: unknown
   onEdit: (value: unknown) => void
 }) {
+  // Infer field type from label or value
+  const inferFieldType = (): 'text' | 'number' | 'date' | 'boolean' | 'email' | 'tel' => {
+    const lowerLabel = label.toLowerCase()
+    
+    if (lowerLabel.includes('email')) return 'email'
+    if (lowerLabel.includes('phone') || lowerLabel.includes('tel')) return 'tel'
+    if (lowerLabel.includes('date') || lowerLabel.includes('effective') || lowerLabel.includes('expiration')) return 'date'
+    if (lowerLabel.includes('amount') || lowerLabel.includes('limit') || lowerLabel.includes('premium')) return 'number'
+    if (typeof value === 'boolean') return 'boolean'
+    if (typeof value === 'number') return 'number'
+    
+    return 'text'
+  }
+
   // Format label for display
   const fieldLabel = label
     .split('_')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ')
 
-  // Handle different value types
-  const displayValue = Array.isArray(value)
-    ? value.join(', ')
-    : typeof value === 'object' && value !== null
-    ? JSON.stringify(value)
-    : String(value ?? 'N/A')
-
   return (
-    <div className="flex items-start justify-between gap-2 text-xs">
+    <div className="flex items-start justify-between gap-2 text-xs group">
       <span className="text-gray-600 font-medium min-w-[120px]">{fieldLabel}:</span>
-      <span 
-        className="text-gray-900 text-right flex-1 cursor-pointer hover:text-blue-600 transition-colors"
-        title="Click to edit"
-        onClick={() => {
-          // For now, show alert - will be replaced with inline editor in next commit
-          const newValue = prompt(`Edit ${fieldLabel}:`, displayValue)
-          if (newValue !== null && newValue !== displayValue) {
-            onEdit(newValue)
-          }
-        }}
-      >
-        {displayValue}
-      </span>
+      <div className="text-right flex-1">
+        <ClickableFieldValue
+          fieldPath={fieldPath}
+          label={fieldLabel}
+          value={value}
+          fieldType={inferFieldType()}
+          onEdit={onEdit}
+          className="w-full text-right"
+        />
+      </div>
     </div>
   )
 }

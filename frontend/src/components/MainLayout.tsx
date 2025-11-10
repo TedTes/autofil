@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import {
   Home,
   Upload,
@@ -17,6 +17,8 @@ import {
  Save,  Loader2 ,
   TrendingUp,
   FolderPlus,
+
+  AlertTriangle
 } from 'lucide-react'
 import {
   RecentActivity,
@@ -35,6 +37,15 @@ import {
 
 import type { Folder, ViewType,  FileDetailActions } from '@/types'
 
+type ViewState = {
+  type: ViewType
+  data?: ViewStateData
+  breadcrumbs: string[]
+}
+
+interface MainLayoutProps {
+  children?: React.ReactNode
+}
 // Type mapping for view data based on view type
 type ViewDataMap = {
   'file-detail': { submissionId: string; filename?: string }
@@ -50,11 +61,6 @@ type ViewDataMap = {
 
 type ViewStateData = ViewDataMap[ViewType]
 
-interface ViewState {
-  type: ViewType
-  data?: ViewStateData
-  breadcrumbs: string[]
-}
 
 interface MainLayoutProps {
   children?: React.ReactNode
@@ -64,19 +70,29 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(false)
-  const [fileDetailActions, setFileDetailActions] = useState<FileDetailActions | null>(null) 
+  const [fileDetailActions, setFileDetailActions] = useState<FileDetailActions | null>(null)
   const [currentView, setCurrentView] = useState<ViewState>({
     type: 'home',
     breadcrumbs: ['Home'],
   })
+  
   // Navigation history for back button
   const [viewHistory, setViewHistory] = useState<ViewState[]>([])
 
-  // folders data
+  // Unsaved changes tracking
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [showNavigationWarning, setShowNavigationWarning] = useState(false)
+  const [pendingNavigation, setPendingNavigation] = useState<{
+    type: ViewType
+    data?: unknown
+    breadcrumbs?: string[]
+  } | null>(null)
+
+  // Folders data
   const [folders, setFolders] = useState<Folder[]>([])
   const [currentFolder, setCurrentFolder] = useState<Folder | null>(null)
 
-  // load folders once
+  // Load folders once
   useEffect(() => {
     void (async () => {
       try {
@@ -91,8 +107,19 @@ export default function MainLayout({ children }: MainLayoutProps) {
     })()
   }, [])
 
-  // Enhanced navigation with history tracking
-  const navigateTo = (type: ViewType, data?: unknown, breadcrumbs?: string[]) => {
+  // Enhanced navigation with unsaved changes guard
+  const navigateTo = useCallback((
+    type: ViewType,
+    data?: unknown,
+    breadcrumbs?: string[]
+  ) => {
+    // Check if navigating away from home with unsaved changes
+    if (currentView.type === 'home' && type !== 'home' && hasUnsavedChanges) {
+      setPendingNavigation({ type, data, breadcrumbs })
+      setShowNavigationWarning(true)
+      return
+    }
+
     // Save current view to history before navigating
     setViewHistory((prev) => [...prev, currentView])
 
@@ -108,10 +135,37 @@ export default function MainLayout({ children }: MainLayoutProps) {
       // Auto-expand when leaving file detail view
       setDesktopSidebarCollapsed(false)
     }
-  }
+  }, [currentView, hasUnsavedChanges, desktopSidebarCollapsed])
+
+  // Handle confirmed navigation (from warning dialog)
+  const handleConfirmNavigation = useCallback(() => {
+    if (pendingNavigation) {
+      // Save current view to history
+      setViewHistory((prev) => [...prev, currentView])
+
+      // Navigate to pending view
+      setCurrentView({
+        type: pendingNavigation.type,
+        data: pendingNavigation.data as ViewStateData,
+        breadcrumbs: pendingNavigation.breadcrumbs || [
+          pendingNavigation.type.charAt(0).toUpperCase() + pendingNavigation.type.slice(1)
+        ],
+      })
+
+      setPendingNavigation(null)
+      setHasUnsavedChanges(false)
+    }
+    setShowNavigationWarning(false)
+  }, [pendingNavigation, currentView])
+
+  // Handle cancel navigation
+  const handleCancelNavigation = useCallback(() => {
+    setShowNavigationWarning(false)
+    setPendingNavigation(null)
+  }, [])
 
   // Navigate back to previous view
-  const navigateBack = () => {
+  const navigateBack = useCallback(() => {
     if (viewHistory.length > 0) {
       const previous = viewHistory[viewHistory.length - 1]
       setCurrentView(previous)
@@ -120,14 +174,14 @@ export default function MainLayout({ children }: MainLayoutProps) {
       // Default to home if no history
       navigateTo('home', undefined, ['Home'])
     }
-  }
+  }, [viewHistory, navigateTo])
 
   // Handle file click - navigate to file detail view
-  const handleFileClick = (submissionId: string, filename?: string) => {
+  const handleFileClick = useCallback((submissionId: string, filename?: string) => {
     navigateTo('file-detail', { submissionId, filename }, ['Home', 'Documents', filename || 'File'])
-  }
+  }, [navigateTo])
 
-  // sidebar items
+  // Sidebar items
   const navigationItems = [
     {
       id: 'home',
@@ -161,7 +215,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
     },
   ]
 
-  // create folder from Documents view
+  // Create folder from Documents view
   const handleCreateFolder = async (name: string) => {
     const newFolder = await createFolder(name)
     setFolders((prev) => [newFolder, ...prev])
@@ -172,32 +226,31 @@ export default function MainLayout({ children }: MainLayoutProps) {
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
       <aside className={`hidden lg:flex lg:flex-col bg-white border-r border-gray-200 transition-all duration-300 ease-in-out ${
-  desktopSidebarCollapsed ? 'lg:w-0 lg:overflow-hidden' : 'lg:w-64'
-}`}>
+        desktopSidebarCollapsed ? 'lg:w-0 lg:overflow-hidden' : 'lg:w-64'
+      }`}>
         {/* Sidebar Header */}
-   
-<div className="h-16 border-b border-gray-200 flex items-center justify-between px-4">
-  <div className="flex items-center gap-2.5">
-    <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-      <TrendingUp className="w-5 h-5 text-white" />
-    </div>
-    <div>
-      <h1 className="text-sm font-bold text-gray-900 leading-tight">AutoFil</h1>
-      <p className="text-[10px] text-gray-500 leading-tight">Smart Form Automation</p>
-    </div>
-  </div>
-  
-  {/* ✅ Collapse Button (desktop only) */}
-  <button
-    onClick={() => setDesktopSidebarCollapsed(true)}
-    className="hidden lg:block p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
-    title="Collapse sidebar"
-  >
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-    </svg>
-  </button>
-</div>
+        <div className="h-16 border-b border-gray-200 flex items-center justify-between px-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+              <TrendingUp className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-sm font-bold text-gray-900 leading-tight">AutoFil</h1>
+              <p className="text-[10px] text-gray-500 leading-tight">Smart Form Automation</p>
+            </div>
+          </div>
+          
+          {/* Collapse Button (desktop only) */}
+          <button
+            onClick={() => setDesktopSidebarCollapsed(true)}
+            className="hidden lg:block p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+            title="Collapse sidebar"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+            </svg>
+          </button>
+        </div>
         {/* Sidebar Content */}
         <div className="flex-1 overflow-y-auto p-4">
           {sidebarOpen ? (
@@ -342,16 +395,16 @@ export default function MainLayout({ children }: MainLayoutProps) {
                 >
                   <Menu className="w-5 h-5" />
                 </button>
-  {/* Desktop Sidebar Toggle (shown when collapsed) */}
-  {desktopSidebarCollapsed && (
-    <button
-      onClick={() => setDesktopSidebarCollapsed(false)}
-      className="hidden lg:block p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-      title="Show sidebar"
-    >
-      <Menu className="w-5 h-5" />
-    </button>
-  )}
+                {/* Desktop Sidebar Toggle (shown when collapsed) */}
+                {desktopSidebarCollapsed && (
+                  <button
+                    onClick={() => setDesktopSidebarCollapsed(false)}
+                    className="hidden lg:block p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                    title="Show sidebar"
+                  >
+                    <Menu className="w-5 h-5" />
+                  </button>
+                )}
                 {/* Breadcrumbs */}
                 <nav className="hidden lg:flex items-center gap-2 text-sm">
                   {currentView.breadcrumbs.map((crumb, idx) => (
@@ -379,25 +432,24 @@ export default function MainLayout({ children }: MainLayoutProps) {
                 </nav>
               </div>
 
-          
-  <div className="flex items-center gap-2">
-  {/* Show action buttons when in FileDetailView */}
-  {currentView.type === 'file-detail' && fileDetailActions && (
-    <FileDetailActions actions={fileDetailActions} />
-  )}
-  
-  <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
-    <Settings className="w-5 h-5" />
-  </button>
-  <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
-    <HelpCircle className="w-5 h-5" />
-  </button>
-</div>
+              <div className="flex items-center gap-2">
+                {/* Show action buttons when in FileDetailView */}
+                {currentView.type === 'file-detail' && fileDetailActions && (
+                  <FileDetailActions actions={fileDetailActions} />
+                )}
+                
+                <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
+                  <Settings className="w-5 h-5" />
+                </button>
+                <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
+                  <HelpCircle className="w-5 h-5" />
+                </button>
+              </div>
             </div>
           </div>
         </header>
 
-        {/* Views - CORRECTED */}
+        {/* Views */}
         <main className={`flex-1 bg-gray-50 ${currentView.type === 'file-detail' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
           <div className={currentView.type === 'file-detail' ? 'h-full' : 'px-4 sm:px-6 lg:px-8 py-6'}>
             
@@ -406,10 +458,11 @@ export default function MainLayout({ children }: MainLayoutProps) {
               <HomeView 
                 totalSubmissions={0}
                 onGoToFile={handleFileClick}
+                onUnsavedChangesUpdate={setHasUnsavedChanges}
               />
             )}
 
-            {/* Documents View - CORRECTED: Removed folders/currentFolder props */}
+            {/* Documents View */}
             {currentView.type === 'documents' && (
               <DocumentsView
                 folders={folders}
@@ -429,7 +482,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
               />
             )}
 
-            {/* File Detail View  */}
+            {/* File Detail View */}
             {currentView.type === 'file-detail' && currentView.data && (
               <FileDetailView
                 submissionId={currentView.data.submissionId}
@@ -467,6 +520,47 @@ export default function MainLayout({ children }: MainLayoutProps) {
           </div>
         </main>
       </div>
+
+      {/* Navigation Warning Dialog */}
+      {showNavigationWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div 
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={handleCancelNavigation}
+          />
+          
+          <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
+            <div className="flex items-start gap-4 p-6">
+              <div className="flex-shrink-0 w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
+                <AlertTriangle className="w-6 h-6 text-yellow-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  Leave without saving?
+                </h3>
+                <p className="text-sm text-gray-600">
+                  You have unsaved extracted data in your workflow. These changes will be lost if you navigate away.
+                </p>
+              </div>
+            </div>
+            
+            <div className="px-6 pb-6 flex gap-3">
+              <button
+                onClick={handleCancelNavigation}
+                className="flex-1 px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+              >
+                Stay
+              </button>
+              <button
+                onClick={handleConfirmNavigation}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+              >
+                Leave Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -10,6 +10,7 @@ import { ConfidenceBadgeCompact } from '@/components/ConfidenceBadge'
 import {formatDate,formatFileSize, formatFileType} from "../lib/utils";
 import { ExtractionReviewPanel } from './extraction'
 import type { WorkflowFile, WorkflowStep } from '@/types/workflow'
+import { UnsavedChangesDialog } from './shared/UnsavedChangesDialog'
 
 type Phase = 'upload' | 'extract' | 'export'
 type JSONValue =
@@ -38,14 +39,16 @@ type HomeViewProps = {
   totalSubmissions: number
   onUploadComplete?: (uploadedCount: number) => void
   onGoToFile?: (submissionId: string, filename?: string) => void
+  onUnsavedChangesUpdate?: (hasChanges: boolean) => void
 }
 
-export function HomeView({ totalSubmissions, onUploadComplete, onGoToFile }: HomeViewProps) {
+export function HomeView({ totalSubmissions, onUploadComplete, onGoToFile ,onUnsavedChangesUpdate}: HomeViewProps) {
   if (totalSubmissions === 0) {
     return (
       <EmptyDashboardState
         onUploadComplete={onUploadComplete}
         onGoToFile={onGoToFile}
+        onUnsavedChangesUpdate={onUnsavedChangesUpdate}
       />
     )
   }
@@ -74,9 +77,11 @@ export function HomeView({ totalSubmissions, onUploadComplete, onGoToFile }: Hom
 function EmptyDashboardState({
   onUploadComplete,
   onGoToFile,
+  onUnsavedChangesUpdate
 }: {
   onUploadComplete?: (uploadedCount: number) => void
   onGoToFile?: (submissionId: string, filename?: string) => void
+  onUnsavedChangesUpdate?: (hasChanges: boolean) => void
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isUploading, setIsUploading] = useState(false)
@@ -89,8 +94,14 @@ function EmptyDashboardState({
   const [workflowStep, setWorkflowStep] = useState<WorkflowStep>('upload')
   const [workflowFiles, setWorkflowFiles] = useState<WorkflowFile[]>([])
   const [uploaded, setUploaded] = useState<UploadedRow[]>([])
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)
+  const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null)
 
-  const triggerFilePicker = () => fileInputRef.current?.click()
+  const triggerFilePicker = () => {
+    handleNavigationAttempt(() => {
+      fileInputRef.current?.click()
+    })
+  }
 
   // Helper to detect file type
   const getFileType = (filename: string): 'pdf' | 'excel' | 'csv' | 'other' => {
@@ -100,6 +111,61 @@ function EmptyDashboardState({
     if (ext === 'csv') return 'csv'
     return 'other'
   }
+
+  // Check if there are unsaved changes
+const hasUnsavedChanges = useCallback(() => {
+  return workflowFiles.some(f => 
+    f.status === 'extracted' || f.status === 'reviewing'
+  )
+}, [workflowFiles])
+
+// Handle navigation with guard
+const handleNavigationAttempt = useCallback((navigationFn: () => void) => {
+  if (hasUnsavedChanges()) {
+    setPendingNavigation(() => navigationFn)
+    setShowUnsavedDialog(true)
+  } else {
+    navigationFn()
+  }
+}, [hasUnsavedChanges])
+
+// Handle save from dialog
+const handleDialogSave = async () => {
+  setShowUnsavedDialog(false)
+  const extractedFileIds = workflowFiles
+    .filter(f => f.status === 'extracted' || f.status === 'reviewing')
+    .map(f => f.id)
+  
+  await handleSaveAll(extractedFileIds)
+  
+  // Execute pending navigation after save
+  if (pendingNavigation) {
+    pendingNavigation()
+    setPendingNavigation(null)
+  }
+}
+
+// Handle discard from dialog
+const handleDialogDiscard = () => {
+  setShowUnsavedDialog(false)
+  
+  // Clear all extracted files
+  setWorkflowFiles([])
+  setUploaded([])
+  setWorkflowStep('upload')
+  
+  // Execute pending navigation
+  if (pendingNavigation) {
+    pendingNavigation()
+    setPendingNavigation(null)
+  }
+}
+
+// Handle cancel from dialog
+const handleDialogCancel = () => {
+  setShowUnsavedDialog(false)
+  setPendingNavigation(null)
+}
 
   const doUpload = async (files: File[]) => {
     if (!files.length) return
@@ -641,7 +707,17 @@ function EmptyDashboardState({
           </div>
         </>
       )}
+       <UnsavedChangesDialog
+      isOpen={showUnsavedDialog}
+      fileCount={workflowFiles.filter(f => 
+        f.status === 'extracted' || f.status === 'reviewing'
+      ).length}
+      onSave={handleDialogSave}
+      onDiscard={handleDialogDiscard}
+      onCancel={handleDialogCancel}
+    />
     </div>
+    
   )
 }
 

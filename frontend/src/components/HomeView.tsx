@@ -5,7 +5,7 @@ import {
   CheckSquare, Calendar, Download, FileText, TrendingUp, Zap, Clock, 
   CheckCircle2, Upload, File, FileSpreadsheet, X, Eye, Check
 } from 'lucide-react'
-import { uploadPdf, getSubmission, downloadPdf } from '@/lib/api-client'
+import { uploadPdf, getSubmission, downloadPdf,bulkSaveSubmissions, updateSubmissionStatus } from '@/lib/api-client'
 import { ConfidenceBadgeCompact } from '@/components/ConfidenceBadge'
 import {formatDate,formatFileSize, formatFileType} from "../lib/utils";
 import { ExtractionReviewPanel } from './extraction'
@@ -391,97 +391,114 @@ const handleDialogCancel = () => {
     }
   }
 
-  // Save file to Documents
-  const handleSaveFile = async (fileId: string) => {
-    setIsSaving(true)
-    try {
-      // Update file status
-      setWorkflowFiles(prev =>
-        prev.map(file =>
-          file.id === fileId
-            ? { ...file, status: 'saving' }
-            : file
-        )
+// Save file to Documents
+const handleSaveFile = async (fileId: string) => {
+  setIsSaving(true)
+  try {
+    // Update file status to saving
+    setWorkflowFiles(prev =>
+      prev.map(file =>
+        file.id === fileId
+          ? { ...file, status: 'saving' }
+          : file
       )
+    )
 
-      // TODO: Call API to save submission with status='saved'
-      await new Promise(resolve => setTimeout(resolve, 500)) // Simulate API call
+    // Call API to save submission
+    await updateSubmissionStatus(fileId, 'saved')
 
-      // Update file status to saved
-      setWorkflowFiles(prev =>
-        prev.map(file =>
-          file.id === fileId
-            ? { ...file, status: 'saved', savedAt: new Date().toISOString() }
-            : file
-        )
+    // Update file status to saved
+    setWorkflowFiles(prev =>
+      prev.map(file =>
+        file.id === fileId
+          ? { ...file, status: 'saved', savedAt: new Date().toISOString() }
+          : file
       )
+    )
 
-      setMessage(`✓ Saved to Documents`)
-    } catch (err) {
-      console.error('Save failed:', err)
-      setError('Failed to save file')
-      
-      setWorkflowFiles(prev =>
-        prev.map(file =>
-          file.id === fileId
-            ? { ...file, status: 'extracted' }
-            : file
-        )
+    setMessage(`✓ Saved to Documents`)
+  } catch (err) {
+    console.error('Save failed:', err)
+    setError(err instanceof Error ? err.message : 'Failed to save file')
+    
+    // Revert status on error
+    setWorkflowFiles(prev =>
+      prev.map(file =>
+        file.id === fileId
+          ? { ...file, status: 'extracted' }
+          : file
       )
-    } finally {
-      setIsSaving(false)
-    }
+    )
+  } finally {
+    setIsSaving(false)
   }
+}
 
   // Save all files to Documents
-  const handleSaveAll = async (fileIds: string[]) => {
-    setIsSaving(true)
-    try {
-      // Update all files to saving status
+// Find the handleSaveAll function and replace it:
+
+// Save all files to Documents
+const handleSaveAll = async (fileIds: string[]) => {
+  setIsSaving(true)
+  try {
+    // Update all files to saving status
+    setWorkflowFiles(prev =>
+      prev.map(file =>
+        fileIds.includes(file.id)
+          ? { ...file, status: 'saving' }
+          : file
+      )
+    )
+
+    // Call bulk save API
+    const result = await bulkSaveSubmissions(fileIds)
+
+    if (result.success) {
+      // Update successfully saved files
       setWorkflowFiles(prev =>
-        prev.map(file =>
-          fileIds.includes(file.id)
-            ? { ...file, status: 'saving' }
-            : file
-        )
+        prev.map(file => {
+          if (fileIds.includes(file.id) && !result.failed.includes(file.id)) {
+            return { ...file, status: 'saved', savedAt: new Date().toISOString() }
+          }
+          return file
+        })
       )
 
-      // TODO: Call bulk save API
-      await new Promise(resolve => setTimeout(resolve, 1000)) // Simulate API call
+      // Show success message
+      if (result.failed.length === 0) {
+        setMessage(`✓ Saved ${result.saved_count} file${result.saved_count > 1 ? 's' : ''} to Documents`)
+      } else {
+        setMessage(`✓ Saved ${result.saved_count} file${result.saved_count > 1 ? 's' : ''}, ${result.failed.length} failed`)
+        setError(`Failed: ${result.failed.join(', ')}`)
+      }
 
-      // Update all files to saved status
-      setWorkflowFiles(prev =>
-        prev.map(file =>
-          fileIds.includes(file.id)
-            ? { ...file, status: 'saved', savedAt: new Date().toISOString() }
-            : file
-        )
-      )
-
-      setMessage(`✓ Saved ${fileIds.length} file${fileIds.length > 1 ? 's' : ''} to Documents`)
-      
-      // Clear workflow after save
+      // Clear workflow after successful save
       setTimeout(() => {
-        setWorkflowFiles([])
-        setUploaded([])
-        setWorkflowStep('upload')
+        setWorkflowFiles(prev => prev.filter(f => f.status !== 'saved'))
+        setUploaded(prev => prev.filter(r => !fileIds.includes(r.submissionId)))
+        if (workflowFiles.filter(f => f.status !== 'saved').length === 0) {
+          setWorkflowStep('upload')
+        }
       }, 2000)
-    } catch (err) {
-      console.error('Bulk save failed:', err)
-      setError('Failed to save files')
-      
-      // Revert files back to extracted status
-      setWorkflowFiles(prev =>
-        prev.map(file =>
-          fileIds.includes(file.id)
-            ? { ...file, status: 'extracted' }
-            : file
-        )
-      )
-    } finally {
-      setIsSaving(false)
+    } else {
+      throw new Error('Bulk save operation failed')
     }
+  } catch (err) {
+    console.error('Bulk save failed:', err)
+    setError(err instanceof Error ? err.message : 'Failed to save files')
+    
+    // Revert files back to extracted status
+    setWorkflowFiles(prev =>
+      prev.map(file =>
+        fileIds.includes(file.id)
+          ? { ...file, status: 'extracted' }
+          : file
+      )
+    )
+  } finally {
+    setIsSaving(false)
   }
+}
 
   // Discard file from review
   const handleDiscardFile = (fileId: string) => {

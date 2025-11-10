@@ -703,13 +703,7 @@ export interface SubmissionListItem {
   file_type?: string
 }
 
-export async function getAllSubmissions(): Promise<SubmissionListItem[]> {
-  const response = await api.get('/submissions')
-  if (!response.data.success) {
-    throw new Error(response.data.error || 'Failed to fetch submissions')
-  }
-  return response.data.submissions || []
-}
+
 
 export async function bulkExportSubmissions(submissionIds: string[]): Promise<{
   success: boolean
@@ -753,4 +747,112 @@ export async function deleteSubmission(id: string): Promise<void> {
 
 export function downloadZip(blob: Blob, filename: string = 'exported_files.zip'): void {
   downloadBlob(blob, filename)
+}
+
+/**
+ * Bulk save submissions to Documents
+ * Updates workflow_status to 'saved' for multiple submissions
+ */
+export async function bulkSaveSubmissions(submissionIds: string[]): Promise<{
+  success: boolean
+  saved_count: number
+  failed: string[]
+  errors: Record<string, string>
+}> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/submissions/bulk-save`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        submission_ids: submissionIds,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Bulk save error:', error)
+    throw error
+  }
+}
+
+
+/**
+ * Get all submissions with optional filtering
+ */
+export async function getAllSubmissions(options?: {
+  status?: string | string[]
+  limit?: number
+  offset?: number
+}): Promise<SubmissionListItem[]> {
+  try {
+    const params = new URLSearchParams()
+    
+    if (options?.status) {
+      const statuses = Array.isArray(options.status) ? options.status : [options.status]
+      params.append('status', statuses.join(','))
+    }
+    
+    if (options?.limit) {
+      params.append('limit', options.limit.toString())
+    }
+    
+    if (options?.offset) {
+      params.append('offset', options.offset.toString())
+    }
+
+    const queryString = params.toString()
+    const url = `/submissions${queryString ? `?${queryString}` : ''}`
+    
+    const response = await api.get(url)
+    
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to fetch submissions')
+    }
+    
+    return response.data.submissions || []
+  } catch (error) {
+    console.error('Get submissions error:', error)
+    throw error
+  }
+}
+
+/**
+ * Update submission workflow status
+ */
+export async function updateSubmissionStatus(
+  submissionId: string,
+  status: 'uploaded' | 'extracted' | 'reviewing' | 'saved' | 'finalized'
+): Promise<{
+  success: boolean
+  submission_id: string
+  workflow_status: string
+}> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/submissions/${submissionId}/status`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        workflow_status: status,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Update status error:', error)
+    throw error
+  }
 }

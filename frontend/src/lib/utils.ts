@@ -4,7 +4,18 @@
 
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
-import {ExtractedField,CanonicalOutput} from "../types";
+import {ExtractedField,CanonicalOutput,WorkflowStep,FileWorkflowStatus,WorkflowFile,StepValidation,WORKFLOW_TRANSITIONS,FILE_STATUS_TRANSITIONS} from "../types";
+import { 
+  Upload, 
+  Zap, 
+  Eye, 
+  Save,
+  CheckCircle2,
+  Loader2,
+  AlertCircle,
+  Clock
+} from 'lucide-react'
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
@@ -208,4 +219,365 @@ export function isCanonicalOutput(data: CanonicalOutput) {
     'metadata' in data &&
     typeof data.entities === 'object'
   )
+}
+/**
+ * Check if a status transition is valid
+ */
+export function isValidStatusTransition(
+  from: FileWorkflowStatus,
+  to: FileWorkflowStatus
+): boolean {
+  return FILE_STATUS_TRANSITIONS[from]?.includes(to) ?? false
+}
+
+/**
+ * Get next step in workflow
+ */
+export function getNextStep(currentStep: WorkflowStep): WorkflowStep | null {
+  return WORKFLOW_TRANSITIONS[currentStep]
+}
+
+/**
+ * Check if files are ready for a step
+ */
+export function canProceedToStep(
+  step: WorkflowStep,
+  files: WorkflowFile[]
+): StepValidation {
+  if (files.length === 0) {
+    return { canProceed: false, reason: 'No files uploaded' }
+  }
+
+  switch (step) {
+    case 'extract':
+      const uploadedFiles = files.filter(f => f.status === 'uploaded')
+      if (uploadedFiles.length === 0) {
+        return { canProceed: false, reason: 'No files ready for extraction' }
+      }
+      return { canProceed: true }
+
+    case 'review':
+      const extractedFiles = files.filter(f => f.status === 'extracted')
+      if (extractedFiles.length === 0) {
+        return { canProceed: false, reason: 'No files extracted yet' }
+      }
+      return { canProceed: true }
+
+    case 'save':
+      const reviewedFiles = files.filter(f => 
+        f.status === 'extracted' || f.status === 'reviewing'
+      )
+      if (reviewedFiles.length === 0) {
+        return { canProceed: false, reason: 'No files ready to save' }
+      }
+      return { canProceed: true }
+
+    default:
+      return { canProceed: true }
+  }
+}
+
+/**
+ * Get files by status
+ */
+export function getFilesByStatus(
+  files: WorkflowFile[],
+  status: FileWorkflowStatus | FileWorkflowStatus[]
+): WorkflowFile[] {
+  const statuses = Array.isArray(status) ? status : [status]
+  return files.filter(f => statuses.includes(f.status))
+}
+
+/**
+ * Get step progress percentage
+ */
+export function getStepProgress(step: WorkflowStep): number {
+  const steps: WorkflowStep[] = ['upload', 'extract', 'review', 'save']
+  const index = steps.indexOf(step)
+  return ((index + 1) / steps.length) * 100
+}
+
+/**
+ * Check if step is completed
+ */
+export function isStepCompleted(
+  step: WorkflowStep,
+  currentStep: WorkflowStep
+): boolean {
+  const steps: WorkflowStep[] = ['upload', 'extract', 'review', 'save']
+  const stepIndex = steps.indexOf(step)
+  const currentIndex = steps.indexOf(currentStep)
+  return stepIndex < currentIndex
+}
+
+/**
+ * Get step status for UI
+ */
+export function getStepStatus(
+  step: WorkflowStep,
+  currentStep: WorkflowStep
+): 'completed' | 'current' | 'upcoming' {
+  const steps: WorkflowStep[] = ['upload', 'extract', 'review', 'save']
+  const stepIndex = steps.indexOf(step)
+  const currentIndex = steps.indexOf(currentStep)
+
+  if (stepIndex < currentIndex) return 'completed'
+  if (stepIndex === currentIndex) return 'current'
+  return 'upcoming'
+}
+
+
+/**
+ * Workflow constants and configuration
+ */
+
+
+/**
+ * Step metadata for UI display
+ */
+export const WORKFLOW_STEPS: Record<WorkflowStep, {
+  label: string
+  description: string
+  icon: typeof Upload
+  color: string
+}> = {
+  upload: {
+    label: 'Upload',
+    description: 'Select and upload your documents',
+    icon: Upload,
+    color: 'blue',
+  },
+  extract: {
+    label: 'Extract',
+    description: 'AI extracts data from documents',
+    icon: Zap,
+    color: 'purple',
+  },
+  review: {
+    label: 'Review',
+    description: 'Review and edit extracted data',
+    icon: Eye,
+    color: 'orange',
+  },
+  save: {
+    label: 'Save',
+    description: 'Save to Documents section',
+    icon: Save,
+    color: 'green',
+  },
+}
+
+/**
+ * File status metadata for UI display
+ */
+export const FILE_STATUS_META: Record<FileWorkflowStatus, {
+  label: string
+  icon: typeof CheckCircle2
+  color: string
+  bgColor: string
+  textColor: string
+}> = {
+  pending: {
+    label: 'Pending',
+    icon: Clock,
+    color: 'gray',
+    bgColor: 'bg-gray-100',
+    textColor: 'text-gray-700',
+  },
+  uploading: {
+    label: 'Uploading',
+    icon: Loader2,
+    color: 'blue',
+    bgColor: 'bg-blue-100',
+    textColor: 'text-blue-700',
+  },
+  uploaded: {
+    label: 'Uploaded',
+    icon: CheckCircle2,
+    color: 'green',
+    bgColor: 'bg-green-100',
+    textColor: 'text-green-700',
+  },
+  extracting: {
+    label: 'Extracting',
+    icon: Loader2,
+    color: 'purple',
+    bgColor: 'bg-purple-100',
+    textColor: 'text-purple-700',
+  },
+  extracted: {
+    label: 'Extracted',
+    icon: CheckCircle2,
+    color: 'purple',
+    bgColor: 'bg-purple-100',
+    textColor: 'text-purple-700',
+  },
+  reviewing: {
+    label: 'Reviewing',
+    icon: Eye,
+    color: 'orange',
+    bgColor: 'bg-orange-100',
+    textColor: 'text-orange-700',
+  },
+  saving: {
+    label: 'Saving',
+    icon: Loader2,
+    color: 'blue',
+    bgColor: 'bg-blue-100',
+    textColor: 'text-blue-700',
+  },
+  saved: {
+    label: 'Saved',
+    icon: CheckCircle2,
+    color: 'green',
+    bgColor: 'bg-green-100',
+    textColor: 'text-green-700',
+  },
+  error: {
+    label: 'Error',
+    icon: AlertCircle,
+    color: 'red',
+    bgColor: 'bg-red-100',
+    textColor: 'text-red-700',
+  },
+}
+
+/**
+ * Allowed file types for upload
+ */
+export const ALLOWED_FILE_TYPES = {
+  pdf: 'application/pdf',
+  csv: 'text/csv',
+  excel: [
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ],
+  image: ['image/png', 'image/jpeg', 'image/jpg'],
+}
+
+/**
+ * Flattened allowed MIME types
+ */
+export const ALLOWED_MIME_TYPES = [
+  ALLOWED_FILE_TYPES.pdf,
+  ALLOWED_FILE_TYPES.csv,
+  ...ALLOWED_FILE_TYPES.excel,
+  ...ALLOWED_FILE_TYPES.image,
+]
+
+/**
+ * File extensions
+ */
+export const ALLOWED_EXTENSIONS = [
+  '.pdf',
+  '.csv',
+  '.xls',
+  '.xlsx',
+  '.png',
+  '.jpg',
+  '.jpeg',
+]
+
+/**
+ * Max file size (50 MB)
+ */
+export const MAX_FILE_SIZE = 50 * 1024 * 1024
+
+/**
+ * Max files per upload
+ */
+export const MAX_FILES_PER_UPLOAD = 10
+
+/**
+ * Auto-save interval (ms)
+ */
+export const AUTO_SAVE_INTERVAL = 30000 // 30 seconds
+
+/**
+ * Toast durations (ms)
+ */
+export const TOAST_DURATION = {
+  success: 3000,
+  error: 5000,
+  warning: 4000,
+  info: 3000,
+}
+
+/**
+ * Confidence thresholds
+ */
+export const CONFIDENCE_THRESHOLDS = {
+  high: 0.9,
+  medium: 0.7,
+  low: 0.5,
+}
+
+/**
+ * Get confidence level from score
+ */
+export function getConfidenceLevel(confidence: number): 'high' | 'medium' | 'low' {
+  if (confidence >= CONFIDENCE_THRESHOLDS.high) return 'high'
+  if (confidence >= CONFIDENCE_THRESHOLDS.medium) return 'medium'
+  return 'low'
+}
+
+/**
+ * Get confidence color
+ */
+export function getConfidenceColor(confidence: number): string {
+  const level = getConfidenceLevel(confidence)
+  return {
+    high: 'green',
+    medium: 'yellow',
+    low: 'red',
+  }[level]
+}
+
+/**
+ * Workflow messages
+ */
+export const WORKFLOW_MESSAGES = {
+  upload: {
+    empty: 'Drop files here or click to browse',
+    dragActive: 'Drop files here',
+    uploading: 'Uploading files...',
+    success: (count: number) => `✓ Uploaded ${count} file${count > 1 ? 's' : ''}`,
+    error: 'Upload failed',
+  },
+  extract: {
+    pending: 'Ready to extract',
+    extracting: (current: number, total: number) => 
+      `Extracting ${current}/${total} files...`,
+    success: (count: number) => 
+      `✓ Extracted ${count} file${count > 1 ? 's' : ''} successfully`,
+    error: (count: number) => 
+      `Failed to extract ${count} file${count > 1 ? 's' : ''}`,
+  },
+  review: {
+    empty: 'No files to review',
+    unsavedChanges: 'You have unsaved changes',
+    lowConfidence: (count: number) => 
+      `${count} field${count > 1 ? 's' : ''} with low confidence`,
+  },
+  save: {
+    saving: (count: number) => 
+      `Saving ${count} file${count > 1 ? 's' : ''}...`,
+    success: (count: number) => 
+      `✓ Saved ${count} file${count > 1 ? 's' : ''} to Documents`,
+    error: 'Failed to save',
+  },
+}
+
+/**
+ * Navigation warning
+ */
+export const UNSAVED_CHANGES_WARNING = {
+  title: 'Unsaved Changes',
+  message: (count: number) => 
+    `You have ${count} extracted file${count > 1 ? 's' : ''} that haven't been saved. What would you like to do?`,
+  actions: {
+    save: 'Save & Continue',
+    discard: 'Discard',
+    cancel: 'Cancel',
+  },
 }

@@ -19,6 +19,7 @@ from services.version_service import VersionService
 from services.comparison_service import ComparisonService
 from services.form_generator import FormGenerator
 from services.export_service import ExportService
+from extraction.core import UniversalFileLoader
 
 class SubmissionService:
     """
@@ -96,11 +97,14 @@ class SubmissionService:
             # Progress: 40% - Starting extraction
             if progress_callback:
                 progress_callback(submission_id, 40, 'extracting', 'Analyzing document...')
+            # Use UniversalFileLoader to handle all file types
+            loader = UniversalFileLoader()
 
-            # READ + CLASSIFY
-            doc = Document(file_path=upload_path, file_name=filename)
-            reader = PdfReader()
-            reader.read(upload_path, doc)
+            try:
+               doc =  loader.load(upload_path)
+            except Exception as e:
+                raise ValueError(f"Failed to load file: {str(e)}")
+      
             
             DocumentClassifier.classify(doc)
 

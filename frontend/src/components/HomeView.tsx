@@ -194,7 +194,7 @@ function EmptyDashboardState({
               className="hidden"
               onChange={handleFileChange}
               multiple
-              accept=".pdf,.csv,.xlsx,.xls,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              accept="text/csv,.pdf,.csv,.xlsx,.xls,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             />
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
         {phase === 'upload' ? (

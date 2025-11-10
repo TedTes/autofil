@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useRef, useState } from 'react'
+import React, { useRef, useState ,useCallback } from 'react'
 import { 
   CheckSquare, Calendar, Download, FileText, TrendingUp, Zap, Clock, 
   CheckCircle2, Upload, File, FileSpreadsheet, X, Eye, Check
@@ -8,8 +8,19 @@ import {
 import { uploadPdf, getSubmission, downloadPdf } from '@/lib/api-client'
 import { ConfidenceBadgeCompact } from '@/components/ConfidenceBadge'
 import {formatDate,formatFileSize, formatFileType} from "../lib/utils";
-type Phase = 'upload' | 'extract' | 'export'
+import { ExtractionReviewPanel } from './extraction'
+import type { WorkflowFile, WorkflowStep } from '@/types/workflow'
 
+type Phase = 'upload' | 'extract' | 'export'
+type JSONValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JSONValue[]
+  | { [key: string]: JSONValue }
+
+type JSONObject = { [key: string]: JSONValue }
 type UploadedRow = {
   submissionId: string
   filename: string
@@ -69,17 +80,20 @@ function EmptyDashboardState({
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const [progress, setProgress] = useState<Record<number, number>>({})
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const [phase, setPhase] = useState<Phase>('upload')
+  // Workflow state
+  const [workflowStep, setWorkflowStep] = useState<WorkflowStep>('upload')
+  const [workflowFiles, setWorkflowFiles] = useState<WorkflowFile[]>([])
   const [uploaded, setUploaded] = useState<UploadedRow[]>([])
 
   const triggerFilePicker = () => fileInputRef.current?.click()
 
   // Helper to detect file type
-  const getFileType = (filename: string): UploadedRow['fileType'] => {
+  const getFileType = (filename: string): 'pdf' | 'excel' | 'csv' | 'other' => {
     const ext = filename.split('.').pop()?.toLowerCase()
     if (ext === 'pdf') return 'pdf'
     if (ext === 'xlsx' || ext === 'xls') return 'excel'
@@ -93,9 +107,12 @@ function EmptyDashboardState({
     setError(null)
     setMessage(null)
     setProgress({})
+    
     try {
       const rows: UploadedRow[] = []
+      const newWorkflowFiles: WorkflowFile[] = []
       const errors: Array<{ filename: string; error: string }> = []
+      
       for (let i = 0; i < files.length; i++) {
         try {
           console.log(`📤 Uploading ${i + 1}/${files.length}: ${files[i].name}`)
@@ -106,19 +123,31 @@ function EmptyDashboardState({
           
           console.log(`✅ Success ${i + 1}`)
           
+          // Add to uploaded rows
           rows.push({
             submissionId: res.submission_id,
             filename: files[i].name,
             uploadedAt: new Date().toISOString(),
             fileType: getFileType(files[i].name),
             fileSize: files[i].size,
-            confidence: res.extraction.confidence,
-            // Set initial extraction status
-            extractionStatus: 'pending',  // Files uploaded but not yet "viewed" as extracted
+            confidence: res.extraction?.confidence,
+            extractionStatus: 'pending',
             extractionProgress: 0
           })
+
+          // Add to workflow files
+          newWorkflowFiles.push({
+            id: res.submission_id,
+            file: files[i],
+            filename: files[i].name,
+            fileType: getFileType(files[i].name),
+            fileSize: files[i].size,
+            status: 'uploaded',
+            uploadProgress: 100,
+            submissionId: res.submission_id,
+            uploadedAt: new Date().toISOString(),
+          })
         } catch (e: unknown) {
-          // ✅ Log error ,then CONTINUE to next file
           const errorMessage = e instanceof Error ? e.message : 'Upload failed'
           console.error(`❌ Failed ${i + 1}: ${files[i].name}`, errorMessage)
           
@@ -128,33 +157,34 @@ function EmptyDashboardState({
           })
         }
       }
-        // Update state after ALL files processed
-        if (rows.length > 0) {
-          setUploaded((prev) => [...rows, ...prev])
-          onUploadComplete?.(rows.length)
-          setPhase('extract')
-          
-          if (errors.length > 0) {
-            setMessage(
-              `✓ Uploaded ${rows.length}/${files.length} files. ${errors.length} failed: ${errors.map(e => e.filename).join(', ')}`
-            )
-          } else {
-            setMessage(`✓ Uploaded ${rows.length} file${rows.length > 1 ? 's' : ''} successfully.`)
-          }
+      
+      // Update state after ALL files processed
+      if (rows.length > 0) {
+        setUploaded((prev) => [...rows, ...prev])
+        setWorkflowFiles((prev) => [...newWorkflowFiles, ...prev])
+        onUploadComplete?.(rows.length)
+        setWorkflowStep('extract')
+        
+        if (errors.length > 0) {
+          setMessage(
+            `✓ Uploaded ${rows.length}/${files.length} files. ${errors.length} failed: ${errors.map(e => e.filename).join(', ')}`
+          )
         } else {
-          setError(`All ${files.length} uploads failed`)
+          setMessage(`✓ Uploaded ${rows.length} file${rows.length > 1 ? 's' : ''} successfully.`)
         }
+      } else {
+        setError(`All ${files.length} uploads failed`)
+      }
 
-        setIsUploading(false)
-        if (fileInputRef.current) fileInputRef.current.value = ''
-        setTimeout(() => setMessage(null), 3000)
+      setIsUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      setTimeout(() => setMessage(null), 3000)
     } catch (e: unknown) {
       const errorMessage = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Upload failed'
       setError(errorMessage)
     } finally {
       setIsUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
-      setTimeout(() => setMessage(null), 3000)
     }
   }
 
@@ -178,34 +208,305 @@ function EmptyDashboardState({
       ? Math.floor(Object.values(progress).reduce((a, b) => a + b, 0) / Object.keys(progress).length)
       : 0
 
-  const removeFile = (submissionId: string) => {
-    setUploaded((prev) => prev.filter((r) => r.submissionId !== submissionId))
-    if (uploaded.length === 1) {
-      setPhase('upload')
+  // Extract selected files
+  const handleExtractSelected = async (selectedIds: string[]) => {
+    setMessage(null)
+    setError(null)
+    
+    let successCount = 0
+    let errorCount = 0
+    
+    for (let i = 0; i < selectedIds.length; i++) {
+      const submissionId = selectedIds[i]
+      
+      try {
+        // Update uploaded rows status
+        setUploaded(prev =>
+          prev.map(row =>
+            row.submissionId === submissionId
+              ? { ...row, extractionStatus: 'extracting', extractionProgress: 0 }
+              : row
+          )
+        )
+        
+        // Update workflow files status
+        setWorkflowFiles(prev =>
+          prev.map(file =>
+            file.id === submissionId
+              ? { ...file, status: 'extracting' }
+              : file
+          )
+        )
+        
+        // Simulate progress
+        for (let progress = 20; progress <= 80; progress += 20) {
+          await new Promise(resolve => setTimeout(resolve, 100))
+          setUploaded(prev =>
+            prev.map(row =>
+              row.submissionId === submissionId
+                ? { ...row, extractionProgress: progress }
+                : row
+            )
+          )
+        }
+        
+        // Fetch extraction data
+        const data = await getSubmission(submissionId)
+        
+        // Update uploaded rows
+        setUploaded(prev =>
+          prev.map(row =>
+            row.submissionId === submissionId
+              ? { 
+                  ...row, 
+                  extractionStatus: 'extracted',
+                  extractionProgress: 100,
+                  confidence: data.confidence || row.confidence
+                }
+              : row
+          )
+        )
+        
+        // Update workflow files with extracted data
+        setWorkflowFiles(prev =>
+          prev.map(file =>
+            file.id === submissionId
+              ? { 
+                  ...file, 
+                  status: 'extracted',
+                  extractedData: data.data,
+                  confidence: data.confidence,
+                  warnings: data.warnings,
+                  extractedAt: new Date().toISOString(),
+                }
+              : file
+          )
+        )
+        
+        successCount++
+        
+      } catch (err) {
+        console.error(`Extraction failed for ${submissionId}:`, err)
+        
+        setUploaded(prev =>
+          prev.map(row =>
+            row.submissionId === submissionId
+              ? { 
+                  ...row, 
+                  extractionStatus: 'error',
+                  extractionError: err instanceof Error ? err.message : 'Extraction failed'
+                }
+              : row
+          )
+        )
+        
+        setWorkflowFiles(prev =>
+          prev.map(file =>
+            file.id === submissionId
+              ? { 
+                  ...file, 
+                  status: 'error',
+                  error: err instanceof Error ? err.message : 'Extraction failed'
+                }
+              : file
+          )
+        )
+        
+        errorCount++
+      }
+    }
+    
+    // Show summary and transition to review step
+    if (errorCount === 0) {
+      setMessage(`✓ Successfully extracted ${successCount} file${successCount > 1 ? 's' : ''}`)
+      setWorkflowStep('review')
+    } else {
+      setMessage(`Extracted ${successCount} file${successCount > 1 ? 's' : ''}, ${errorCount} failed`)
     }
   }
+
+  // Save file to Documents
+  const handleSaveFile = async (fileId: string) => {
+    setIsSaving(true)
+    try {
+      // Update file status
+      setWorkflowFiles(prev =>
+        prev.map(file =>
+          file.id === fileId
+            ? { ...file, status: 'saving' }
+            : file
+        )
+      )
+
+      // TODO: Call API to save submission with status='saved'
+      await new Promise(resolve => setTimeout(resolve, 500)) // Simulate API call
+
+      // Update file status to saved
+      setWorkflowFiles(prev =>
+        prev.map(file =>
+          file.id === fileId
+            ? { ...file, status: 'saved', savedAt: new Date().toISOString() }
+            : file
+        )
+      )
+
+      setMessage(`✓ Saved to Documents`)
+    } catch (err) {
+      console.error('Save failed:', err)
+      setError('Failed to save file')
+      
+      setWorkflowFiles(prev =>
+        prev.map(file =>
+          file.id === fileId
+            ? { ...file, status: 'extracted' }
+            : file
+        )
+      )
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // Save all files to Documents
+  const handleSaveAll = async (fileIds: string[]) => {
+    setIsSaving(true)
+    try {
+      // Update all files to saving status
+      setWorkflowFiles(prev =>
+        prev.map(file =>
+          fileIds.includes(file.id)
+            ? { ...file, status: 'saving' }
+            : file
+        )
+      )
+
+      // TODO: Call bulk save API
+      await new Promise(resolve => setTimeout(resolve, 1000)) // Simulate API call
+
+      // Update all files to saved status
+      setWorkflowFiles(prev =>
+        prev.map(file =>
+          fileIds.includes(file.id)
+            ? { ...file, status: 'saved', savedAt: new Date().toISOString() }
+            : file
+        )
+      )
+
+      setMessage(`✓ Saved ${fileIds.length} file${fileIds.length > 1 ? 's' : ''} to Documents`)
+      
+      // Clear workflow after save
+      setTimeout(() => {
+        setWorkflowFiles([])
+        setUploaded([])
+        setWorkflowStep('upload')
+      }, 2000)
+    } catch (err) {
+      console.error('Bulk save failed:', err)
+      setError('Failed to save files')
+      
+      // Revert files back to extracted status
+      setWorkflowFiles(prev =>
+        prev.map(file =>
+          fileIds.includes(file.id)
+            ? { ...file, status: 'extracted' }
+            : file
+        )
+      )
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // Discard file from review
+  const handleDiscardFile = (fileId: string) => {
+    setWorkflowFiles(prev => prev.filter(file => file.id !== fileId))
+    setUploaded(prev => prev.filter(row => row.submissionId !== fileId))
+    
+    if (workflowFiles.length === 1) {
+      setWorkflowStep('upload')
+    }
+  }
+
+  // Edit field in extracted data
+  const handleEditField = (
+    fileId: string,
+    fieldPath: string,
+    value: unknown
+  ) => {
+    setWorkflowFiles(prev =>
+      prev.map(file => {
+        if (file.id !== fileId || !file.extractedData) return file
+  
+        const pathParts = fieldPath.split('.')
+  
+        // Treat extractedData as a JSON object
+        const newData: JSONObject = {
+          ...(file.extractedData as JSONObject),
+        }
+  
+        let current: JSONObject = newData
+  
+        for (let i = 0; i < pathParts.length - 1; i++) {
+          const key = pathParts[i]
+          const existing = current[key]
+  
+          // Ensure the next level is an object
+          if (
+            !existing ||
+            typeof existing !== 'object' ||
+            Array.isArray(existing)
+          ) {
+            current[key] = {}
+          }
+  
+          current = current[key] as JSONObject
+        }
+  
+        const lastKey = pathParts[pathParts.length - 1]
+        current[lastKey] = value as JSONValue
+  
+        return {
+          ...file,
+          extractedData: newData,
+          status: 'reviewing' as const,
+        }
+      })
+    )
+  }
+
+  const removeFile = (submissionId: string) => {
+    setUploaded((prev) => prev.filter((r) => r.submissionId !== submissionId))
+    setWorkflowFiles((prev) => prev.filter((f) => f.id !== submissionId))
+    if (uploaded.length === 1) {
+      setWorkflowStep('upload')
+    }
+  }
+
+  // Get extracted files for review
+  const extractedFiles = workflowFiles.filter(f => 
+    f.status === 'extracted' || f.status === 'reviewing'
+  )
 
   return (
     <div className="max-w-5xl mx-auto space-y-8">
       {/* Main upload/extract box */}
       <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              onChange={handleFileChange}
-              multiple
-              accept="text/csv,.pdf,.csv,.xlsx,.xls,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            />
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
-        {phase === 'upload' ? (
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        onChange={handleFileChange}
+        multiple
+        accept="text/csv,.pdf,.csv,.xlsx,.xls,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      />
+      
+      {/* Show upload zone when no files or on upload step */}
+      {workflowStep === 'upload' && (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
           <div
             className="relative"
             onDragOver={handleDragOver}
             onDrop={handleDrop}
           >
-          
-           
-
             {/* Upload zone */}
             <div
               className="px-8 py-16 text-center cursor-pointer"
@@ -274,136 +575,76 @@ function EmptyDashboardState({
                 </div>
               )}
             </div>
-
-          
           </div>
-        ) : (
-          <ExtractPanel
-            rows={uploaded}
-            phase={phase}
-            onExtractSelected={async (selectedIds) => {
-              setMessage(null)
-              setError(null)
-              
-              let successCount = 0
-              let errorCount = 0
-              
-              // Process each file sequentially with status updates
-              for (let i = 0; i < selectedIds.length; i++) {
-                const submissionId = selectedIds[i]
-                
-                try {
-                  //  Update status to 'extracting'
-                  setUploaded(prev =>
-                    prev.map(row =>
-                      row.submissionId === submissionId
-                        ? { ...row, extractionStatus: 'extracting', extractionProgress: 0 }
-                        : row
-                    )
-                  )
-                  
-                  // Simulate progress (optional - for visual feedback)
-                  for (let progress = 20; progress <= 80; progress += 20) {
-                    await new Promise(resolve => setTimeout(resolve, 100))
-                    setUploaded(prev =>
-                      prev.map(row =>
-                        row.submissionId === submissionId
-                          ? { ...row, extractionProgress: progress }
-                          : row
-                      )
-                    )
-                  }
-                  
-                  // Fetch extraction data to confirm it's ready
-                  const data = await getSubmission(submissionId)
-                  
-                  //  Update status to 'extracted' with confidence
-                  setUploaded(prev =>
-                    prev.map(row =>
-                      row.submissionId === submissionId
-                        ? { 
-                            ...row, 
-                            extractionStatus: 'extracted',
-                            extractionProgress: 100,
-                            confidence: data.confidence || row.confidence
-                          }
-                        : row
-                    )
-                  )
-                  
-                  successCount++
-                  
-                } catch (err) {
-                  console.error(`Extraction failed for ${submissionId}:`, err)
-                  
-                  //  Update status to 'error'
-                  setUploaded(prev =>
-                    prev.map(row =>
-                      row.submissionId === submissionId
-                        ? { 
-                            ...row, 
-                            extractionStatus: 'error',
-                            extractionError: err instanceof Error ? err.message : 'Extraction failed'
-                          }
-                        : row
-                    )
-                  )
-                  
-                  errorCount++
-                }
-              }
-              
-              //  Show summary message
-              if (errorCount === 0) {
-                setMessage(`✓ Successfully extracted ${successCount} file${successCount > 1 ? 's' : ''}`)
-              } else {
-                setMessage(`Extracted ${successCount} file${successCount > 1 ? 's' : ''}, ${errorCount} failed`)
-              }
-            }}
-            onRemove={removeFile}
-            onUploadMore={triggerFilePicker}
-            onGoToFile={onGoToFile} 
-          />
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* Extract Panel */}
+      {workflowStep === 'extract' && (
+        <ExtractPanel
+          rows={uploaded}
+          phase="extract"
+          onExtractSelected={handleExtractSelected}
+          onRemove={removeFile}
+          onUploadMore={triggerFilePicker}
+          onGoToFile={onGoToFile}
+        />
+      )}
+
+      {/* Review Panel */}
+      {workflowStep === 'review' && extractedFiles.length > 0 && (
+        <ExtractionReviewPanel
+          files={extractedFiles}
+          onSaveFile={handleSaveFile}
+          onSaveAll={handleSaveAll}
+          onDiscardFile={handleDiscardFile}
+          onEditField={handleEditField}
+          isSaving={isSaving}
+        />
+      )}
 
       {/* Separator */}
-      <div className="relative">
-        <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-gray-200"></div>
-        </div>
-        <div className="relative flex justify-center text-sm">
-          <span className="px-4 bg-gray-50 text-gray-500 font-medium">Features</span>
-        </div>
-      </div>
+      {workflowStep === 'upload' && (
+        <>
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-4 bg-gray-50 text-gray-500 font-medium">Features</span>
+            </div>
+          </div>
 
-      {/* Feature highlights */}
-      <div className="grid md:grid-cols-3 gap-6">
-        <FeatureHighlight
-          icon={CheckCircle2}
-          iconColor="text-green-600"
-          bgColor="bg-green-50"
-          title="95%+ Accuracy"
-          description="AI-powered extraction with high confidence scoring"
-        />
-        <FeatureHighlight
-          icon={Clock}
-          iconColor="text-purple-600"
-          bgColor="bg-purple-50"
-          title="Version Control"
-          description="Track every change with complete audit history"
-        />
-        <FeatureHighlight
-          icon={Zap}
-          iconColor="text-orange-600"
-          bgColor="bg-orange-50"
-          title="Instant Results"
-          description="Process documents in seconds, not hours"
-        />
-      </div>
+          {/* Feature highlights */}
+          <div className="grid md:grid-cols-3 gap-6">
+            <FeatureHighlight
+              icon={CheckCircle2}
+              iconColor="text-green-600"
+              bgColor="bg-green-50"
+              title="95%+ Accuracy"
+              description="AI-powered extraction with high confidence scoring"
+            />
+            <FeatureHighlight
+              icon={Clock}
+              iconColor="text-purple-600"
+              bgColor="bg-purple-50"
+              title="Version Control"
+              description="Track every change with complete audit history"
+            />
+            <FeatureHighlight
+              icon={Zap}
+              iconColor="text-orange-600"
+              bgColor="bg-orange-50"
+              title="Instant Results"
+              description="Process documents in seconds, not hours"
+            />
+          </div>
+        </>
+      )}
     </div>
   )
 }
+
 
 
 

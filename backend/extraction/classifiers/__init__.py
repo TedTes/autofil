@@ -13,7 +13,6 @@ from .registry import ClassifierRegistry, classifier_registry
 from .table_classifier import TableClassifier
 from .keyword_classifier import KeywordClassifier
 from .ml_classifier import MLClassifier, LayoutLMClassifier, DonutClassifier
-from .document_classifier import DocumentClassifier
 __all__ = [
     'MimeClassifier',
     'KeywordClassifier',
@@ -22,8 +21,7 @@ __all__ = [
     'classifier_registry',
     'MLClassifier',  
     'LayoutLMClassifier', 
-    'DonutClassifier',
-    'DocumentClassifier'
+    'DonutClassifier'
 ]
 
 __version__ = '1.0.0'

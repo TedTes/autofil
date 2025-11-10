@@ -114,7 +114,6 @@ class SubmissionService:
                except Exception as e:
                     print(f"⚠️ Classification failed: {str(e)}")
                     # Fallback to generic if classification fails
-                    from extraction.core.document import DocumentType
                     doc.set_document_type(DocumentType.GENERIC, 0.3)
             except Exception as e:
                 raise ValueError(f"Failed to load file: {str(e)}")
@@ -142,7 +141,7 @@ class SubmissionService:
                 progress_callback(submission_id, 80, "extracting", "Saving extracted data...")
 
             # JSON-compatible dict (handles datetime, UUID, etc.)
-            json_data = extraction_result.model_dump(mode="json")
+            json_data = extraction_result.to_dict()
 
             version_id = self.version_service.create_version(
                 submission_id=submission_id,

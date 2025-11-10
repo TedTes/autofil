@@ -58,3 +58,6 @@ class CanonicalOutput(BaseModel):
                     f"Field '{field}' must contain only EntityValue objects"
                 )
         return v
+    def to_dict(self):
+        """Make it compatible with all other extractors"""
+        return self.model_dump(mode="json")

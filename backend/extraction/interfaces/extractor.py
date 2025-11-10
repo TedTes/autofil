@@ -49,7 +49,6 @@ class IExtractor(ABC):
         """
         pass
     
-    @abstractmethod
     def get_supported_form_type(self) -> str:
         """
         Return the form type this extractor supports.
@@ -57,4 +56,5 @@ class IExtractor(ABC):
         Returns:
             Form type identifier (e.g., "126", "125", "140")
         """
-        pass
+        # Default implementation - subclasses can override
+        return self.__class__.__name__.replace('Extractor', '').lower()

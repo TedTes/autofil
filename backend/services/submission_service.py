@@ -9,9 +9,9 @@ from typing import Optional,Dict,Any,List
 from datetime import datetime
 from werkzeug.utils import secure_filename
 from extraction.extractors import extractor_registry
-from extraction.classifiers import DocumentClassifier
+from extraction.classifiers import classifier_registry
 from extraction.core.readers.pdf_reader import PdfReader
-from extraction.core.document import Document
+from extraction.core.document import Document,DocumentType
 from filling.fillers import Acord126Filler
 from services.client_service import ClientService
 from lib.submission_templates import get_template, TEMPLATES
@@ -52,7 +52,10 @@ class SubmissionService:
         self.comparison_service = ComparisonService(self.storage_dir)
         self.form_generator = FormGenerator()
         self.export_service = ExportService(self.storage_dir)
-    
+        self.classifier = classifier_registry.create_composite(
+        classifier_names=['mime', 'keyword', 'table'],
+        strategy='highest_confidence'
+        )
     def upload_and_extract(self, file, folder_id: str = None, progress_callback=None):
         """
         Upload PDF and extract data with progress tracking.
@@ -102,12 +105,20 @@ class SubmissionService:
 
             try:
                doc =  loader.load(upload_path)
+               print(f"Document loaded - MIME: {doc.mime_type}, Type: {doc.document_type}")
+               print(f"🔍 Running composite classifier (mime + keyword + table)...")
+               try:
+                    doc_type, confidence = self.classifier.classify(doc)
+                    doc.set_document_type(doc_type, confidence)
+                    print(f"Classified as: {doc_type} (confidence: {confidence:.2f})")
+               except Exception as e:
+                    print(f"⚠️ Classification failed: {str(e)}")
+                    # Fallback to generic if classification fails
+                    from extraction.core.document import DocumentType
+                    doc.set_document_type(DocumentType.GENERIC, 0.3)
             except Exception as e:
                 raise ValueError(f"Failed to load file: {str(e)}")
       
-            
-            DocumentClassifier.classify(doc)
-
             extractor = extractor_registry.get_extractor_for_document(doc)
             if not extractor:
               raise ValueError(f"No extractor for {doc.document_type}")
@@ -186,6 +197,7 @@ class SubmissionService:
             }
         except Exception as e:
             print("upload and extract error:", str(e))
+            raise
     
     def get_submission(self, submission_id: str):
         """

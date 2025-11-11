@@ -15,10 +15,11 @@ def create_app():
     """
     app = Flask(__name__)
     # Register blueprints
-    from .routes  import (submission_bp,folder_bp, health_bp,extraction_bp,client_bp)
+    from .routes  import (submission_bp,folder_bp, health_bp,extraction_bp,client_bp,bulk_export_bp)
 
    
     app.register_blueprint(submission_bp, url_prefix='/api/submissions')
+    app.register_blueprint(bulk_export_bp, url_prefix="/api/submissions/bulk")
     app.register_blueprint(folder_bp, url_prefix='/api/folders')
     app.register_blueprint(extraction_bp, url_prefix='/api/extraction')
     app.register_blueprint(health_bp, url_prefix='/api')

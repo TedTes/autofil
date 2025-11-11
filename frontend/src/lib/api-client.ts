@@ -856,3 +856,57 @@ export async function updateSubmissionStatus(
     throw error
   }
 }
+
+/**
+ * Get submission for editing (even if already saved)
+ * Returns the extracted data and metadata
+ */
+export async function getSubmissionForEdit(submissionId: string): Promise<{
+  submission_id: string
+  filename: string
+  uploaded_at: string
+  workflow_status: string
+  confidence?: number
+  data: Record<string, unknown>
+  warnings?: string[]
+}> {
+  try {
+    const response = await api.get(`/submissions/${submissionId}`)
+    
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to fetch submission')
+    }
+    
+    return response.data
+  } catch (error) {
+    console.error('Get submission for edit error:', error)
+    throw error
+  }
+}
+
+/**
+ * Update submission data after editing
+ */
+export async function updateSubmissionData(
+  submissionId: string,
+  data: Record<string, unknown>
+): Promise<{
+  success: boolean
+  submission_id: string
+  message: string
+}> {
+  try {
+    const response = await api.patch(`/submissions/${submissionId}/data`, {
+      data: data
+    })
+    
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to update submission')
+    }
+    
+    return response.data
+  } catch (error) {
+    console.error('Update submission data error:', error)
+    throw error
+  }
+}

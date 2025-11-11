@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo,useRef } from 'react'
 import { 
   Search,  Download, Trash2, RefreshCw, 
   Grid3x3, List, Loader2, FolderOpen, FileText,
-  X, Sliders,Clock, 
+  X, Sliders,Clock, Eye,
   ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react'
 
@@ -1175,6 +1175,7 @@ function FileListView({
           Uploaded
           <SortIcon column="date" />
         </button>
+        <div className="col-span-2">Actions</div>
       </div>
 
       {/* File Rows - Mobile Optimized */}
@@ -1187,7 +1188,7 @@ function FileListView({
             }`}
           >
             {/* Desktop Layout */}
-            <div className="hidden md:grid grid-cols-12 gap-4 items-center">
+            <div className="hidden md:grid grid-cols-13 gap-4 items-center">
               <div className="col-span-1">
                 <input
                   type="checkbox"
@@ -1232,6 +1233,19 @@ function FileListView({
                   {formatDate(file.uploaded_at)}
                 </span>
               </div>
+
+              <div className="col-span-1 flex items-center gap-2">
+  <button
+    onClick={(e) => {
+      e.stopPropagation()
+      onFileClick?.(file.submission_id, file.filename)
+    }}
+    className="flex items-center gap-1 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors font-medium"
+  >
+    <Eye className="w-4 h-4" />
+    <span className="hidden xl:inline">View</span>
+  </button>
+</div>
             </div>
 
             {/* Mobile Layout - Simplified */}
@@ -1269,7 +1283,17 @@ function FileListView({
                       Client: {file.client_name}
                     </p>
                   )}
+
+     
                 </button>
+
+      <button
+        onClick={() => onFileClick?.(file.submission_id, file.filename)}
+        className="mt-2 flex items-center gap-1 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors font-medium"
+      >
+        <Eye className="w-4 h-4" />
+        View & Edit
+      </button>
               </div>
             </div>
           </div>

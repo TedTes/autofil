@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useMemo,useRef } from 'react'
 import { 
-  Search, Filter, Download, Trash2, RefreshCw, 
+  Search,  Download, Trash2, RefreshCw, 
   Grid3x3, List, Loader2, FolderOpen, FileText,
-  X, Sliders,Clock,  Calendar, User, TrendingUp,ChevronDown, 
+  X, Sliders,Clock, 
   ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react'
 
@@ -29,7 +29,7 @@ interface DocumentsViewProps {
   onRefreshComplete?: () => void
 }
 
-type ISelected = 'all' | 'ready' | 'extracted' | 'filled'
+type SelectedStatus = 'all' | 'ready' | 'extracted' | 'filled'
 export function DocumentsView({ folders,
   currentFolder,
   onFolderChange, 
@@ -43,7 +43,7 @@ export function DocumentsView({ folders,
   const [error, setError] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list')
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedFilter, setSelectedFilter] = useState<ISelected>('all')
+  const [selectedFilter, setSelectedFilter] = useState<SelectedStatus>('all')
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set())
 
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
@@ -62,18 +62,18 @@ export function DocumentsView({ folders,
   const [isBulkOperationInProgress, setIsBulkOperationInProgress] = useState(false)
   const [bulkOperationProgress, setBulkOperationProgress] = useState({ current: 0, total: 0 })
   const [showBulkConfirmModal, setShowBulkConfirmModal] = useState<'export' | 'delete' | null>(null)
-
+  const [showRecentlyAdded, setShowRecentlyAdded] = useState(true)
   const [operationResults, setOperationResults] = useState<{
     success: number
     failed: number
     errors: string[]
   }>({ success: 0, failed: 0, errors: [] })
   const [showResultsModal, setShowResultsModal] = useState(false)
-
+  const [showAllRecent, setShowAllRecent] = useState(false)
   // Fetch files on mount
   useEffect(() => {
     if (shouldRefresh) {
-      refreshSubmissions()
+      loadFiles()
       onRefreshComplete?.()
     }
   }, [shouldRefresh, onRefreshComplete])
@@ -146,21 +146,38 @@ useEffect(() => {
   return () => document.removeEventListener('keydown', handleKeyDown)
 }, [searchQuery])
 
+// Helper to check if file was saved recently (last 24 hours)
+const isRecentlySaved = (uploadedAt: string): boolean => {
+  const uploadDate = new Date(uploadedAt)
+  const now = new Date()
+  const hoursDiff = (now.getTime() - uploadDate.getTime()) / (1000 * 60 * 60)
+  return hoursDiff <= 24
+}
+// Separate recently saved files (last 24 hours)
+const recentlySavedFiles = useMemo(() => {
+  return files.filter(file => isRecentlySaved(file.uploaded_at))
+}, [files])
 
-const refreshSubmissions = async () => {
+// Other files (older than 24 hours)
+const olderFiles = useMemo(() => {
+  return files.filter(file => !isRecentlySaved(file.uploaded_at))
+}, [files])
+const baseFiles = showRecentlyAdded ? files : olderFiles
+const loadFiles = async () => {
   try {
     setIsLoading(true)
+    setError(null)
     const data = await getAllSubmissions({ 
       status: ['saved', 'finalized'] 
     })
     setFiles(data)
   } catch (error) {
     console.error('Failed to refresh submissions:', error)
+    setError(error instanceof Error ? error.message : 'Failed to load files')
   } finally {
     setIsLoading(false)
   }
 }
-
   // Get unique clients for filter dropdown
 const uniqueClients = useMemo(() => {
   const clients = new Set(files.map((f) => f.client_name).filter(Boolean))
@@ -169,7 +186,7 @@ const uniqueClients = useMemo(() => {
 
 // Filter, search, and sort files
 const filteredFiles = useMemo(() => {
-  let result = files
+  let result = baseFiles
 
   // Apply status filter
   if (selectedFilter !== 'all') {
@@ -245,7 +262,7 @@ const filteredFiles = useMemo(() => {
   })
 
   return result
-}, [files, selectedFilter, debouncedSearchQuery, confidenceRange, dateRange, selectedClient, sortBy, sortOrder])
+}, [baseFiles, selectedFilter, debouncedSearchQuery, confidenceRange, dateRange, selectedClient, sortBy, sortOrder])
 
 const searchSuggestions = useMemo(() => {
   if (!searchQuery.trim() || searchQuery.length < 2) return []
@@ -265,22 +282,7 @@ const searchSuggestions = useMemo(() => {
 
   return Array.from(suggestions).slice(0, 5)
 }, [files, searchQuery])
-const fetchFiles = async () => {
-    setIsLoading(true)
-    setError(null)
 
-    try {
-      const data = await getAllSubmissions({ 
-        status: ['saved', 'finalized'] 
-      })
-      setFiles(data)
-    } catch (err) {
-      console.error('Failed to fetch submissions:', err)
-      setError(err instanceof Error ? err.message : 'Failed to load files')
-    } finally {
-      setIsLoading(false)
-    }
-    }
 
   // Toggle file selection
   const toggleFileSelection = (fileId: string) => {
@@ -304,6 +306,7 @@ const selectAllFiltered = () => {
 const selectAllFiles = () => {
   setSelectedFiles(new Set(files.map((f) => f.submission_id)))
 }
+
 
 // Toggle selection for all filtered files
 const toggleSelectAll = () => {
@@ -487,7 +490,7 @@ const toggleSelectAll = () => {
       
       // Refresh the list
       if (successCount > 0) {
-        await fetchFiles()
+        await loadFiles()
       }
     }
   }
@@ -500,7 +503,7 @@ const toggleSelectAll = () => {
   }
 
   if (error) {
-    return <ErrorState error={error} onRetry={fetchFiles} />
+    return <ErrorState error={error} onRetry={loadFiles} />
   }
 
   if (files.length === 0) {
@@ -545,7 +548,7 @@ const handleSort = (column: typeof sortBy) => {
             </p>
           </div>
           <button
-            onClick={fetchFiles}
+            onClick={loadFiles}
             className="flex items-center gap-2 px-4 py-2 text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
@@ -652,7 +655,7 @@ const handleSort = (column: typeof sortBy) => {
     {/* Status Filter */}
     <select
       value={selectedFilter}
-      onChange={(e) => setSelectedFilter(e.target.value as ISelected)}
+      onChange={(e) => setSelectedFilter(e.target.value as SelectedStatus)}
       className="flex-1 min-w-[120px] px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-500 bg-white"
     >
       <option value="all">All ({files.length})</option>
@@ -954,6 +957,8 @@ const handleSort = (column: typeof sortBy) => {
     </div>
   </div>
 )}
+
+
 {/* Bulk Operation Progress */}
 {isBulkOperationInProgress && (
   <div className="bg-white border-b border-gray-200 px-6 py-4">
@@ -978,6 +983,83 @@ const handleSort = (column: typeof sortBy) => {
   </div>
 )}
 
+{/* Recently Saved Section */}
+{recentlySavedFiles.length > 0 && (
+  <div className="px-6 py-4 bg-gradient-to-r from-green-50 to-emerald-50 border-b border-green-200">
+    <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center gap-2">
+        <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+          <Clock className="w-4 h-4 text-green-600" />
+        </div>
+        <div>
+          <h3 className="text-sm font-semibold text-green-900">
+            Recently Saved
+          </h3>
+          <p className="text-xs text-green-700">
+            {recentlySavedFiles.length} file{recentlySavedFiles.length !== 1 ? 's' : ''} added in the last 24 hours
+          </p>
+        </div>
+      </div>
+      <button
+        onClick={() => setShowRecentlyAdded(!showRecentlyAdded)}
+        className="text-sm text-green-700 hover:text-green-800 font-medium"
+      >
+        {showRecentlyAdded ? 'Hide' : 'Show'}
+      </button>
+    </div>
+
+    {showRecentlyAdded && (
+      <div className="space-y-2">
+        {recentlySavedFiles.slice(0, showAllRecent ? recentlySavedFiles.length : 5).map((file) => (
+          <div
+            key={file.submission_id}
+            className="bg-white rounded-lg border border-green-200 p-3 hover:shadow-sm transition-shadow"
+          >
+            <button
+              onClick={() => onFileClick?.(file.submission_id, file.filename)}
+              className="w-full flex items-center gap-3 text-left"
+            >
+              <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                <FileText className="w-5 h-5 text-green-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">
+                  {file.filename}
+                </p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xs text-gray-500">
+                    {formatDate(file.uploaded_at)}
+                  </span>
+                  {file.confidence !== undefined && (
+                    <>
+                      <span className="text-gray-300">•</span>
+                      <ConfidenceBadgeCompact confidence={file.confidence} />
+                    </>
+                  )}
+                </div>
+              </div>
+              <div className="flex-shrink-0">
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
+                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                  New
+                </span>
+              </div>
+            </button>
+          </div>
+        ))}
+         {recentlySavedFiles.length > 5 && !showAllRecent && (
+      <button
+        onClick={() => setShowAllRecent(true)}
+        className="w-full text-sm text-green-700 hover:text-green-800 font-medium py-2"
+      >
+        Show all {recentlySavedFiles.length} recent files
+      </button>
+    )}
+        
+      </div>
+    )}
+  </div>
+)}
       {/* Main Content Area */}
       <div className="flex-1 overflow-auto px-6 py-6">
         {filteredFiles.length === 0 ? (
@@ -1036,7 +1118,7 @@ function FileListView({
 }: {
   files: SubmissionListItem[]
   selectedFiles: Set<string>
-  onFileClick?: (id: string, name: string) => void
+  onFileClick?: (submissionId: string, name: string) => void
   onToggleSelect: (id: string) => void
   toggleSelectAll: () => void
   sortBy: 'date' | 'filename' | 'confidence' | 'client'
@@ -1206,7 +1288,7 @@ function FileGridView({
 }: {
   files: SubmissionListItem[]
   selectedFiles: Set<string>
-  onFileClick?: (id: string, name: string) => void
+  onFileClick?: (submissionId: string, name: string) => void
   onToggleSelect: (id: string) => void
 }) {
   return (
@@ -1346,7 +1428,7 @@ function ErrorState({ error, onRetry }: { error: string; onRetry: () => void }) 
 }
 
 // Empty State (when no files uploaded yet)
-function EmptyState({ onFileClick }: { onFileClick?: (id: string, name: string) => void }) {
+function EmptyState({ onFileClick }: { onFileClick?: (submissionId: string, name: string) => void }) {
   return (
     <div className="max-w-2xl mx-auto text-center py-12">
       <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">

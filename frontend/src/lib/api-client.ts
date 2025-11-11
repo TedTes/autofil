@@ -910,3 +910,56 @@ export async function updateSubmissionData(
     throw error
   }
 }
+
+/**
+ * Bulk export submissions as ZIP file
+ * Server creates a ZIP of all filled PDFs
+ */
+export async function bulkExportAsZip(submissionIds: string[]): Promise<Blob> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/submissions/bulk-export-zip`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        submission_ids: submissionIds,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
+    }
+
+    return await response.blob()
+  } catch (error) {
+    console.error('Bulk export ZIP error:', error)
+    throw error
+  }
+}
+
+/**
+ * Get bulk export progress (for long-running exports)
+ */
+export async function getBulkExportProgress(jobId: string): Promise<{
+  status: 'pending' | 'processing' | 'completed' | 'failed'
+  progress: number
+  total: number
+  current: number
+  download_url?: string
+  error?: string
+}> {
+  try {
+    const response = await api.get(`/bulk-export/status/${jobId}`)
+    
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to get export progress')
+    }
+    
+    return response.data
+  } catch (error) {
+    console.error('Get export progress error:', error)
+    throw error
+  }
+}

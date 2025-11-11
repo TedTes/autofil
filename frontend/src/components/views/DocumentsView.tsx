@@ -12,11 +12,10 @@ import { getAllSubmissions, type SubmissionListItem , bulkExportSubmissions,
   bulkDeleteSubmissions,
   exportSingleSubmission,
   deleteSubmission,
-  downloadZip,
-  downloadBlob} from '@/lib/api-client'
+  downloadBlob,formatDate,bulkExportAsZip} from '@/lib'
 import {Folder,ViewType} from "../../types"
 import { ConfidenceBadgeCompact } from '@/components/ConfidenceBadge'
-import {formatDate} from "../../lib";
+import {BulkExportProgressModal} from "../BulkExportProgressModal"
 
 interface DocumentsViewProps {
   folders: Folder[]
@@ -30,7 +29,7 @@ interface DocumentsViewProps {
 }
 
 type SelectedStatus = 'all' | 'ready' | 'extracted' | 'filled'
-export function DocumentsView({ folders,
+export function DocumentsView({folders,
   currentFolder,
   onFolderChange, 
   onCreateFolder,
@@ -70,6 +69,7 @@ export function DocumentsView({ folders,
   }>({ success: 0, failed: 0, errors: [] })
   const [showResultsModal, setShowResultsModal] = useState(false)
   const [showAllRecent, setShowAllRecent] = useState(false)
+  const [showExportProgressModal, setShowExportProgressModal] = useState(false)
   // Fetch files on mount
   useEffect(() => {
     if (shouldRefresh) {
@@ -308,6 +308,100 @@ const selectAllFiles = () => {
 }
 
 
+const confirmBulkExport = async () => {
+  setShowBulkConfirmModal(null)
+  setShowExportProgressModal(true)
+  setIsBulkOperationInProgress(true)
+  
+  const selectedFilesList = Array.from(selectedFiles)
+  const selectedFilesData = files.filter((f) => selectedFilesList.includes(f.submission_id))
+  
+  setBulkOperationProgress({ current: 0, total: selectedFilesList.length })
+  
+  let successCount = 0
+  let failedCount = 0
+  const errors: string[] = []
+
+  try {
+    // Strategy 1: Use ZIP export for 3+ files
+    if (selectedFilesList.length >= 3) {
+      try {
+        setBulkOperationProgress({ current: 1, total: selectedFilesList.length })
+        
+        // Call bulk export ZIP API
+        const zipBlob = await bulkExportAsZip(selectedFilesList)
+        
+        // Generate ZIP filename
+        const timestamp = new Date().toISOString().split('T')[0]
+        const zipFilename = `documents_export_${timestamp}_${selectedFilesList.length}files.zip`
+        
+        // Download ZIP
+        downloadBlob(zipBlob, zipFilename)
+        
+        successCount = selectedFilesList.length
+        
+        setOperationResults({ success: successCount, failed: 0, errors: [] })
+        alert(`✓ Successfully exported ${successCount} file(s) as ZIP`)
+        clearSelection()
+        
+      } catch (err) {
+        console.error('ZIP export failed, falling back to individual exports:', err)
+        // Fall back to individual exports on error
+        throw err
+      }
+    } else {
+      // Strategy 2: Individual exports for 1-2 files
+      for (let i = 0; i < selectedFilesList.length; i++) {
+        const fileId = selectedFilesList[i]
+        const file = selectedFilesData[i]
+        
+        try {
+          const pdfBlob = await exportSingleSubmission(fileId)
+          
+          // Generate filename
+          const timestamp = new Date().toISOString().split('T')[0]
+          const baseFilename = file.filename.replace('.pdf', '') || 'document'
+          const exportFilename = `${baseFilename}_filled_${timestamp}.pdf`
+          
+          // Download individual PDF
+          downloadBlob(pdfBlob, exportFilename)
+          
+          successCount++
+        } catch (err) {
+          console.error(`Failed to export ${file.filename}:`, err)
+          failedCount++
+          errors.push(`${file.filename}: ${err instanceof Error ? err.message : 'Unknown error'}`)
+        }
+        
+        // Update progress
+        setBulkOperationProgress({ current: i + 1, total: selectedFilesList.length })
+        
+        // Small delay between downloads
+        if (i < selectedFilesList.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 300))
+        }
+      }
+      
+      // Show results
+      setOperationResults({ success: successCount, failed: failedCount, errors })
+      
+      if (failedCount === 0) {
+        alert(`✓ Successfully exported ${successCount} file(s)`)
+        clearSelection()
+      } else {
+        setShowResultsModal(true)
+      }
+    }
+    
+  } catch (err) {
+    console.error('Bulk export failed completely:', err)
+    alert(`Failed to export files: ${err instanceof Error ? err.message : 'Unknown error'}`)
+  } finally {
+    setIsBulkOperationInProgress(false)
+    setBulkOperationProgress({ current: 0, total: 0 })
+  }
+}
+
 // Toggle selection for all filtered files
 const toggleSelectAll = () => {
   // Check if all filtered files are selected
@@ -338,89 +432,7 @@ const toggleSelectAll = () => {
   const handleBulkDelete = async () => {
     setShowBulkConfirmModal('delete')
   }
-  const confirmBulkExport = async () => {
-    setShowBulkConfirmModal(null)
-    setIsBulkOperationInProgress(true)
-    
-    const selectedFilesList = Array.from(selectedFiles)
-    const selectedFilesData = files.filter((f) => selectedFilesList.includes(f.submission_id))
-    
-    setBulkOperationProgress({ current: 0, total: selectedFilesList.length })
-    
-    let successCount = 0
-    let failedCount = 0
-    const errors: string[] = []
-  
-    try {
-      // Strategy 1: If backend supports bulk export (ZIP), use it
-      if (selectedFilesList.length > 5) {
-        try {
-          const result = await bulkExportSubmissions(selectedFilesList)
-          
-          if (result.success) {
-            successCount = result.results.filter((r) => r.success).length
-            failedCount = result.results.filter((r) => !r.success).length
-          } else {
-            throw new Error('Bulk export failed')
-          }
-        } catch (err) {
-          console.error('Bulk export failed, falling back to individual exports:', err)
-          // Fall back to individual exports
-        }
-      }
-      
-      // Strategy 2: Individual exports (for small batches or when bulk fails)
-      if (selectedFilesList.length <= 5 || successCount === 0) {
-        for (let i = 0; i < selectedFilesList.length; i++) {
-          const fileId = selectedFilesList[i]
-          const file = selectedFilesData[i]
-          
-          try {
-            const pdfBlob = await exportSingleSubmission(fileId)
-            
-            // Generate filename
-            const timestamp = new Date().toISOString().split('T')[0]
-            const baseFilename = file.filename.replace('.pdf', '') || 'document'
-            const exportFilename = `${baseFilename}_filled_${timestamp}.pdf`
-            
-            // Download individual PDF
-            downloadBlob(pdfBlob, exportFilename)
-            
-            successCount++
-          } catch (err) {
-            console.error(`Failed to export ${file.filename}:`, err)
-            failedCount++
-            errors.push(`${file.filename}: ${err instanceof Error ? err.message : 'Unknown error'}`)
-          }
-          
-          // Update progress
-          setBulkOperationProgress({ current: i + 1, total: selectedFilesList.length })
-          
-          // Small delay between downloads to prevent browser blocking
-          if (i < selectedFilesList.length - 1) {
-            await new Promise((resolve) => setTimeout(resolve, 200))
-          }
-        }
-      }
-  
-      // Show results
-      setOperationResults({ success: successCount, failed: failedCount, errors })
-      
-      if (failedCount === 0) {
-        alert(`✓ Successfully exported ${successCount} file(s)`)
-        clearSelection()
-      } else {
-        setShowResultsModal(true)
-      }
-      
-    } catch (err) {
-      console.error('Bulk export failed:', err)
-      alert(`Failed to export files: ${err instanceof Error ? err.message : 'Unknown error'}`)
-    } finally {
-      setIsBulkOperationInProgress(false)
-      setBulkOperationProgress({ current: 0, total: 0 })
-    }
-  }
+
   
   const confirmBulkDelete = async () => {
     setShowBulkConfirmModal(null)
@@ -962,23 +974,55 @@ const handleSort = (column: typeof sortBy) => {
 {/* Bulk Operation Progress */}
 {isBulkOperationInProgress && (
   <div className="bg-white border-b border-gray-200 px-6 py-4">
-    <div className="max-w-xl mx-auto">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-medium text-gray-900">
-          Processing files...
-        </span>
-        <span className="text-sm text-gray-600">
-          {bulkOperationProgress.current} / {bulkOperationProgress.total}
+    <div className="max-w-2xl mx-auto">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-3">
+          <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+          <div>
+            <span className="text-sm font-semibold text-gray-900">
+              {bulkOperationProgress.total >= 3 
+                ? 'Creating ZIP archive...'
+                : 'Exporting files...'
+              }
+            </span>
+            <p className="text-xs text-gray-600 mt-0.5">
+              {bulkOperationProgress.total >= 3
+                ? 'This may take a moment for large batches'
+                : `Processing ${bulkOperationProgress.current} of ${bulkOperationProgress.total}`
+              }
+            </p>
+          </div>
+        </div>
+        <span className="text-sm font-medium text-gray-600">
+          {Math.round((bulkOperationProgress.current / bulkOperationProgress.total) * 100)}%
         </span>
       </div>
-      <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+      
+      <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
         <div
-          className="h-2 bg-blue-600 transition-all duration-300"
+          className="h-2.5 bg-blue-600 transition-all duration-500 ease-out rounded-full"
           style={{
             width: `${(bulkOperationProgress.current / bulkOperationProgress.total) * 100}%`,
           }}
         />
       </div>
+      
+      {/* Individual file progress for small batches */}
+      {bulkOperationProgress.total < 3 && bulkOperationProgress.current > 0 && (
+        <div className="mt-3 space-y-1">
+          {Array.from(selectedFiles).slice(0, bulkOperationProgress.current).map((fileId, idx) => {
+            const file = files.find(f => f.submission_id === fileId)
+            return (
+              <div key={fileId} className="flex items-center gap-2 text-xs text-gray-600">
+                <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span className="truncate">{file?.filename || 'Unknown file'}</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   </div>
 )}
@@ -1100,9 +1144,28 @@ const handleSort = (column: typeof sortBy) => {
     clearSelection()
   }}
 />
+<BulkExportProgressModal
+  isOpen={showExportProgressModal}
+  progress={bulkOperationProgress}
+  isProcessing={isBulkOperationInProgress}
+  results={isBulkOperationInProgress ? undefined : operationResults}
+  onClose={() => {
+    setShowExportProgressModal(false)
+    clearSelection()
+  }}
+  onRetry={() => {
+    // Retry only failed files
+    const failedIds = Array.from(selectedFiles).filter(id => 
+      operationResults.errors.some(err => err.includes(id))
+    )
+    // Re-trigger export for failed files
+  }}
+/>
     </div>
   )
 }
+
+
 
 // File List View (Table-like with sortable headers)
 // Mobile-friendly file list - hide some columns on small screens

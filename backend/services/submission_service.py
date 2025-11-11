@@ -231,51 +231,59 @@ class SubmissionService:
             'data': data
         }
     
-    def update_data(self, submission_id: str, data, user: str = 'user', notes: str = ''):
+    def update_data(
+        self,
+        submission_id: str,
+        data: Dict[str, Any],
+        user: str = 'user',
+        notes: str = ''
+    ):
         """
-        Update submission data with versioning.
-        
-        Args:
-            submission_id: Submission identifier
-            data: Updated JSON data
-            user: User making the update
-            notes: Optional notes about the update
-        
-        Returns:
-            Updated submission
+        Update submission extracted data with versioning & audit metadata.
+
+        - Overwrites the JSON data for this submission.
+        - Does NOT change workflow/status.
+        - Records a version in VersionService.
+        - Updates last_edited_at / last_edited_by.
         """
         data_path = os.path.join(self.data_dir, f"{submission_id}.json")
-        
-        if not os.path.exists(data_path):
+        metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
+
+        if not os.path.exists(data_path) or not os.path.exists(metadata_path):
             raise ValueError("Submission not found")
-        
-       
+
+        # Load current data (for versioning / audit)
+        with open(data_path, 'r') as f:
+            previous_data = json.load(f)
+
+        # Create version BEFORE overwriting, so we keep the old snapshot
         version_id = self.version_service.create_version(
             submission_id=submission_id,
-            data=data,
+            data=previous_data,
             user=user,
-            action='update',
-            notes=notes or 'Manual data update'
+            action='edit',
+            notes=notes or 'Manual data update',
         )
-        
-        # Save updated data
+
+        # Write new data
         with open(data_path, 'w') as f:
             json.dump(data, f, indent=2)
-        
-       
-        metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
-        if os.path.exists(metadata_path):
-            with open(metadata_path, 'r') as f:
-                metadata = json.load(f)
-            
-            metadata['current_version_id'] = version_id
-            metadata['updated_at'] = datetime.utcnow().isoformat()
-            metadata['updated_by'] = user
-            
-            with open(metadata_path, 'w') as f:
-                json.dump(metadata, f, indent=2)
-        
-        return self.get_submission(submission_id)
+
+        # Update metadata (but DO NOT touch existing status)
+        with open(metadata_path, 'r') as f:
+            metadata = json.load(f)
+
+        metadata['current_version_id'] = version_id
+        metadata['last_edited_at'] = datetime.utcnow().isoformat()
+        metadata['last_edited_by'] = user
+
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f, indent=2)
+
+        # Return fresh snapshot
+        updated = self.get_submission(submission_id)
+        return updated
+
     
     def fill_pdf(self, submission_id: str):
         """

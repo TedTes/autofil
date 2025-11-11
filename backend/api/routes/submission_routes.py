@@ -1324,3 +1324,49 @@ async def bulk_delete_submissions(submission_ids: list[str]):
             results.append({"id": sub_id, "success": False, "error": str(e)})
     
     return {"success": True, "results": results}
+
+
+@submission_bp.route('/<submission_id>/data', methods=['PATCH'])
+def patch_submission_data(submission_id):
+    """
+    Update the extracted data for a submission.
+
+    Request Body:
+        {
+            "data": { ... },        # required - full extracted-data object
+            "user": "user@x.com",   # optional - for audit
+            "notes": "Edited ..."   # optional
+        }
+
+    Behavior:
+    - Overwrites the extracted data JSON.
+    - Does NOT change status/workflow.
+    - Records version & last_edited_at.
+    """
+    try:
+        payload = request.get_json() or {}
+        new_data = payload.get('data')
+
+        if not isinstance(new_data, dict):
+            return jsonify({'error': '`data` object is required'}), 400
+
+        user = payload.get('user', 'user')
+        notes = payload.get('notes', 'Manual data update via API')
+
+        submission_service.update_data(
+            submission_id=submission_id,
+            data=new_data,
+            user=user,
+            notes=notes,
+        )
+
+        return jsonify({
+            "success": True,
+            "submission_id": submission_id,
+            "message": "Updated"
+        }), 200
+
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

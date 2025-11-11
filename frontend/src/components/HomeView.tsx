@@ -40,15 +40,17 @@ type HomeViewProps = {
   onUploadComplete?: (uploadedCount: number) => void
   onGoToFile?: (submissionId: string, filename?: string) => void
   onUnsavedChangesUpdate?: (hasChanges: boolean) => void
+  onDocumentsSaved?: (count: number) => void
 }
 
-export function HomeView({ totalSubmissions, onUploadComplete, onGoToFile ,onUnsavedChangesUpdate}: HomeViewProps) {
+export function HomeView({ totalSubmissions, onUploadComplete, onGoToFile ,onUnsavedChangesUpdate,onDocumentsSaved}: HomeViewProps) {
   if (totalSubmissions === 0) {
     return (
       <EmptyDashboardState
         onUploadComplete={onUploadComplete}
         onGoToFile={onGoToFile}
-        onUnsavedChangesUpdate={onUnsavedChangesUpdate}
+         onUnsavedChangesUpdate={onUnsavedChangesUpdate}
+         onDocumentsSaved= {onDocumentsSaved}
       />
     )
   }
@@ -77,11 +79,13 @@ export function HomeView({ totalSubmissions, onUploadComplete, onGoToFile ,onUns
 function EmptyDashboardState({
   onUploadComplete,
   onGoToFile,
-  onUnsavedChangesUpdate
+  onUnsavedChangesUpdate,
+  onDocumentsSaved
 }: {
   onUploadComplete?: (uploadedCount: number) => void
   onGoToFile?: (submissionId: string, filename?: string) => void
   onUnsavedChangesUpdate?: (hasChanges: boolean) => void
+  onDocumentsSaved?: (count: number) => void
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isUploading, setIsUploading] = useState(false)
@@ -406,7 +410,7 @@ const handleSaveFile = async (fileId: string) => {
 
     // Call API to save submission
     await updateSubmissionStatus(fileId, 'saved')
-
+    onDocumentsSaved?.(1)
     // Update file status to saved
     setWorkflowFiles(prev =>
       prev.map(file =>
@@ -435,8 +439,6 @@ const handleSaveFile = async (fileId: string) => {
 }
 
   // Save all files to Documents
-// Find the handleSaveAll function and replace it:
-
 // Save all files to Documents
 const handleSaveAll = async (fileIds: string[]) => {
   setIsSaving(true)
@@ -471,7 +473,10 @@ const handleSaveAll = async (fileIds: string[]) => {
         setMessage(`✓ Saved ${result.saved_count} file${result.saved_count > 1 ? 's' : ''}, ${result.failed.length} failed`)
         setError(`Failed: ${result.failed.join(', ')}`)
       }
-
+ // Notify parent
+ onDocumentsSaved?.(result.saved_count)
+  
+ setMessage(`✓ Saved ${result.saved_count} file${result.saved_count > 1 ? 's' : ''} to Documents`)
       // Clear workflow after successful save
       setTimeout(() => {
         setWorkflowFiles(prev => prev.filter(f => f.status !== 'saved'))

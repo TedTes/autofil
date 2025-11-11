@@ -5,4 +5,3 @@ export * from "./UploadView";
 export * from "./HomeView";
 export * from "./FilesView";
 export * from "./DocumentsFilesSection";
-export * from "./DocumentsView";

@@ -10,25 +10,18 @@ import {
   Download,
   Settings,
   HelpCircle,
-  ChevronLeft,
-  ChevronRight,
   Menu,
   X,
  Save,  Loader2 ,
   TrendingUp,
-  FolderPlus,
-
   AlertTriangle
 } from 'lucide-react'
 import {
   RecentActivity,
   UploadView,
-  FolderView,
-  HomeView,
-  FilesView,
-  DocumentsView
+  HomeView
 } from './'
-import { FileDetailView } from './views/FileDetailView'
+import { FileDetailView, DocumentsView } from './views'
 
 import {
   getFolders,
@@ -82,6 +75,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
   // Unsaved changes tracking
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [showNavigationWarning, setShowNavigationWarning] = useState(false)
+  const [documentsNeedRefresh, setDocumentsNeedRefresh] = useState(false)
   const [pendingNavigation, setPendingNavigation] = useState<{
     type: ViewType
     data?: unknown
@@ -459,6 +453,10 @@ export default function MainLayout({ children }: MainLayoutProps) {
                 totalSubmissions={0}
                 onGoToFile={handleFileClick}
                 onUnsavedChangesUpdate={setHasUnsavedChanges}
+                onDocumentsSaved={(count) => {
+                  console.log(`${count} document(s) saved`)
+                  setDocumentsNeedRefresh(true)
+                }}
               />
             )}
 
@@ -470,6 +468,9 @@ export default function MainLayout({ children }: MainLayoutProps) {
                 onFolderChange={setCurrentFolder}
                 onCreateFolder={handleCreateFolder}
                 onNavigate={navigateTo}
+                onFileClick ={handleFileClick}
+                shouldRefresh={documentsNeedRefresh}
+                onRefreshComplete={() => setDocumentsNeedRefresh(false)}
               />
             )}
 

@@ -14,16 +14,30 @@ import { getAllSubmissions, type SubmissionListItem , bulkExportSubmissions,
   deleteSubmission,
   downloadZip,
   downloadBlob} from '@/lib/api-client'
-
+import {Folder,ViewType} from "../../types"
 import { ConfidenceBadgeCompact } from '@/components/ConfidenceBadge'
 import {formatDate} from "../../lib";
 
 interface DocumentsViewProps {
-  onFileClick?: (submissionId: string, filename: string) => void
+  folders: Folder[]
+  currentFolder: Folder | null
+  onFolderChange: (folder: Folder | null) => void
+  onCreateFolder: (name: string) => Promise<void>
+  onNavigate: (type: ViewType, data?: unknown, breadcrumbs?: string[]) => void
+  onFileClick?: (submissionId: string, filename?: string) => void
+  shouldRefresh?: boolean
+  onRefreshComplete?: () => void
 }
 
 type ISelected = 'all' | 'ready' | 'extracted' | 'filled'
-export function DocumentsView({ onFileClick }: DocumentsViewProps) {
+export function DocumentsView({ folders,
+  currentFolder,
+  onFolderChange, 
+  onCreateFolder,
+  onNavigate,
+  onFileClick,
+  shouldRefresh,
+  onRefreshComplete }: DocumentsViewProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [files, setFiles] = useState<SubmissionListItem[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -58,8 +72,11 @@ export function DocumentsView({ onFileClick }: DocumentsViewProps) {
 
   // Fetch files on mount
   useEffect(() => {
-    fetchFiles()
-  }, [])
+    if (shouldRefresh) {
+      refreshSubmissions()
+      onRefreshComplete?.()
+    }
+  }, [shouldRefresh, onRefreshComplete])
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchQuery(searchQuery)
@@ -128,6 +145,22 @@ useEffect(() => {
   document.addEventListener('keydown', handleKeyDown)
   return () => document.removeEventListener('keydown', handleKeyDown)
 }, [searchQuery])
+
+
+const refreshSubmissions = async () => {
+  try {
+    setIsLoading(true)
+    const data = await getAllSubmissions({ 
+      status: ['saved', 'finalized'] 
+    })
+    setFiles(data)
+  } catch (error) {
+    console.error('Failed to refresh submissions:', error)
+  } finally {
+    setIsLoading(false)
+  }
+}
+
   // Get unique clients for filter dropdown
 const uniqueClients = useMemo(() => {
   const clients = new Set(files.map((f) => f.client_name).filter(Boolean))
@@ -237,8 +270,10 @@ const fetchFiles = async () => {
     setError(null)
 
     try {
-      const submissions = await getAllSubmissions()
-      setFiles(submissions)
+      const data = await getAllSubmissions({ 
+        status: ['saved', 'finalized'] 
+      })
+      setFiles(data)
     } catch (err) {
       console.error('Failed to fetch submissions:', err)
       setError(err instanceof Error ? err.message : 'Failed to load files')
@@ -498,6 +533,7 @@ const handleSort = (column: typeof sortBy) => {
   }
 }
   return (
+    
     <div className="h-full flex flex-col bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">

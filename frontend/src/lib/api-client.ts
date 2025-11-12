@@ -1008,17 +1008,30 @@ export async function getRecentSubmissions(
 
     // Transform the response to include computed fields
     const submissions: RecentSubmission[] = (response.data?.data?.submissions || []).map(
-      (sub: RecentSubmission) => ({
-        ...sub,
-        // Compute document types present from files
-        document_types_present: getDocumentTypesPresent(sub.files || []),
-        // Compute completion percentage
-        completion_percentage: calculateCompletionPercentage(sub),
-        // Check for errors
-        has_errors: sub.status === 'error' || (sub.files || []).some((f: RecentSubmissionFile) => f.status === 'error'),
-        // Format last activity as human-readable
-        last_activity: formatRelativeTime(sub.updated_at),
-      })
+      (sub: any) => {
+        // Use the correct timestamp field from API
+        const timestamp = sub.last_activity_at || sub.updated_at || sub.uploaded_at
+        
+        return {
+          ...sub,
+          name: sub.name || sub.filename || `Submission ${sub.submission_id.slice(0, 8)}`,
+          file_count: sub.files?.length || (sub.filename ? 1 : 0),
+          files: sub.files || (sub.filename ? [{
+            file_id: sub.submission_id,
+            filename: sub.filename,
+            status: sub.status,
+            document_type: sub.document_type,
+            confidence: sub.confidence,
+            uploaded_at: sub.uploaded_at
+          }] : []),
+          document_types_present: getDocumentTypesPresent(sub.files || (sub.filename ? [{
+            document_type: sub.document_type
+          }] : [])),
+          completion_percentage: calculateCompletionPercentage(sub),
+          has_errors: sub.status === 'error' || (sub.files || []).some((f: any) => f.status === 'error'),
+          last_activity: formatRelativeTime(timestamp),
+        }
+      }
     )
 
     return submissions
@@ -1031,16 +1044,23 @@ export async function getRecentSubmissions(
 /**
  * Helper: Extract unique document types from files
  */
-function getDocumentTypesPresent(files: RecentSubmissionFile[]): string[] {
+function getDocumentTypesPresent(files: any[]): string[] {
   const types = new Set<string>()
   
   files.forEach(file => {
     if (file.document_type) {
       // Convert document_type codes to human-readable labels
       const label = formatDocumentType(file.document_type)
-      types.add(label)
+      if (label) {
+        types.add(label)
+      }
     }
   })
+  
+  // If no document types found but files exist, show generic "Document"
+  if (types.size === 0 && files.length > 0) {
+    return ['Document']
+  }
   
   return Array.from(types).sort()
 }
@@ -1067,12 +1087,19 @@ function formatDocumentType(docType: string): string {
 /**
  * Helper: Calculate completion percentage based on file statuses
  */
-function calculateCompletionPercentage(submission: RecentSubmission): number {
+function calculateCompletionPercentage(submission: any): number {
   const files = submission.files || []
-  if (files.length === 0) return 0
+  
+  // If no files array, check single file status
+  if (files.length === 0) {
+    if (submission.status === 'ready' || submission.status === 'extracted' || submission.status === 'filled') {
+      return 100
+    }
+    return 0
+  }
   
   const completedFiles = files.filter(
-    (f: RecentSubmissionFile) => f.status === 'ready' || f.status === 'extracted'
+    (f: any) => f.status === 'ready' || f.status === 'extracted' || f.status === 'filled'
   ).length
   
   return Math.round((completedFiles / files.length) * 100)
@@ -1081,25 +1108,42 @@ function calculateCompletionPercentage(submission: RecentSubmission): number {
 /**
  * Helper: Format timestamp as relative time (e.g., "2 hours ago")
  */
-function formatRelativeTime(timestamp: string): string {
-  const date = new Date(timestamp)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
-  const diffHours = Math.floor(diffMins / 60)
-  const diffDays = Math.floor(diffHours / 24)
+function formatRelativeTime(timestamp: string | null | undefined): string {
+  if (!timestamp) return 'Recently'
   
-  if (diffMins < 1) return 'Just now'
-  if (diffMins < 60) return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`
-  if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`
-  if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`
-  
-  // For older dates, return formatted date
-  return date.toLocaleDateString('en-US', { 
-    month: 'short', 
-    day: 'numeric',
-    year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
-  })
+  try {
+    const date = new Date(timestamp)
+    
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      return 'Recently'
+    }
+    
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    
+    // Handle future dates
+    if (diffMs < 0) return 'Just now'
+    
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMins / 60)
+    const diffDays = Math.floor(diffHours / 24)
+    
+    if (diffMins < 1) return 'Just now'
+    if (diffMins < 60) return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`
+    if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`
+    if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`
+    
+    // For older dates, return formatted date
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+    })
+  } catch (err) {
+    console.error('Error formatting date:', timestamp, err)
+    return 'Recently'
+  }
 }
 
 /**

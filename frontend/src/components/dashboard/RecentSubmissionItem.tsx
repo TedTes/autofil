@@ -68,9 +68,9 @@ export default function RecentSubmissionItem({
     if (!submission.template_type) return null
     
     const typeMap = {
-      'property_renewal': '🏢 Property Renewal',
+      'property_renewal': '🏢 Property',
       'wc_quote': '👷 Workers Comp',
-      'gl_new_business': '🛡️ GL New Business',
+      'gl_new_business': '🛡️ GL',
       'custom': '✨ Custom'
     }
     
@@ -79,6 +79,9 @@ export default function RecentSubmissionItem({
 
   const statusConfig = getStatusConfig()
   const StatusIcon = statusConfig.icon
+
+  // Safely display submission name
+  const displayName = submission.name || `Submission ${submission.submission_id.slice(0, 8)}`
 
   return (
     <div
@@ -91,7 +94,7 @@ export default function RecentSubmissionItem({
           {/* Submission name and template type */}
           <div className="flex items-center gap-2 mb-1">
             <h4 className="text-sm font-semibold text-gray-900 truncate">
-              {submission.name}
+              {displayName}
             </h4>
             {submission.template_type && (
               <span className="text-xs text-gray-500 flex-shrink-0">
@@ -105,11 +108,11 @@ export default function RecentSubmissionItem({
             <div className="flex items-center gap-1 text-xs text-gray-600">
               <FileText className="w-3.5 h-3.5" />
               <span>
-                {submission.file_count} file{submission.file_count !== 1 ? 's' : ''}
+                {submission.file_count || 0} file{submission.file_count !== 1 ? 's' : ''}
               </span>
             </div>
             
-            {submission.document_types_present.length > 0 && (
+            {submission.document_types_present && submission.document_types_present.length > 0 && (
               <>
                 <span className="text-gray-300">•</span>
                 <div className="flex flex-wrap gap-1">
@@ -147,11 +150,11 @@ export default function RecentSubmissionItem({
               <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-blue-600 transition-all duration-300"
-                  style={{ width: `${submission.completion_percentage}%` }}
+                  style={{ width: `${submission.completion_percentage || 0}%` }}
                 />
               </div>
               <span className="text-xs text-gray-500 flex-shrink-0">
-                {submission.completion_percentage}%
+                {submission.completion_percentage || 0}%
               </span>
             </div>
           )}
@@ -159,7 +162,7 @@ export default function RecentSubmissionItem({
           {/* Last activity timestamp */}
           <div className="flex items-center gap-1 text-xs text-gray-500">
             <Clock className="w-3.5 h-3.5" />
-            <span>{submission.last_activity}</span>
+            <span>{submission.last_activity || 'Recently'}</span>
           </div>
         </div>
 

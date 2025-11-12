@@ -238,25 +238,31 @@ def download_pdf(submission_id):
 def preview_input_pdf(submission_id):
     """Preview the original input file inline (for iframes)."""
     try:
-        backend_root = os.path.dirname(os.path.dirname(
-            os.path.dirname(os.path.abspath(__file__))
-        ))
-        metadata_path = os.path.join(
-            backend_root, "storage", "data", f"{submission_id}_meta.json"
-        )
+        # Use relative path from current working directory (where Flask runs)
+        metadata_path = os.path.join("storage", "data", f"{submission_id}_meta.json")
+        
+        print(f"🔍 Looking for metadata at: {os.path.abspath(metadata_path)}")
+        print(f"🔍 File exists: {os.path.exists(metadata_path)}")
 
         if not os.path.exists(metadata_path):
-            return jsonify({"error": "Submission not found"}), 404
+            return jsonify({"error": "Submission metadata not found"}), 404
 
         with open(metadata_path, "r") as f:
             metadata = json.load(f)
 
         file_path = metadata.get("upload_path")
+        print(f"🔍 Upload path from metadata: {file_path}")
+        
         if not file_path:
             return jsonify({"error": "File path not found in metadata"}), 404
 
+        # upload_path is already absolute or relative to working directory
         if not os.path.isabs(file_path):
-            file_path = os.path.join(backend_root, file_path)
+            file_path = os.path.abspath(file_path)
+        
+        print(f"🔍 Final file path: {file_path}")
+        print(f"🔍 File exists: {os.path.exists(file_path)}")
+        
         if not os.path.exists(file_path):
             return jsonify({"error": f"File not found: {file_path}"}), 404
 
@@ -268,6 +274,9 @@ def preview_input_pdf(submission_id):
         return response
 
     except Exception as e:
+        print(f"❌ Preview error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 
@@ -275,13 +284,15 @@ def preview_input_pdf(submission_id):
 def preview_output_pdf(submission_id):
     """Preview the filled PDF inline (for iframes)."""
     try:
-        backend_root = os.path.dirname(os.path.dirname(
-            os.path.dirname(os.path.abspath(__file__))
-        ))
+        
         file_path = submission_service.get_output_path(submission_id)
+        
         if not os.path.isabs(file_path):
-            file_path = os.path.join(backend_root, file_path)
+            file_path = os.path.abspath(file_path)
 
+        print(f"🔍 Output file path: {file_path}")
+        print(f"🔍 File exists: {os.path.exists(file_path)}")
+        
         if not os.path.exists(file_path):
             return jsonify({"error": f"File not found: {file_path}"}), 404
 
@@ -293,6 +304,9 @@ def preview_output_pdf(submission_id):
         return response
 
     except Exception as e:
+        print(f"❌ Preview error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 

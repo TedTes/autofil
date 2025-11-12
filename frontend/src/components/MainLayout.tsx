@@ -17,7 +17,6 @@ import {
   AlertTriangle
 } from 'lucide-react'
 import {
-  RecentActivity,
   UploadView,
   HomeView
 } from './'
@@ -275,14 +274,6 @@ export default function MainLayout({ children }: MainLayoutProps) {
                   })}
                 </div>
               </div>
-
-              {/* Recent Activity */}
-              <div>
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-                  RECENT ACTIVITY
-                </h3>
-                <RecentActivity onNavigate={navigateTo} />
-              </div>
             </div>
           ) : (
             <div className="space-y-2">
@@ -364,12 +355,6 @@ export default function MainLayout({ children }: MainLayoutProps) {
                     )
                   })}
                 </div>
-              </div>
-              <div>
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-                  RECENT ACTIVITY
-                </h3>
-                <RecentActivity onNavigate={navigateTo} />
               </div>
             </div>
           </aside>

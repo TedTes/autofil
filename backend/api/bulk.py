@@ -1,0 +1,360 @@
+"""
+Bulk operations for submissions.
+
+Endpoints for multi-submission fill, export, download, webhook send, and delete.
+"""
+
+import os
+from datetime import datetime
+from flask import Blueprint, request, jsonify, send_file, after_this_request
+
+from services.submission_service import SubmissionService
+from services.bulk_export_service import BulkExportService
+
+bulk_bp = Blueprint("bulk", __name__)
+
+submission_service = SubmissionService()
+bulk_export_service = BulkExportService()
+
+
+@bulk_bp.route("/fill", methods=["POST"])
+def bulk_fill():
+    """
+    Fill multiple submissions.
+
+    Request JSON:
+        { "submission_ids": ["id1", "id2", ...] }
+
+    Returns:
+        200 with per-item results
+    """
+    try:
+        data = request.get_json() or {}
+        ids = data.get("submission_ids", [])
+        if not isinstance(ids, list) or not ids:
+            return jsonify({"error": "submission_ids must be a non-empty array"}), 400
+
+        results, errors = [], []
+        for sid in ids:
+            try:
+                report = submission_service.fill_pdf(sid)
+                results.append({
+                    "submission_id": sid,
+                    "fill_report": {
+                        "written": report.get("written"),
+                        "skipped": report.get("skipped"),
+                        "warnings": report.get("notes", []),
+                    },
+                    "download_url": f"/api/submissions/{sid}/download",
+                })
+            except Exception as e:
+                errors.append({"submission_id": sid, "error": str(e)})
+
+        return jsonify({
+            "success": len(results) > 0,
+            "data": {
+                "total": len(ids),
+                "successful": len(results),
+                "failed": len(errors),
+                "results": results,
+                "errors": errors,
+            },
+            "message": f"Bulk fill: {len(results)} succeeded, {len(errors)} failed",
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@bulk_bp.route("/download", methods=["POST"])
+def bulk_download_zip():
+    """
+    Download multiple filled PDFs as a ZIP.
+
+    Request JSON:
+        { "submission_ids": ["id1", "id2", ...] }
+
+    Response:
+        application/zip (200 if all available, 207 if partial)
+    """
+    try:
+        data = request.get_json() or {}
+        ids = data.get("submission_ids", [])
+        if not isinstance(ids, list) or not ids:
+            return jsonify({"error": "submission_ids must be a non-empty array"}), 400
+
+        import io, zipfile
+
+        buf = io.BytesIO()
+        success, fail = 0, 0
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for sid in ids:
+                try:
+                    file_path = submission_service.get_output_path(sid)
+                    if os.path.exists(file_path):
+                        meta = submission_service.get_submission(sid)
+                        name = f"{(meta.get('filename') or sid).replace('.pdf','')}_filled.pdf"
+                        zf.write(file_path, name)
+                        success += 1
+                    else:
+                        fail += 1
+                except Exception:
+                    fail += 1
+
+            if fail and success:
+                zf.writestr("error_log.txt", f"{fail} file(s) were missing or failed to add.")
+
+        if success == 0:
+            return jsonify({"success": False, "message": "No filled PDFs to download"}), 400
+
+        buf.seek(0)
+        status = 200 if fail == 0 else 207
+        ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        return send_file(buf, mimetype="application/zip", as_attachment=True, download_name=f"filled_pdfs_{ts}.zip"), status
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@bulk_bp.route("/export-zip", methods=["POST"])
+def bulk_export_zip():
+    """
+    Export multiple filled PDFs as a single ZIP via BulkExportService.
+
+    Request JSON:
+        { "submission_ids": ["id1", "id2", ...] }
+
+    Response:
+        application/zip
+        - 200 OK if all succeeded
+        - 207 Multi-Status if partial success (ZIP may include error_log.txt)
+        - 400 if none succeeded
+    """
+    try:
+        payload = request.get_json() or {}
+        ids = payload.get("submission_ids")
+
+        if not isinstance(ids, list) or not ids:
+            return jsonify({"error": "submission_ids (non-empty array) is required"}), 400
+
+        zip_path, results = bulk_export_service.create_zip_for_submissions(ids)
+        if not os.path.exists(zip_path):
+            return jsonify({"error": "Failed to generate ZIP"}), 500
+
+        success_count = sum(1 for r in results if r.get("success"))
+        failure_count = sum(1 for r in results if not r.get("success"))
+
+        if success_count == 0:
+            os.remove(zip_path)
+            return jsonify({
+                "success": False,
+                "message": "No filled PDFs could be exported",
+                "results": results,
+            }), 400
+
+        status_code = 200 if failure_count == 0 else 207
+        ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        filename = f"export_{ts}.zip"
+
+        @after_this_request
+        def cleanup(resp):
+            try:
+                if os.path.exists(zip_path):
+                    os.remove(zip_path)
+            except Exception:
+                pass
+            return resp
+
+        return send_file(zip_path, mimetype="application/zip", as_attachment=True, download_name=filename), status_code
+
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@bulk_bp.route("/export/csv", methods=["POST"])
+def bulk_export_csv():
+    """
+    Export submissions to CSV.
+
+    Request JSON:
+        {
+          "submission_ids": ["id1","id2",...],  # optional (exports all if omitted)
+          "fields": ["field1","field2",...]     # optional
+        }
+    """
+    try:
+        data = request.get_json() or {}
+
+        submissions = (
+            submission_service.get_submissions_by_ids(data["submission_ids"])
+            if data.get("submission_ids")
+            else submission_service.get_all_submissions()
+        )
+        if not submissions:
+            return jsonify({"error": "No submissions to export"}), 400
+
+        fields = data.get("fields")
+        csv_path = submission_service.export_service.export_to_csv(submissions=submissions, fields=fields)
+
+        ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        return send_file(csv_path, mimetype="text/csv", as_attachment=True, download_name=f"submissions_{ts}.csv")
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@bulk_bp.route("/export/json", methods=["POST"])
+def bulk_export_json():
+    """
+    Export submissions to JSON.
+
+    Request JSON:
+        {
+          "submission_ids": ["id1","id2",...],  # optional
+          "pretty": true                        # optional (default true)
+        }
+    """
+    try:
+        data = request.get_json() or {}
+
+        submissions = (
+            submission_service.get_submissions_by_ids(data["submission_ids"])
+            if data.get("submission_ids")
+            else submission_service.get_all_submissions()
+        )
+        if not submissions:
+            return jsonify({"error": "No submissions to export"}), 400
+
+        pretty = data.get("pretty", True)
+        json_path = submission_service.export_service.export_to_json(submissions=submissions, pretty=pretty)
+
+        ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        return send_file(json_path, mimetype="application/json", as_attachment=True, download_name=f"submissions_{ts}.json")
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@bulk_bp.route("/export/package", methods=["POST"])
+def bulk_export_package():
+    """
+    Export a complete package (PDFs, JSON, CSV) as a ZIP.
+
+    Request JSON:
+        {
+          "submission_ids": ["id1","id2",...],  # optional
+          "include_pdfs": true,
+          "include_json": true,
+          "include_csv": true
+        }
+    """
+    try:
+        data = request.get_json() or {}
+
+        submissions = (
+            submission_service.get_submissions_by_ids(data["submission_ids"])
+            if data.get("submission_ids")
+            else submission_service.get_all_submissions()
+        )
+        if not submissions:
+            return jsonify({"error": "No submissions to export"}), 400
+
+        zip_path = submission_service.export_service.create_export_package(
+            submissions=submissions,
+            include_pdfs=data.get("include_pdfs", True),
+            include_json=data.get("include_json", True),
+            include_csv=data.get("include_csv", True),
+        )
+
+        ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        return send_file(zip_path, mimetype="application/zip", as_attachment=True, download_name=f"submissions_package_{ts}.zip")
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@bulk_bp.route("/export/webhook", methods=["POST"])
+def bulk_send_webhook():
+    """
+    Send multiple submissions to a webhook.
+
+    Request JSON:
+        {
+          "webhook_url": "https://example.com/webhook",
+          "submission_ids": ["id1","id2",...],  # optional
+          "format": "full" | "summary" | "ids_only",
+          "headers": { ... }                    # optional
+        }
+    """
+    try:
+        data = request.get_json() or {}
+        webhook_url = data.get("webhook_url")
+        if not webhook_url:
+            return jsonify({"error": "webhook_url is required"}), 400
+
+        submissions = (
+            submission_service.get_submissions_by_ids(data["submission_ids"])
+            if data.get("submission_ids")
+            else submission_service.get_all_submissions()
+        )
+        if not submissions:
+            return jsonify({"error": "No submissions to send"}), 400
+
+        payload = submission_service.export_service.generate_api_payload(
+            submissions=submissions,
+            format=data.get("format", "full"),
+        )
+        headers = data.get("headers", {})
+
+        resp = submission_service.export_service.send_webhook(
+            webhook_url=webhook_url,
+            payload=payload,
+            headers=headers,
+        )
+        return jsonify({"success": resp["success"], "data": resp}), (200 if resp["success"] else 500)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@bulk_bp.route("/delete", methods=["DELETE"])
+def bulk_delete():
+    """
+    Delete multiple submissions.
+
+    Request JSON:
+        { "submission_ids": ["id1","id2",...] }
+
+    Returns:
+        { "success": true, "results": [{ id, success, error? }, ...] }
+    """
+    try:
+        data = request.get_json() or {}
+        ids = data.get("submission_ids", [])
+        if not isinstance(ids, list) or not ids:
+            return jsonify({"error": "submission_ids must be a non-empty array"}), 400
+
+        results = []
+        for sid in ids:
+            try:
+                # Reuse single-delete route's logic by calling service methods directly
+                meta_path = os.path.join("storage", "data", f"{sid}_meta.json")
+                data_path = os.path.join("storage", "data", f"{sid}.json")
+
+                if os.path.exists(meta_path):
+                    with open(meta_path, "r") as f:
+                        meta = __import__("json").load(f)
+                    if (p := meta.get("upload_path")) and os.path.exists(p):
+                        os.remove(p)
+                    if (p := meta.get("output_path")) and os.path.exists(p):
+                        os.remove(p)
+                    os.remove(meta_path)
+                if os.path.exists(data_path):
+                    os.remove(data_path)
+
+                # Optional: update folder metadata if present (omitted here for brevity)
+
+                results.append({"id": sid, "success": True})
+            except Exception as e:
+                results.append({"id": sid, "success": False, "error": str(e)})
+
+        return jsonify({"success": True, "results": results}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

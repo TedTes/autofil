@@ -675,3 +675,47 @@ def get_submissions_stats():
         }), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@submission_bp.route('/recent', methods=['GET'])
+def list_recent_submissions():
+    """
+    List recent submissions by last activity (uploaded/edited/filled/updated).
+    
+    Query params:
+      - limit (int, default 20)
+      - offset (int, default 0)
+      - status (comma-separated list, optional)
+      - folder_id (str, optional)
+      - since (ISO datetime, optional) -> only items with activity >= since
+    """
+    try:
+        limit = int(request.args.get('limit', 20))
+        offset = int(request.args.get('offset', 0))
+        status_param = request.args.get('status')
+        folder_id = request.args.get('folder_id')
+        since = request.args.get('since')
+
+        statuses = [s.strip() for s in status_param.split(',')] if status_param else None
+
+        result = submission_service.get_recent_submissions(
+            limit=limit,
+            offset=offset,
+            status=statuses,
+            folder_id=folder_id,
+            since=since,
+        )
+
+        return jsonify({
+            "success": True,
+            "data": {
+                "submissions": result["items"],
+                "total": result["total"],
+                "limit": limit,
+                "offset": offset
+            },
+            "message": "Recent submissions retrieved successfully"
+        }), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

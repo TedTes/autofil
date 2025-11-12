@@ -1,16 +1,17 @@
 'use client'
 
-import React, { useRef, useState ,useCallback } from 'react'
+import React, { useRef, useState ,useCallback,useEffect } from 'react'
 import { 
   CheckSquare, Calendar, Download, FileText, TrendingUp, Zap, Clock, 
   CheckCircle2, Upload, File, FileSpreadsheet, X, Eye, Check
 } from 'lucide-react'
-import { uploadPdf, getSubmission, downloadPdf,bulkSaveSubmissions, updateSubmissionStatus } from '@/lib/api-client'
+import { uploadPdf, getSubmission, downloadPdf,bulkSaveSubmissions, updateSubmissionStatus,getRecentSubmissions } from '@/lib/api-client'
 import { ConfidenceBadgeCompact } from '@/components/ConfidenceBadge'
 import {formatDate,formatFileSize, formatFileType} from "../lib/utils";
 import { ExtractionReviewPanel } from './extraction'
-import type { WorkflowFile, WorkflowStep } from '@/types/workflow'
+import type { WorkflowFile, WorkflowStep,RecentSubmission  } from '@/types'
 import { UnsavedChangesDialog } from './shared/UnsavedChangesDialog'
+import RecentSubmissionsCard from './dashboard/RecentSubmissionsCard'
 
 type Phase = 'upload' | 'extract' | 'export'
 type JSONValue =
@@ -44,7 +45,35 @@ type HomeViewProps = {
 }
 
 export function HomeView({ totalSubmissions, onUploadComplete, onGoToFile ,onUnsavedChangesUpdate,onDocumentsSaved}: HomeViewProps) {
-  if (totalSubmissions === 0) {
+  const [recentSubmissions, setRecentSubmissions] = useState<RecentSubmission[]>([])
+const [loadingRecent, setLoadingRecent] = useState(false)
+
+useEffect(() => {
+  loadRecentSubmissions()
+}, [])
+// Load recent submissions
+const loadRecentSubmissions = async () => {
+  try {
+    setLoadingRecent(true)
+    const data = await getRecentSubmissions({ 
+      limit: 5,
+      include_files: true 
+    })
+    setRecentSubmissions(data)
+  } catch (error) {
+    console.error('Failed to load recent submissions:', error)
+  } finally {
+    setLoadingRecent(false)
+  }
+}  
+
+// Handle recent submission click
+const handleRecentSubmissionClick = (submissionId: string) => {
+  if (onGoToFile) {
+    onGoToFile(submissionId)
+  }
+}
+if (totalSubmissions === 0) {
     return (
       <EmptyDashboardState
         onUploadComplete={onUploadComplete}

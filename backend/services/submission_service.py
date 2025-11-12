@@ -363,6 +363,7 @@ class SubmissionService:
                 return output_path
         # Fallback to legacy path
         output_path = os.path.join(self.outputs_dir, f"{submission_id}_filled.pdf")
+
         return output_path
     
     def create_submission(
@@ -614,6 +615,84 @@ class SubmissionService:
             json.dump(metadata, f, indent=2)
 
         return {'submission_id': submission_id, 'status': status}
+
+    def _parse_iso(self, s: Optional[str]) -> Optional[datetime]:
+        if not s:
+            return None
+        try:
+            # handle plain ISO and ISO with Z
+            return datetime.fromisoformat(s.replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    def get_recent_submissions(
+        self,
+        limit: int = 20,
+        offset: int = 0,
+        status: Optional[List[str]] = None,
+        folder_id: Optional[str] = None,
+        since: Optional[str] = None,   # optional ISO string to filter by activity >= since
+    ) -> Dict[str, Any]:
+        """
+        Returns submissions sorted by latest activity desc.
+        Activity = max(uploaded_at, last_edited_at, filled_at, updated_at) that exists.
+        """
+        subs = self.get_all_submissions()
+
+        # optional filters
+        if status:
+            status_set = set(status)
+            subs = [s for s in subs if s.get("status") in status_set]
+        if folder_id:
+            subs = [s for s in subs if s.get("folder_id") == folder_id]
+
+        since_dt = self._parse_iso(since) if since else None
+
+        def activity_dt(s: Dict[str, Any]) -> datetime:
+            # try multiple fields and pick the latest that exists
+            candidates = [
+                self._parse_iso(s.get("last_edited_at")),
+                self._parse_iso(s.get("filled_at")),
+                self._parse_iso(s.get("updated_at")),
+                self._parse_iso(s.get("uploaded_at")),
+            ]
+            # fallback very old date if none exist
+            return max([c for c in candidates if c is not None] or [datetime.min.replace(tzinfo=None)])
+
+        # annotate with activity for sorting and optional since
+        annotated = []
+        for s in subs:
+            act = activity_dt(s)
+            if since_dt and act < since_dt:
+                continue
+            s_copy = dict(s)
+            s_copy["last_activity_at"] = act.isoformat()
+            annotated.append(s_copy)
+
+        # sort newest first
+        annotated.sort(key=lambda x: x["last_activity_at"], reverse=True)
+
+        total = len(annotated)
+        page = annotated[offset: offset + limit]
+
+        # return compact rows (add any fields you want in the list)
+        items = [
+            {
+                "submission_id": r.get("submission_id"),
+                "filename": r.get("filename"),
+                "status": r.get("status"),
+                "folder_id": r.get("folder_id"),
+                "uploaded_at": r.get("uploaded_at"),
+                "last_edited_at": r.get("last_edited_at"),
+                "filled_at": r.get("filled_at"),
+                "updated_at": r.get("updated_at"),
+                "last_activity_at": r.get("last_activity_at"),
+                "confidence": r.get("confidence"),
+            }
+            for r in page
+        ]
+
+        return {"items": items, "total": total}
     
 
 

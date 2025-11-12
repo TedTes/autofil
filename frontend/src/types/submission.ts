@@ -59,7 +59,7 @@ export interface RecentSubmission {
 export interface RecentSubmissionFile {
   file_id: string
   filename: string
-  status: 'uploading' | 'uploaded' | 'extracting' | 'ready' | 'error'
+  status: 'uploading' | 'uploaded' | 'extracting' | 'ready' | 'error' | 'extracted'
   document_type?: string             // e.g., 'ACORD_126', 'LOSS_RUN', 'SOV'
   confidence?: number
   uploaded_at: string

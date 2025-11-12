@@ -9,7 +9,7 @@ import type {
   SubmissionDetail,
   Folder,
   FillReport,
-  ExtractionData
+  RecentSubmissionFile
 } from '@/types'
 
 import { transformEntities } from './entity-transformer'
@@ -952,6 +952,180 @@ export async function getBulkExportProgress(jobId: string): Promise<{
     return response.data
   } catch (error) {
     console.error('Get export progress error:', error)
+    throw error
+  }
+}
+
+
+/**
+ * API client functions for Recent Submissions feature
+ */
+
+import type { 
+  RecentSubmission, 
+  RecentSubmissionsQuery, 
+  RecentSubmissionsResponse 
+} from '@/types'
+
+/**
+ * Fetch recent submissions for dashboard display
+ * Returns submissions sorted by most recently updated
+ */
+export async function getRecentSubmissions(
+  query?: RecentSubmissionsQuery
+): Promise<RecentSubmission[]> {
+  try {
+    const params = new URLSearchParams()
+    
+    // Default to 5 most recent submissions
+    const limit = query?.limit ?? 5
+    params.append('limit', limit.toString())
+    
+    // Include file details by default
+    const includeFiles = query?.include_files ?? true
+    params.append('include_files', includeFiles.toString())
+    
+    // Sort by updated_at by default (most recent first)
+    const sortBy = query?.sort_by ?? 'updated_at'
+    params.append('sort_by', sortBy)
+    
+    const sortOrder = query?.sort_order ?? 'desc'
+    params.append('sort_order', sortOrder)
+    
+    // Optional status filter
+    if (query?.status_filter && query.status_filter.length > 0) {
+      params.append('status', query.status_filter.join(','))
+    }
+
+    const queryString = params.toString()
+    const url = `/submissions/recent${queryString ? `?${queryString}` : ''}`
+    
+    const response = await api.get(url)
+    
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to fetch recent submissions')
+    }
+
+    // Transform the response to include computed fields
+    const submissions: RecentSubmission[] = (response.data?.data?.submissions || []).map(
+      (sub: RecentSubmission) => ({
+        ...sub,
+        // Compute document types present from files
+        document_types_present: getDocumentTypesPresent(sub.files || []),
+        // Compute completion percentage
+        completion_percentage: calculateCompletionPercentage(sub),
+        // Check for errors
+        has_errors: sub.status === 'error' || (sub.files || []).some((f: RecentSubmissionFile) => f.status === 'error'),
+        // Format last activity as human-readable
+        last_activity: formatRelativeTime(sub.updated_at),
+      })
+    )
+
+    return submissions
+  } catch (error) {
+    console.error('Get recent submissions error:', error)
+    throw error
+  }
+}
+
+/**
+ * Helper: Extract unique document types from files
+ */
+function getDocumentTypesPresent(files: RecentSubmissionFile[]): string[] {
+  const types = new Set<string>()
+  
+  files.forEach(file => {
+    if (file.document_type) {
+      // Convert document_type codes to human-readable labels
+      const label = formatDocumentType(file.document_type)
+      types.add(label)
+    }
+  })
+  
+  return Array.from(types).sort()
+}
+
+/**
+ * Helper: Format document type code to human-readable label
+ */
+function formatDocumentType(docType: string): string {
+  const typeMap: Record<string, string> = {
+    'ACORD_126': 'ACORD 126',
+    'ACORD_125': 'ACORD 125',
+    'ACORD_130': 'ACORD 130',
+    'ACORD_140': 'ACORD 140',
+    'LOSS_RUN': 'Loss Run',
+    'SOV': 'SOV',
+    'FINANCIAL_STATEMENT': 'Financial Statement',
+    'SUPPLEMENTAL': 'Supplemental',
+    'GENERIC': 'Document',
+  }
+  
+  return typeMap[docType] || docType
+}
+
+/**
+ * Helper: Calculate completion percentage based on file statuses
+ */
+function calculateCompletionPercentage(submission: RecentSubmission): number {
+  const files = submission.files || []
+  if (files.length === 0) return 0
+  
+  const completedFiles = files.filter(
+    (f: RecentSubmissionFile) => f.status === 'ready' || f.status === 'extracted'
+  ).length
+  
+  return Math.round((completedFiles / files.length) * 100)
+}
+
+/**
+ * Helper: Format timestamp as relative time (e.g., "2 hours ago")
+ */
+function formatRelativeTime(timestamp: string): string {
+  const date = new Date(timestamp)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMins / 60)
+  const diffDays = Math.floor(diffHours / 24)
+  
+  if (diffMins < 1) return 'Just now'
+  if (diffMins < 60) return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`
+  if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`
+  if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`
+  
+  // For older dates, return formatted date
+  return date.toLocaleDateString('en-US', { 
+    month: 'short', 
+    day: 'numeric',
+    year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+  })
+}
+
+/**
+ * Get a single recent submission by ID with computed metadata
+ */
+export async function getRecentSubmissionById(
+  submissionId: string
+): Promise<RecentSubmission> {
+  try {
+    const response = await api.get(`/submissions/${submissionId}`)
+    
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to fetch submission')
+    }
+    
+    const sub = response.data.submission
+    
+    return {
+      ...sub,
+      document_types_present: getDocumentTypesPresent(sub.files || []),
+      completion_percentage: calculateCompletionPercentage(sub),
+      has_errors: sub.status === 'error' || (sub.files || []).some((f: RecentSubmissionFile) => f.status === 'error'),
+      last_activity: formatRelativeTime(sub.updated_at),
+    }
+  } catch (error) {
+    console.error('Get recent submission by ID error:', error)
     throw error
   }
 }

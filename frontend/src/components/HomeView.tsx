@@ -80,6 +80,7 @@ if (totalSubmissions === 0) {
         onGoToFile={onGoToFile}
          onUnsavedChangesUpdate={onUnsavedChangesUpdate}
          onDocumentsSaved= {onDocumentsSaved}
+         onRecentSubmissionClick={handleRecentSubmissionClick}
       />
     )
   }
@@ -109,12 +110,14 @@ function EmptyDashboardState({
   onUploadComplete,
   onGoToFile,
   onUnsavedChangesUpdate,
-  onDocumentsSaved
+  onDocumentsSaved,
+  onRecentSubmissionClick
 }: {
   onUploadComplete?: (uploadedCount: number) => void
   onGoToFile?: (submissionId: string, filename?: string) => void
   onUnsavedChangesUpdate?: (hasChanges: boolean) => void
-  onDocumentsSaved?: (count: number) => void
+  onDocumentsSaved?: (count: number) => void,
+  onRecentSubmissionClick?: (submissionId: string) => void
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isUploading, setIsUploading] = useState(false)
@@ -719,7 +722,13 @@ const handleSaveAll = async (fileIds: string[]) => {
           isSaving={isSaving}
         />
       )}
-
+      {/* Recent Submissions Section  */}
+      <div className="mt-8">
+        <RecentSubmissionsCard
+          limit={5}
+          onSubmissionClick={onRecentSubmissionClick}
+        />
+      </div>
       {/* Separator */}
       {workflowStep === 'upload' && (
         <>

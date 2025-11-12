@@ -39,7 +39,7 @@ export interface RecentSubmission {
   template_type?: 'property_renewal' | 'wc_quote' | 'gl_new_business' | 'custom'
   created_at: string
   updated_at: string
-  status: 'created' | 'uploading' | 'extracting' | 'ready' | 'filled' | 'error'
+  status: 'created' | 'uploading' | 'extracting' | 'ready' | 'filled' | 'error' | 'extracted'
   
   // Aggregated file info
   file_count: number
@@ -59,10 +59,16 @@ export interface RecentSubmission {
 export interface RecentSubmissionFile {
   file_id: string
   filename: string
-  status: 'uploading' | 'uploaded' | 'extracting' | 'ready' | 'error' | 'extracted'
+  status: 'uploading' | 'uploaded' | 'extracting' | 'ready' | 'error' | 'extracted' | 'filled'
   document_type?: string             // e.g., 'ACORD_126', 'LOSS_RUN', 'SOV'
   confidence?: number
   uploaded_at: string
+  last_activity_at?:string
+  last_edited_at?:string
+  updated_at?:string;
+  submission_id:string
+  filled_at?:string
+  folder_id?:string
 }
 
 /**

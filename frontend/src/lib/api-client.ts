@@ -9,8 +9,11 @@ import type {
   SubmissionDetail,
   Folder,
   FillReport,
-  RecentSubmissionFile
+  RecentSubmissionFile,
+  RecentSubmission, 
+  RecentSubmissionsQuery
 } from '@/types'
+
 
 import { transformEntities } from './entity-transformer'
 import {isCanonicalOutput} from "../lib/utils";
@@ -957,19 +960,10 @@ export async function getBulkExportProgress(jobId: string): Promise<{
 }
 
 
-/**
- * API client functions for Recent Submissions feature
- */
 
-import type { 
-  RecentSubmission, 
-  RecentSubmissionsQuery, 
-  RecentSubmissionsResponse 
-} from '@/types'
 
 /**
  * Fetch recent submissions for dashboard display
- * Returns submissions sorted by most recently updated
  */
 export async function getRecentSubmissions(
   query?: RecentSubmissionsQuery
@@ -977,22 +971,18 @@ export async function getRecentSubmissions(
   try {
     const params = new URLSearchParams()
     
-    // Default to 5 most recent submissions
     const limit = query?.limit ?? 5
     params.append('limit', limit.toString())
     
-    // Include file details by default
     const includeFiles = query?.include_files ?? true
     params.append('include_files', includeFiles.toString())
     
-    // Sort by updated_at by default (most recent first)
     const sortBy = query?.sort_by ?? 'updated_at'
     params.append('sort_by', sortBy)
     
     const sortOrder = query?.sort_order ?? 'desc'
     params.append('sort_order', sortOrder)
     
-    // Optional status filter
     if (query?.status_filter && query.status_filter.length > 0) {
       params.append('status', query.status_filter.join(','))
     }
@@ -1006,33 +996,43 @@ export async function getRecentSubmissions(
       throw new Error(response.data.error || 'Failed to fetch recent submissions')
     }
 
-    // Transform the response to include computed fields
-    const submissions: RecentSubmission[] = (response.data?.data?.submissions || []).map(
-      (sub: any) => {
-        // Use the correct timestamp field from API
-        const timestamp = sub.last_activity_at || sub.updated_at || sub.uploaded_at
-        
-        return {
-          ...sub,
-          name: sub.name || sub.filename || `Submission ${sub.submission_id.slice(0, 8)}`,
-          file_count: sub.files?.length || (sub.filename ? 1 : 0),
-          files: sub.files || (sub.filename ? [{
-            file_id: sub.submission_id,
-            filename: sub.filename,
-            status: sub.status,
-            document_type: sub.document_type,
-            confidence: sub.confidence,
-            uploaded_at: sub.uploaded_at
-          }] : []),
-          document_types_present: getDocumentTypesPresent(sub.files || (sub.filename ? [{
-            document_type: sub.document_type
-          }] : [])),
-          completion_percentage: calculateCompletionPercentage(sub),
-          has_errors: sub.status === 'error' || (sub.files || []).some((f: any) => f.status === 'error'),
-          last_activity: formatRelativeTime(timestamp),
-        }
+    const rawSubmissions: Partial<RecentSubmissionFile>[] = response.data?.data?.submissions || []
+    
+    const submissions: RecentSubmission[] = rawSubmissions.map(sub => {
+      // Use available timestamp fields
+      const timestamp = sub.last_activity_at || sub.updated_at || sub.uploaded_at || ''
+      
+      // Build files array - API returns submission-level data that needs to be converted to file format
+      const files: RecentSubmissionFile[] = sub.filename ? [{
+        file_id: sub.submission_id || '',
+        filename: sub.filename,
+        status: (sub.status as RecentSubmissionFile['status']) || 'ready',
+        document_type: sub.document_type,
+        confidence: sub.confidence,
+        uploaded_at: sub.uploaded_at || '',
+        submission_id: sub.submission_id || '',
+        last_activity_at: sub.last_activity_at,
+        updated_at: sub.updated_at,
+        filled_at: sub.filled_at,
+        folder_id: sub.folder_id,
+      }] : []
+      
+      return {
+        submission_id: sub.submission_id || '',
+        client_id: '',
+        name: sub.filename || `Submission ${(sub.submission_id || '').slice(0, 8)}`,
+        template_type: undefined, 
+        created_at: sub.uploaded_at || '',
+        updated_at: timestamp,
+        status: (sub.status as RecentSubmission['status']) || 'ready',
+        file_count: files.length,
+        files: files,
+        document_types_present: getDocumentTypesPresent(files),
+        completion_percentage: calculateCompletionPercentage(sub.status as RecentSubmission['status'], files),
+        has_errors: sub.status === 'error',
+        last_activity: formatRelativeTime(timestamp),
       }
-    )
+    })
 
     return submissions
   } catch (error) {
@@ -1044,12 +1044,11 @@ export async function getRecentSubmissions(
 /**
  * Helper: Extract unique document types from files
  */
-function getDocumentTypesPresent(files: any[]): string[] {
+function getDocumentTypesPresent(files: RecentSubmissionFile[]): string[] {
   const types = new Set<string>()
   
   files.forEach(file => {
     if (file.document_type) {
-      // Convert document_type codes to human-readable labels
       const label = formatDocumentType(file.document_type)
       if (label) {
         types.add(label)
@@ -1057,7 +1056,6 @@ function getDocumentTypesPresent(files: any[]): string[] {
     }
   })
   
-  // If no document types found but files exist, show generic "Document"
   if (types.size === 0 && files.length > 0) {
     return ['Document']
   }
@@ -1085,36 +1083,32 @@ function formatDocumentType(docType: string): string {
 }
 
 /**
- * Helper: Calculate completion percentage based on file statuses
+ * Helper: Calculate completion percentage
  */
-function calculateCompletionPercentage(submission: any): number {
-  const files = submission.files || []
-  
-  // If no files array, check single file status
+function calculateCompletionPercentage(
+  status: RecentSubmission['status'] | undefined,
+  files: RecentSubmissionFile[]
+): number {
   if (files.length === 0) {
-    if (submission.status === 'ready' || submission.status === 'extracted' || submission.status === 'filled') {
-      return 100
-    }
-    return 0
+    return (status === 'ready' || status === 'extracted' || status === 'filled') ? 100 : 0
   }
   
   const completedFiles = files.filter(
-    (f: any) => f.status === 'ready' || f.status === 'extracted' || f.status === 'filled'
+    f => f.status === 'ready' || f.status === 'extracted' || f.status === 'filled'
   ).length
   
   return Math.round((completedFiles / files.length) * 100)
 }
 
 /**
- * Helper: Format timestamp as relative time (e.g., "2 hours ago")
+ * Helper: Format timestamp as relative time
  */
-function formatRelativeTime(timestamp: string | null | undefined): string {
+function formatRelativeTime(timestamp: string): string {
   if (!timestamp) return 'Recently'
   
   try {
     const date = new Date(timestamp)
     
-    // Check if date is valid
     if (isNaN(date.getTime())) {
       return 'Recently'
     }
@@ -1122,7 +1116,6 @@ function formatRelativeTime(timestamp: string | null | undefined): string {
     const now = new Date()
     const diffMs = now.getTime() - date.getTime()
     
-    // Handle future dates
     if (diffMs < 0) return 'Just now'
     
     const diffMins = Math.floor(diffMs / 60000)
@@ -1134,7 +1127,6 @@ function formatRelativeTime(timestamp: string | null | undefined): string {
     if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`
     if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`
     
-    // For older dates, return formatted date
     return date.toLocaleDateString('en-US', { 
       month: 'short', 
       day: 'numeric',
@@ -1145,6 +1137,7 @@ function formatRelativeTime(timestamp: string | null | undefined): string {
     return 'Recently'
   }
 }
+
 
 /**
  * Get a single recent submission by ID with computed metadata
@@ -1159,14 +1152,40 @@ export async function getRecentSubmissionById(
       throw new Error(response.data.error || 'Failed to fetch submission')
     }
     
-    const sub = response.data.submission
+    const sub: Partial<RecentSubmissionFile> = response.data.submission
+    
+    // Use available timestamp fields
+    const timestamp = sub.last_activity_at || sub.updated_at || sub.uploaded_at || ''
+    
+    // Build files array
+    const files: RecentSubmissionFile[] = sub.filename ? [{
+      file_id: sub.submission_id || '',
+      filename: sub.filename,
+      status: (sub.status as RecentSubmissionFile['status']) || 'ready',
+      document_type: sub.document_type,
+      confidence: sub.confidence,
+      uploaded_at: sub.uploaded_at || '',
+      submission_id: sub.submission_id || '',
+      last_activity_at: sub.last_activity_at,
+      updated_at: sub.updated_at,
+      filled_at: sub.filled_at,
+      folder_id: sub.folder_id,
+    }] : []
     
     return {
-      ...sub,
-      document_types_present: getDocumentTypesPresent(sub.files || []),
-      completion_percentage: calculateCompletionPercentage(sub),
-      has_errors: sub.status === 'error' || (sub.files || []).some((f: RecentSubmissionFile) => f.status === 'error'),
-      last_activity: formatRelativeTime(sub.updated_at),
+      submission_id: sub.submission_id || '',
+      client_id: '',
+      name: sub.filename || `Submission ${(sub.submission_id || '').slice(0, 8)}`,
+      template_type: undefined,
+      created_at: sub.uploaded_at || '',
+      updated_at: timestamp,
+      status: (sub.status as RecentSubmission['status']) || 'ready',
+      file_count: files.length,
+      files: files,
+      document_types_present: getDocumentTypesPresent(files),
+      completion_percentage: calculateCompletionPercentage(sub.status as RecentSubmission['status'], files),
+      has_errors: sub.status === 'error',
+      last_activity: formatRelativeTime(timestamp),
     }
   } catch (error) {
     console.error('Get recent submission by ID error:', error)

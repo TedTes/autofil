@@ -1193,12 +1193,12 @@ def list_all_submissions():
         
         # Get all submissions
         all_submissions = submission_service.get_all_submissions()
-        
         # Filter by status if provided
         if status_filter:
+            statuses = [s.strip() for s in status_filter.split(',')] if status_filter else []
             all_submissions = [
                 s for s in all_submissions 
-                if s.get('status') == status_filter
+                if s.get('status') in statuses
             ]
         
         # Apply pagination
@@ -1364,6 +1364,54 @@ def patch_submission_data(submission_id):
             "success": True,
             "submission_id": submission_id,
             "message": "Updated"
+        }), 200
+
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@submission_bp.route('/<submission_id>/status', methods=['PATCH'])
+def update_submission_status(submission_id):
+    """
+    Update the workflow status of a submission.
+
+    PATCH body JSON must contain:
+        {
+          "workflow_status": "uploaded" | "extracted" | "reviewing"
+                             | "saved" | "finalized" | …
+        }
+
+    Response:
+        {
+          "success": true,
+          "submission_id": "<submission_id>",
+          "workflow_status": "<new_status>"
+        }
+    """
+    try:
+        payload = request.get_json() or {}
+        new_status = payload.get('workflow_status')
+        if not new_status:
+            return jsonify({'error': '`workflow_status` is required'}), 400
+
+        # Optional: validate that new_status is one of the allowed values
+        # allowed_statuses = {'uploaded','extracted','reviewing','saved','finalized'}
+        # if new_status not in allowed_statuses:
+        #     return jsonify({'error': f'Invalid status: {new_status}'}), 400
+
+        submission_service.update_status(
+            submission_id=submission_id,
+            status=new_status,
+            user=payload.get('user', 'system')
+        )
+
+        return jsonify({
+            'success': True,
+            'data' :{
+             'submission_id': submission_id,
+            'workflow_status': new_status
+            }
         }), 200
 
     except ValueError as e:

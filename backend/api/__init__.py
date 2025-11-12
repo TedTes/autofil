@@ -17,7 +17,6 @@ def create_app():
     # Register blueprints
     from .routes  import (submission_bp,folder_bp, health_bp,extraction_bp,client_bp,bulk_export_bp)
 
-   
     app.register_blueprint(submission_bp, url_prefix='/api/submissions')
     app.register_blueprint(bulk_export_bp, url_prefix="/api/submissions/bulk")
     app.register_blueprint(folder_bp, url_prefix='/api/folders')
@@ -29,7 +28,7 @@ def create_app():
     CORS(app, resources={
         r"/api/*": {
             "origins": os.environ.get("CORS_ORIGINS","http://localhost:3000").split(","), 
-            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS","PATCH"],
             "allow_headers": ["Content-Type"]
         }
     })

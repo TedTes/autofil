@@ -808,15 +808,15 @@ export async function getAllSubmissions(options?: {
     }
 
     const queryString = params.toString()
-    const url = `/submissions${queryString ? `?${queryString}` : ''}`
+    const url = `/submissions/list${queryString ? `?${queryString}` : ''}`
     
     const response = await api.get(url)
     
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to fetch submissions')
     }
-    
-    return response.data.submissions || []
+
+    return response.data?.data?.submissions || []
   } catch (error) {
     console.error('Get submissions error:', error)
     throw error
@@ -835,22 +835,14 @@ export async function updateSubmissionStatus(
   workflow_status: string
 }> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/submissions/${submissionId}/status`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        workflow_status: status,
-      }),
-    })
+    const response = await api.patch(`/submissions/${submissionId}/status`, {
+    workflow_status: status,
+  })
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
-    }
-
-    return await response.json()
+  if (!response.data.success) {
+    throw new Error(response.data.error || 'Failed to update status')
+  }
+  return response.data
   } catch (error) {
     console.error('Update status error:', error)
     throw error
@@ -917,7 +909,7 @@ export async function updateSubmissionData(
  */
 export async function bulkExportAsZip(submissionIds: string[]): Promise<Blob> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/submissions/bulk-export-zip`, {
+    const response = await fetch(`${API_BASE_URL}/api/submissions/bulk/export-zip`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

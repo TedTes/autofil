@@ -146,6 +146,19 @@ useEffect(() => {
   return () => document.removeEventListener('keydown', handleKeyDown)
 }, [searchQuery])
 
+useEffect(() => {
+  loadFiles()
+}, [])
+
+useEffect(() => {
+  if (shouldRefresh) {
+    (async () => {
+      await loadFiles()
+      onRefreshComplete?.()
+    })()
+  }
+}, [shouldRefresh, onRefreshComplete])
+
 // Helper to check if file was saved recently (last 24 hours)
 const isRecentlySaved = (uploadedAt: string): boolean => {
   const uploadDate = new Date(uploadedAt)
@@ -170,6 +183,8 @@ const loadFiles = async () => {
     const data = await getAllSubmissions({ 
       status: ['saved', 'finalized'] 
     })
+    console.log("from document view")
+    console.log(data)
     setFiles(data)
   } catch (error) {
     console.error('Failed to refresh submissions:', error)

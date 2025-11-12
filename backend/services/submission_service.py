@@ -555,7 +555,6 @@ class SubmissionService:
                         submissions.append(submission)
                 except:
                     continue
-        
         return submissions
 
     def get_submissions_by_ids(self, submission_ids: List[str]) -> List[Dict[str, Any]]:
@@ -579,6 +578,42 @@ class SubmissionService:
                 continue
         
         return submissions
+
+    def update_status(self, submission_id: str, status: str, user: str = 'system') -> dict:
+        """
+        Update the workflow status of a submission.
+
+        Args:
+            submission_id: Unique identifier for the submission.
+            status: New workflow status (e.g., 'uploaded', 'extracted',
+                'reviewing', 'saved', 'finalized', etc.).
+            user: Username/email of the user making the update.
+
+        Returns:
+            Dictionary with the updated submission ID and status.
+
+        Raises:
+            ValueError: If the submission does not exist.
+        """
+        metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
+        if not os.path.exists(metadata_path):
+            raise ValueError("Submission not found")
+
+        # Load metadata
+        with open(metadata_path, 'r') as f:
+            metadata = json.load(f)
+
+        # Update status and audit fields
+        metadata['status'] = status
+        metadata['workflow_status'] = status  # optional alias expected by clients
+        metadata['updated_at'] = datetime.utcnow().isoformat()
+        metadata['updated_by'] = user
+
+        # Persist changes
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f, indent=2)
+
+        return {'submission_id': submission_id, 'status': status}
     
 
 

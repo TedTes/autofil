@@ -506,6 +506,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
                   console.log(`${count} document(s) saved`)
                   setDocumentsNeedRefresh(true)
                 }}
+                onNavigateToDocuments={() => navigateTo('documents', undefined, ['Home', 'Documents'])}
               />
             )}
 

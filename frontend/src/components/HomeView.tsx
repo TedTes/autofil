@@ -42,9 +42,10 @@ type HomeViewProps = {
   onGoToFile?: (submissionId: string, filename?: string) => void
   onUnsavedChangesUpdate?: (hasChanges: boolean) => void
   onDocumentsSaved?: (count: number) => void
+  onNavigateToDocuments?: () => void
 }
 
-export function HomeView({ totalSubmissions, onUploadComplete, onGoToFile ,onUnsavedChangesUpdate,onDocumentsSaved}: HomeViewProps) {
+export function HomeView({ totalSubmissions, onUploadComplete, onGoToFile ,onUnsavedChangesUpdate,onDocumentsSaved,onNavigateToDocuments}: HomeViewProps) {
   const [recentSubmissions, setRecentSubmissions] = useState<RecentSubmission[]>([])
 const [loadingRecent, setLoadingRecent] = useState(false)
 
@@ -81,6 +82,7 @@ if (totalSubmissions === 0) {
          onUnsavedChangesUpdate={onUnsavedChangesUpdate}
          onDocumentsSaved= {onDocumentsSaved}
          onRecentSubmissionClick={handleRecentSubmissionClick}
+         onNavigateToDocuments={onNavigateToDocuments}
       />
     )
   }
@@ -111,13 +113,15 @@ function EmptyDashboardState({
   onGoToFile,
   onUnsavedChangesUpdate,
   onDocumentsSaved,
-  onRecentSubmissionClick
+  onRecentSubmissionClick,
+  onNavigateToDocuments
 }: {
   onUploadComplete?: (uploadedCount: number) => void
   onGoToFile?: (submissionId: string, filename?: string) => void
   onUnsavedChangesUpdate?: (hasChanges: boolean) => void
   onDocumentsSaved?: (count: number) => void,
   onRecentSubmissionClick?: (submissionId: string) => void
+  onNavigateToDocuments?:()=>void
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isUploading, setIsUploading] = useState(false)
@@ -727,6 +731,7 @@ const handleSaveAll = async (fileIds: string[]) => {
         <RecentSubmissionsCard
           limit={5}
           onSubmissionClick={onRecentSubmissionClick}
+          onViewAll={onNavigateToDocuments}
         />
       </div>
       {/* Separator */}

@@ -14,12 +14,14 @@ import RecentSubmissionItem from './RecentSubmissionItem'
 interface RecentSubmissionsCardProps {
   limit?: number
   onSubmissionClick?: (submissionId: string) => void
+  onViewAll?: () => void
   className?: string
 }
 
 export default function RecentSubmissionsCard({
   limit = 5,
   onSubmissionClick,
+  onViewAll,
   className = '',
 }: RecentSubmissionsCardProps) {
   const [submissions, setSubmissions] = useState<RecentSubmission[]>([])
@@ -117,10 +119,7 @@ export default function RecentSubmissionsCard({
       {!loading && !error && submissions.length > 0 && (
         <div className="px-6 py-3 bg-gray-50 border-t border-gray-200 rounded-b-xl">
           <button
-            onClick={() => {
-              // Navigate to submissions view or expand list
-              console.log('View all submissions')
-            }}
+            onClick={onViewAll}
             className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 font-medium"
           >
             <span>View all submissions</span>

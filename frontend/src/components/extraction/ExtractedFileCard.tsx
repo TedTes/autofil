@@ -8,7 +8,8 @@
 import { ChevronDown, ChevronUp, Save, X, AlertTriangle, CheckCircle2, File, FileText } from 'lucide-react'
 import type { WorkflowFile } from '@/types/workflow'
 import { ConfidenceBadgeCompact } from '../ConfidenceBadge'
-import { formatFileSize } from '@/lib/utils'
+import { formatFileSize,extractFieldValue,extractConfidence } from '@/lib/utils'
+
 import { ClickableFieldValue } from './InlineFieldEditor'
 interface ExtractedFileCardProps {
   file: WorkflowFile
@@ -228,7 +229,6 @@ function DataSection({
     </div>
   )
 }
-
 /**
  * Data Field Component
  * Renders a single field with inline editing using ClickableFieldValue
@@ -244,38 +244,55 @@ function DataField({
   value: unknown
   onEdit: (value: unknown) => void
 }) {
+  // Extract actual display value and confidence
+  const displayValue = extractFieldValue(value)
+  const confidence = extractConfidence(value)
+  
   // Infer field type from label or value
-  const inferFieldType = (): 'text' | 'number' | 'date' | 'boolean' | 'email' | 'tel' => {
+  const inferFieldType = (): 'text' | 'number' | 'date' => {
     const lowerLabel = label.toLowerCase()
-    
-    if (lowerLabel.includes('email')) return 'email'
-    if (lowerLabel.includes('phone') || lowerLabel.includes('tel')) return 'tel'
-    if (lowerLabel.includes('date') || lowerLabel.includes('effective') || lowerLabel.includes('expiration')) return 'date'
+    if (lowerLabel.includes('date') || lowerLabel.includes('effective')) return 'date'
     if (lowerLabel.includes('amount') || lowerLabel.includes('limit') || lowerLabel.includes('premium')) return 'number'
-    if (typeof value === 'boolean') return 'boolean'
-    if (typeof value === 'number') return 'number'
-    
     return 'text'
   }
 
   // Format label for display
-  const fieldLabel = label
-    .split('_')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+  const formattedLabel = label
+    .replace(/_/g, ' ')
+    .replace(/([A-Z])/g, ' $1')
+    .trim()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(' ')
 
   return (
-    <div className="flex items-start justify-between gap-2 text-xs group">
-      <span className="text-gray-600 font-medium min-w-[120px]">{fieldLabel}:</span>
-      <div className="text-right flex-1">
+    <div className="flex items-start justify-between gap-3 py-1">
+      <span className="text-xs font-medium text-gray-600 flex-shrink-0 min-w-[120px]">
+        {formattedLabel}
+      </span>
+      
+      <div className="flex items-center gap-2 flex-1">
         <ClickableFieldValue
-          fieldPath={fieldPath}
-          label={fieldLabel}
-          value={value}
+          fieldPath={fieldPath}     
+          label={formattedLabel}       
+          value={displayValue}
           fieldType={inferFieldType()}
-          onEdit={onEdit}
-          className="w-full text-right"
+          onEdit={(newValue) => onEdit(newValue)} 
+          className="text-xs text-gray-900"
         />
+        
+        {/* Show confidence badge if available */}
+        {confidence !== undefined && confidence < 1 && (
+          <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+            confidence >= 0.8 
+              ? 'bg-green-100 text-green-700' 
+              : confidence >= 0.6 
+              ? 'bg-yellow-100 text-yellow-700' 
+              : 'bg-red-100 text-red-700'
+          }`}>
+            {Math.round(confidence * 100)}%
+          </span>
+        )}
       </div>
     </div>
   )

@@ -581,3 +581,43 @@ export const UNSAVED_CHANGES_WARNING = {
     cancel: 'Cancel',
   },
 }
+
+/**
+ * Helper: Extract actual value from object structure
+ */
+export function extractFieldValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return ''
+  }
+  
+  // If it's an object with a 'value' property, extract it
+  if (typeof value === 'object' && value !== null && 'value' in value) {
+    return String((value as { value: unknown }).value)
+  }
+  
+  // If it's an array, join the values (limit to first 3)
+  if (Array.isArray(value)) {
+    const extracted = value.map(item => extractFieldValue(item)).filter(Boolean)
+    if (extracted.length > 3) {
+      return `${extracted.slice(0, 3).join(', ')}... (+${extracted.length - 3} more)`
+    }
+    return extracted.join(', ')
+  }
+  
+  // If it's a plain object, stringify it
+  if (typeof value === 'object') {
+    return JSON.stringify(value)
+  }
+  
+  return String(value)
+}
+
+/**
+ * Helper: Extract confidence from object structure
+ */
+export function extractConfidence(value: unknown): number | undefined {
+  if (typeof value === 'object' && value !== null && 'confidence' in value) {
+    return (value as { confidence: number }).confidence
+  }
+  return undefined
+}

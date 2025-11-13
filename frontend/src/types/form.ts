@@ -65,6 +65,8 @@ export interface FormField {
     hasChanges?: boolean
     isSaving?: boolean
     isExporting?: boolean
+    isFilling: boolean
     handleSave?: () => Promise<void>
     handleExport?: () => Promise<void>
+    handleFill: () => void 
   }

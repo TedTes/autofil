@@ -8,6 +8,7 @@ import {type ExtractedField, type ExtractionData,type FileDetailActions } from "
 import { getSubmission,  downloadBlob,exportSingleSubmission,updateSubmissionData } from '@/lib/api-client'
 import {transformFormFieldsToApi,fieldsToNestedObject} from "../../lib"
 import {ExportModal} from "../ExportModal";
+import { CleanDataDisplay } from '../extraction/CleanDataDisplay'
 interface FileDetailViewProps {
   submissionId: string
   filename?: string
@@ -27,7 +28,8 @@ export function FileDetailView({
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  
+  const [isFilling, setIsFilling] = useState(false)
+  const [showFillModal, setShowFillModal] = useState(false)
   // Edit mode state
   const [isEditMode, setIsEditMode] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
@@ -36,6 +38,7 @@ export function FileDetailView({
   // Export state
   const [showExportModal, setShowExportModal] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  
 
   // Fetch submission data
   useEffect(() => {
@@ -55,20 +58,6 @@ export function FileDetailView({
     loadSubmission()
   }, [submissionId])
 
-  // Handle field changes from the form
-  const handleFieldsChange = useCallback((updatedFields: ExtractedField[]) => {
-    setExtractedData((prev) => {
-      if (!prev) return prev
-      const updatedData = transformFormFieldsToApi
-      ? transformFormFieldsToApi(updatedFields)
-      : fieldsToNestedObject(updatedFields)
-     return { ...prev ,
-      data: updatedData
-    }})
-    setHasUnsavedChanges(true)
-  }, [])
-
-  // Save changes to database
   const handleSaveChanges = useCallback(async () => {
     if (!extractedData?.data) return
     
@@ -88,6 +77,77 @@ export function FileDetailView({
       setIsSavingChanges(false)
     }
   },[extractedData, submissionId])
+    // Handle export
+    const handleExport = async () => {
+      setIsExporting(true)
+      setErrorMessage(null)
+      
+      try {
+        const pdfBlob = await exportSingleSubmission(submissionId)
+        const timestamp = new Date().toISOString().split('T')[0]
+        const baseFilename = filename.replace('.pdf', '') || 'document'
+        const exportFilename = `${baseFilename}_filled_${timestamp}.pdf`
+        
+        downloadBlob(pdfBlob, exportFilename)
+        setSuccessMessage('✓ PDF exported successfully')
+        setTimeout(() => setSuccessMessage(null), 3000)
+        setShowExportModal(false)
+      } catch (err) {
+        console.error('Export failed:', err)
+        setErrorMessage(err instanceof Error ? err.message : 'Failed to export PDF')
+      } finally {
+        setIsExporting(false)
+      }
+    }
+    const handleFill = useCallback(async () => {
+      try {
+        setIsFilling(true)
+        setErrorMessage(null)
+        
+        // TODO: Implement in Commit 2-3
+        // For now, just show modal
+        setShowFillModal(true)
+        
+        // Placeholder alert
+        alert('Fill PDF feature will be implemented in next commits')
+        
+      } catch (err) {
+        console.error('Fill error:', err)
+        setErrorMessage(err instanceof Error ? err.message : 'Failed to fill PDF')
+      } finally {
+        setIsFilling(false)
+      }
+    }, [submissionId])
+   // Provide actions to parent (MainLayout)
+   useEffect(() => {
+    if (onActionsReady) {
+      onActionsReady({
+        hasChanges: hasUnsavedChanges,
+        isSaving: isSavingChanges,
+        isExporting,
+        isFilling, 
+        handleSave: handleSaveChanges,
+        handleExport: handleExport,
+        handleFill   
+      })
+    }
+  }, [hasUnsavedChanges, isSavingChanges, isExporting, isFilling, handleSaveChanges, handleExport, handleFill, onActionsReady])
+  // Handle field changes from the form
+  const handleFieldsChange = useCallback((updatedFields: ExtractedField[]) => {
+    setExtractedData((prev) => {
+      if (!prev) return prev
+      const updatedData = transformFormFieldsToApi
+      ? transformFormFieldsToApi(updatedFields)
+      : fieldsToNestedObject(updatedFields)
+     return { ...prev ,
+      data: updatedData
+    }})
+    setHasUnsavedChanges(true)
+  }, [])
+
+  
+  // Save changes to database
+
 
   // Toggle edit mode
   const handleToggleEditMode = () => {
@@ -104,28 +164,6 @@ export function FileDetailView({
     }
   }
 
-  // Handle export
-  const handleExport = async () => {
-    setIsExporting(true)
-    setErrorMessage(null)
-    
-    try {
-      const pdfBlob = await exportSingleSubmission(submissionId)
-      const timestamp = new Date().toISOString().split('T')[0]
-      const baseFilename = filename.replace('.pdf', '') || 'document'
-      const exportFilename = `${baseFilename}_filled_${timestamp}.pdf`
-      
-      downloadBlob(pdfBlob, exportFilename)
-      setSuccessMessage('✓ PDF exported successfully')
-      setTimeout(() => setSuccessMessage(null), 3000)
-      setShowExportModal(false)
-    } catch (err) {
-      console.error('Export failed:', err)
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to export PDF')
-    } finally {
-      setIsExporting(false)
-    }
-  }
 
   const handleDownloadOriginal = async () => {
     try {
@@ -141,16 +179,7 @@ export function FileDetailView({
     return `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/submissions/${id}/preview-input`
   }
 
-  // Provide actions to parent (MainLayout)
-  useEffect(() => {
-    onActionsReady?.({
-      hasChanges: hasUnsavedChanges,
-      isSaving: isSavingChanges,
-      isExporting: isExporting,
-      handleSave: handleSaveChanges,
-      handleExport: async () => setShowExportModal(true)
-    })
-  }, [hasUnsavedChanges, isSavingChanges, isExporting, onActionsReady])
+ 
 
   if (isLoading) {
     return (
@@ -282,28 +311,83 @@ export function FileDetailView({
             )}
 
             {/* Extraction Data Form */}
-            {extractedData ? (
-              <ExtractionDataForm
-                data={{
-                  submission_id: extractedData.submission_id,
-                  filename: extractedData.filename,
-                  status: extractedData.status,
-                  uploaded_at: extractedData.uploaded_at,
-                  data: extractedData.data || {},
-                  field_confidence: extractedData.field_confidence,
-                  confidence: extractedData.confidence,
-                  warnings: extractedData.warnings,
-                  field_hints: extractedData.field_hints,
-                  extraction_issues: extractedData.extraction_issues
-                }}
-                isEditable={isEditMode} 
-                onChange={handleFieldsChange}
-              />
-            ) : (
-              <div className="bg-gray-50 rounded-lg p-6 text-center">
-                <p className="text-sm text-gray-600">No extraction data available</p>
-              </div>
-            )}
+            <div>
+  <div className="flex items-center justify-between mb-4">
+    <div>
+      <h3 className="text-lg font-semibold text-gray-900">Extracted Data</h3>
+      <p className="text-sm text-gray-600 mt-1">
+        Review the extracted information or click Edit to make changes
+      </p>
+    </div>
+  </div>
+
+  {/* Overall Confidence */}
+  {extractedData && extractedData.confidence !== undefined && (
+    <div className="mb-4 bg-white rounded-lg border border-gray-200 p-4">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-gray-700">
+          Overall Extraction Confidence
+        </span>
+        <div className="flex items-center gap-2">
+          <div className="flex-1 bg-gray-200 rounded-full h-2 w-32 overflow-hidden">
+            <div
+              className={`h-2 ${
+                extractedData.confidence >= 0.8
+                  ? 'bg-green-500'
+                  : extractedData.confidence >= 0.6
+                  ? 'bg-yellow-500'
+                  : 'bg-red-500'
+              }`}
+              style={{ width: `${extractedData.confidence * 100}%` }}
+            />
+          </div>
+          <span className={`text-sm font-semibold ${
+            extractedData.confidence >= 0.8
+              ? 'text-green-700'
+              : extractedData.confidence >= 0.6
+              ? 'text-yellow-700'
+              : 'text-red-700'
+          }`}>
+            {Math.round(extractedData.confidence * 100)}%
+          </span>
+        </div>
+      </div>
+    </div>
+  )}
+
+  {/* Clean Data Display */}
+  {extractedData && extractedData.data ? (
+    <CleanDataDisplay
+      data={extractedData.data}
+      fieldConfidence={extractedData.field_confidence}
+      isEditable={isEditMode}
+      onFieldChange={(fieldPath, value) => {
+        // Update the data
+        const keys = fieldPath.split('.')
+        const newData = { ...extractedData.data }
+        
+        // Navigate to nested property and set value
+        let current: any = newData
+        for (let i = 0; i < keys.length - 1; i++) {
+          if (!current[keys[i]]) current[keys[i]] = {}
+          current = current[keys[i]]
+        }
+        current[keys[keys.length - 1]] = value
+        
+        // Update state
+        setExtractedData({
+          ...extractedData,
+          data: newData
+        })
+        setHasUnsavedChanges(true)
+      }}
+    />
+  ) : (
+    <div className="bg-gray-50 rounded-lg p-6 text-center">
+      <p className="text-sm text-gray-600">No extraction data available</p>
+    </div>
+  )}
+</div>
           </div>
         </div>
       </div>

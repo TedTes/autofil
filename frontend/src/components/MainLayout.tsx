@@ -3,10 +3,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import {
   Home,
-  Upload,
   FolderTree,
-  Clock,
-  GitCompare,
   Download,
   Settings,
   HelpCircle,
@@ -14,7 +11,8 @@ import {
   X,
  Save,  Loader2 ,
   TrendingUp,
-  AlertTriangle
+  AlertTriangle,
+  FileText
 } from 'lucide-react'
 import {
   UploadView,
@@ -45,10 +43,8 @@ type ViewDataMap = {
   'documents': undefined
   'upload': undefined
   'files': undefined
-  'history': undefined
-  'compare': undefined
-  'export': undefined
   'folders': undefined
+  'settings': undefined
 }
 
 type ViewStateData = ViewDataMap[ViewType]
@@ -174,11 +170,10 @@ export default function MainLayout({ children }: MainLayoutProps) {
     navigateTo('file-detail', { submissionId, filename }, ['Home', 'Documents', filename || 'File'])
   }, [navigateTo])
 
-  // Sidebar items
   const navigationItems = [
     {
       id: 'home',
-      label: 'Dashboard',
+      label: 'Home',
       icon: Home,
       onClick: () => navigateTo('home', undefined, ['Home']),
     },
@@ -187,25 +182,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
       label: 'Documents',
       icon: FolderTree,
       onClick: () => navigateTo('documents', undefined, ['Home', 'Documents']),
-    },
-    {
-      id: 'history',
-      label: 'History',
-      icon: Clock,
-      onClick: () => navigateTo('history', undefined, ['Home', 'History']),
-    },
-    {
-      id: 'compare',
-      label: 'Compare',
-      icon: GitCompare,
-      onClick: () => navigateTo('compare', undefined, ['Home', 'Compare']),
-    },
-    {
-      id: 'export',
-      label: 'Export',
-      icon: Download,
-      onClick: () => navigateTo('export', undefined, ['Home', 'Export']),
-    },
+    }
   ]
 
   // Create folder from Documents view
@@ -248,10 +225,10 @@ export default function MainLayout({ children }: MainLayoutProps) {
   </div>
 
   {/* Sidebar Content - Scrollable */}
-  <div className="flex-1 overflow-y-auto">
-    {/* Add custom scrollbar styles */}
-    {sidebarOpen ? (
-      <div className="p-4 space-y-8">
+  <div className="flex-1 overflow-y-auto flex flex-col">
+  {sidebarOpen ? (
+    <>
+      <div className="p-4">
         {/* Breathing room at top */}
         <div className="h-2"></div>
         
@@ -291,43 +268,59 @@ export default function MainLayout({ children }: MainLayoutProps) {
           </div>
         </nav>
       </div>
-    ) : (
-      <div className="p-2 space-y-2 mt-4">
-        {navigationItems.map((item) => {
-          const Icon = item.icon
-          const isActive = currentView.type === item.id
-          return (
-            <button
-              key={item.id}
-              onClick={item.onClick}
-              className={`
-                w-full p-2.5 rounded-lg transition-colors
-                ${isActive
-                  ? 'bg-blue-50 text-blue-600'
-                  : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
-                }
-              `}
-              title={item.label}
-            >
-              <Icon className="w-5 h-5 mx-auto" />
-            </button>
-          )
-        })}
-      </div>
-    )}
-  </div>
+      
+      {/* Spacer to push footer down */}
+      <div className="flex-1"></div>
+    </>
+  ) : (
+    <div className="p-2 space-y-2 mt-4">
+      {navigationItems.map((item) => {
+        const Icon = item.icon
+        const isActive = currentView.type === item.id
+        return (
+          <button
+            key={item.id}
+            onClick={item.onClick}
+            className={`
+              w-full p-2.5 rounded-lg transition-colors
+              ${isActive
+                ? 'bg-blue-50 text-blue-600'
+                : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+              }
+            `}
+            title={item.label}
+          >
+            <Icon className="w-5 h-5 mx-auto" />
+          </button>
+        )
+      })}
+    </div>
+  )}
+</div>
 
   {/* Footer - Fixed at bottom */}
-  <div className="border-t border-gray-100 p-4 flex-shrink-0">
-    {/* Added flex-shrink-0 to keep at bottom */}
-    <button
-      onClick={() => {/* Settings action */}}
-      className="w-full flex items-center gap-3 px-3 py-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
-    >
-      <Settings className="w-[18px] h-[18px]" />
-      <span className="text-[13px] font-medium">Settings</span>
-    </button>
-  </div>
+<div className="border-t border-gray-100 p-4 flex-shrink-0">
+  <button
+    onClick={() => navigateTo('settings', undefined, ['Home', 'Settings'])}
+    className={`
+      w-full flex items-center gap-3 px-3 py-2.5 rounded-lg 
+      transition-all duration-200 group
+      ${currentView.type === 'settings'
+        ? 'bg-blue-50 text-blue-700 shadow-sm'
+        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+      }
+    `}
+  >
+    <Settings className={`w-[18px] h-[18px] flex-shrink-0 ${
+      currentView.type === 'settings' ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
+    }`} />
+    <span className="text-[13px] font-medium">Settings</span>
+    
+    {currentView.type === 'settings' && (
+      <div className="ml-auto w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
+    )}
+  </button>
+</div>
 </aside>
 
   {/* Mobile Sidebar Overlay */}
@@ -448,31 +441,32 @@ export default function MainLayout({ children }: MainLayoutProps) {
                     <Menu className="w-5 h-5" />
                   </button>
                 )}
-                {/* Breadcrumbs */}
-                <nav className="hidden lg:flex items-center gap-2 text-sm">
-                  {currentView.breadcrumbs.map((crumb, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      {idx > 0 && (
-                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      )}
-                      {idx < currentView.breadcrumbs.length - 1 ? (
-                        <button
-                          onClick={() => {
-                            if (idx === 0) navigateTo('home', undefined, ['Home'])
-                            else if (crumb === 'Documents') navigateTo('documents', undefined, ['Home', 'Documents'])
-                          }}
-                          className="text-gray-600 hover:text-gray-900 transition-colors"
-                        >
-                          {crumb}
-                        </button>
-                      ) : (
-                        <span className="text-gray-900 font-medium">{crumb}</span>
-                      )}
-                    </div>
-                  ))}
-                </nav>
+             {/* Breadcrumbs */}
+<nav className="hidden lg:flex items-center gap-2 text-sm">
+  {currentView.breadcrumbs.map((crumb, idx) => (
+    <div key={idx} className="flex items-center gap-2">
+      {idx > 0 && (
+        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      )}
+      {idx < currentView.breadcrumbs.length - 1 ? (
+        <button
+          onClick={() => {
+            if (idx === 0) navigateTo('home', undefined, ['Home'])
+            else if (crumb === 'Documents') navigateTo('documents', undefined, ['Home', 'Documents'])
+            else if (crumb === 'Settings') navigateTo('settings', undefined, ['Home', 'Settings'])
+          }}
+          className="text-gray-600 hover:text-gray-900 transition-colors"
+        >
+          {crumb}
+        </button>
+      ) : (
+        <span className="text-gray-900 font-medium">{crumb}</span>
+      )}
+    </div>
+  ))}
+</nav>
               </div>
 
               <div className="flex items-center gap-2">
@@ -542,31 +536,13 @@ export default function MainLayout({ children }: MainLayoutProps) {
                 onActionsReady={setFileDetailActions}
               />
             )}
-
-            {/* History */}
-            {currentView.type === 'history' && (
-              <div className="p-8">
-                <h2 className="text-2xl font-bold text-gray-900 mb-4">History</h2>
-                <p className="text-gray-600">Version history coming soon...</p>
-              </div>
-            )}
-
-            {/* Compare */}
-            {currentView.type === 'compare' && (
-              <div className="p-8">
-                <h2 className="text-2xl font-bold text-gray-900 mb-4">Compare</h2>
-                <p className="text-gray-600">Document comparison coming soon...</p>
-              </div>
-            )}
-
-            {/* Export */}
-            {currentView.type === 'export' && (
-              <div className="p-8">
-                <h2 className="text-2xl font-bold text-gray-900 mb-4">Export Center</h2>
-                <p className="text-gray-600">Batch export options coming soon...</p>
-              </div>
-            )}
-
+{/* Settings */}
+{currentView.type === 'settings' && (
+  <div className="p-8">
+    <h2 className="text-2xl font-bold text-gray-900 mb-4">Settings</h2>
+    <p className="text-gray-600">Configuration options coming soon...</p>
+  </div>
+)}
             {children}
           </div>
         </main>
@@ -616,7 +592,6 @@ export default function MainLayout({ children }: MainLayoutProps) {
   )
 }
 
-// File Detail Action Buttons Component
 function FileDetailActions({ 
   actions
 }: { 
@@ -624,7 +599,8 @@ function FileDetailActions({
 }) {
   if (!actions) return null
   
-  const { hasChanges, isSaving, isExporting, handleSave, handleExport } = actions
+  // ADD isFilling and handleFill here ↓
+  const { hasChanges, isSaving, isExporting, isFilling, handleSave, handleExport, handleFill } = actions
   
   return (
     <>
@@ -668,6 +644,28 @@ function FileDetailActions({
           <>
             <Download className="w-4 h-4" />
             <span className="hidden sm:inline">Export</span>
+          </>
+        )}
+      </button>
+      
+      <button
+        onClick={handleFill}
+        disabled={isFilling}
+        className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+          isFilling
+            ? 'text-white bg-purple-500 cursor-not-allowed'
+            : 'text-white bg-purple-600 hover:bg-purple-700'
+        }`}
+      >
+        {isFilling ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span className="hidden sm:inline">Filling...</span>
+          </>
+        ) : (
+          <>
+            <FileText className="w-4 h-4" />
+            <span className="hidden sm:inline">Fill PDF</span>
           </>
         )}
       </button>

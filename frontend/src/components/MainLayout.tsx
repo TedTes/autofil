@@ -218,89 +218,117 @@ export default function MainLayout({ children }: MainLayoutProps) {
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
-      <aside className={`hidden lg:flex lg:flex-col bg-white border-r border-gray-200 transition-all duration-300 ease-in-out ${
-        desktopSidebarCollapsed ? 'lg:w-0 lg:overflow-hidden' : 'lg:w-64'
-      }`}>
-        {/* Sidebar Header */}
-        <div className="h-16 border-b border-gray-200 flex items-center justify-between px-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-sm font-bold text-gray-900 leading-tight">AutoFil</h1>
-              <p className="text-[10px] text-gray-500 leading-tight">Smart Form Automation</p>
-            </div>
+<aside className={`hidden lg:flex lg:flex-col bg-white border-r border-gray-200 transition-all duration-300 ease-in-out ${
+  desktopSidebarCollapsed ? 'lg:w-0 lg:overflow-hidden' : 'lg:w-64'
+} fixed left-0 top-0 bottom-0 z-40`}>
+  
+  {/* Sidebar Header - Fixed */}
+  <div className="h-16 border-b border-gray-200 flex items-center justify-between px-4 flex-shrink-0">
+    {/* Added flex-shrink-0 to prevent compression */}
+    <div className="flex items-center gap-2.5">
+      <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+        <TrendingUp className="w-5 h-5 text-white" />
+      </div>
+      <div>
+        <h1 className="text-sm font-bold text-gray-900 leading-tight">AutoFil</h1>
+        <p className="text-[10px] text-gray-500 leading-tight">Smart Form Automation</p>
+      </div>
+    </div>
+    
+    {/* Collapse Button */}
+    <button
+      onClick={() => setDesktopSidebarCollapsed(true)}
+      className="hidden lg:block p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+      title="Collapse sidebar"
+    >
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+      </svg>
+    </button>
+  </div>
+
+  {/* Sidebar Content - Scrollable */}
+  <div className="flex-1 overflow-y-auto">
+    {/* Add custom scrollbar styles */}
+    {sidebarOpen ? (
+      <div className="p-4 space-y-8">
+        {/* Breathing room at top */}
+        <div className="h-2"></div>
+        
+        {/* Navigation Section */}
+        <nav>
+          <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3 px-3">
+            Navigation
+          </h3>
+          <div className="space-y-0.5">
+            {navigationItems.map((item) => {
+              const Icon = item.icon
+              const isActive = currentView.type === item.id
+              return (
+                <button
+                  key={item.id}
+                  onClick={item.onClick}
+                  className={`
+                    w-full flex items-center gap-3 px-3 py-2.5 rounded-lg 
+                    transition-all duration-200 group
+                    ${isActive
+                      ? 'bg-blue-50 text-blue-700 shadow-sm'
+                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    }
+                  `}
+                >
+                  <Icon className={`w-[18px] h-[18px] flex-shrink-0 ${
+                    isActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
+                  }`} />
+                  <span className="text-[13px] font-medium">{item.label}</span>
+                  
+                  {isActive && (
+                    <div className="ml-auto w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
+                  )}
+                </button>
+              )
+            })}
           </div>
-          
-          {/* Collapse Button (desktop only) */}
-          <button
-            onClick={() => setDesktopSidebarCollapsed(true)}
-            className="hidden lg:block p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
-            title="Collapse sidebar"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-            </svg>
-          </button>
-        </div>
-        {/* Sidebar Content */}
-        <div className="flex-1 overflow-y-auto p-4">
-          {sidebarOpen ? (
-            <div className="space-y-6">
-              {/* Navigation */}
-              <div>
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-                  NAVIGATION
-                </h3>
-                <div className="space-y-1">
-                  {navigationItems.map((item) => {
-                    const Icon = item.icon
-                    const isActive = currentView.type === item.id
-                    return (
-                      <button
-                        key={item.id}
-                        onClick={item.onClick}
-                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-                          isActive
-                            ? 'bg-blue-50 text-blue-700'
-                            : 'text-gray-700 hover:bg-gray-100'
-                        }`}
-                      >
-                        <Icon className="w-4 h-4 flex-shrink-0" />
-                        <span className="text-sm font-medium">{item.label}</span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="w-full p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                title="Quick Actions"
-              >
-                <TrendingUp className="w-5 h-5 mx-auto" />
-              </button>
-              {navigationItems.map((item) => {
-                const Icon = item.icon
-                return (
-                  <button
-                    key={item.id}
-                    onClick={item.onClick}
-                    className="w-full p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                    title={item.label}
-                  >
-                    <Icon className="w-5 h-5 mx-auto" />
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      </aside>
+        </nav>
+      </div>
+    ) : (
+      <div className="p-2 space-y-2 mt-4">
+        {navigationItems.map((item) => {
+          const Icon = item.icon
+          const isActive = currentView.type === item.id
+          return (
+            <button
+              key={item.id}
+              onClick={item.onClick}
+              className={`
+                w-full p-2.5 rounded-lg transition-colors
+                ${isActive
+                  ? 'bg-blue-50 text-blue-600'
+                  : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+                }
+              `}
+              title={item.label}
+            >
+              <Icon className="w-5 h-5 mx-auto" />
+            </button>
+          )
+        })}
+      </div>
+    )}
+  </div>
+
+  {/* Footer - Fixed at bottom */}
+  <div className="border-t border-gray-100 p-4 flex-shrink-0">
+    {/* Added flex-shrink-0 to keep at bottom */}
+    <button
+      onClick={() => {/* Settings action */}}
+      className="w-full flex items-center gap-3 px-3 py-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+    >
+      <Settings className="w-[18px] h-[18px]" />
+      <span className="text-[13px] font-medium">Settings</span>
+    </button>
+  </div>
+</aside>
 
       {/* Mobile Sidebar Overlay */}
       {mobileSidebarOpen && (
@@ -362,7 +390,9 @@ export default function MainLayout({ children }: MainLayoutProps) {
       )}
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-h-screen">
+      <div className={`flex-1 flex flex-col min-h-screen transition-all duration-300 ${
+  desktopSidebarCollapsed ? 'lg:ml-0' : 'lg:ml-64'
+}`}>
         {/* Header */}
         <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
           <div className="px-4 sm:px-6 lg:px-8">

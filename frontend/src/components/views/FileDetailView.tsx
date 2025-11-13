@@ -367,12 +367,23 @@ export function FileDetailView({
         const newData = { ...extractedData.data }
         
         // Navigate to nested property and set value
-        let current: any = newData
+        let current:Record<string,unknown> = newData
         for (let i = 0; i < keys.length - 1; i++) {
-          if (!current[keys[i]]) current[keys[i]] = {}
-          current = current[keys[i]]
+          const key = keys[i]
+    const next = current[key]
+    if (typeof next !== 'object' || next === null || Array.isArray(next)) {
+      const newObj: Record<string, unknown> = {}
+      current[key] = newObj
+      current = newObj
+    } else {
+      current = next as Record<string, unknown>
+    }
+      
+         
+          
         }
-        current[keys[keys.length - 1]] = value
+        const lastKey = keys[keys.length - 1]
+        current[lastKey] = value as unknown
         
         // Update state
         setExtractedData({

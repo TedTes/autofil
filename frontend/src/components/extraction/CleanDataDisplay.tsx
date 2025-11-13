@@ -77,12 +77,12 @@ function flattenEntities(data: Record<string, unknown>): Record<string, unknown>
   
   // Check if data has 'entities' key (canonical output format)
   if ('entities' in data && typeof data.entities === 'object' && data.entities !== null) {
-    const entities = data.entities as Record<string, any>
+    const entities = data.entities
     
     // Flatten each entity
     Object.entries(entities).forEach(([entityName, entity]) => {
       if (entity && typeof entity === 'object' && 'instances' in entity) {
-        const instances = entity.instances as any[]
+        const instances = entity.instances as unknown[]
         
         if (entity.cardinality === 'zero-to-one' && instances.length > 0) {
           // Single value entity

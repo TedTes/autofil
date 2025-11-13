@@ -138,7 +138,7 @@ export function FileDetailView({
   }
 
   const getInputPreviewUrl = (id: string) => {
-    return `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/submissions/${id}/pdf`
+    return `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/submissions/${id}/preview-input`
   }
 
   // Provide actions to parent (MainLayout)

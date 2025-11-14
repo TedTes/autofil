@@ -4,11 +4,13 @@ import { useState, useEffect,useCallback } from 'react'
 import { ArrowLeft, Download, Save, Loader2,Edit,Check } from 'lucide-react'
 import { PdfPreview } from '@/components/PdfPreview'
 import { ExtractionDataForm} from '@/components/ExtractionDataForm'
-import {type ExtractedField, type ExtractionData,type FileDetailActions } from "../../types";
+import {type ExtractedField, type ExtractionData,type FileDetailActions,type FillReport  } from "../../types";
 import { getSubmission,  downloadBlob,exportSingleSubmission,updateSubmissionData } from '@/lib/api-client'
 import {transformFormFieldsToApi,fieldsToNestedObject} from "../../lib"
 import {ExportModal} from "../ExportModal";
 import { CleanDataDisplay } from '../extraction/CleanDataDisplay'
+import { FillModal } from '../FillModal'
+
 interface FileDetailViewProps {
   submissionId: string
   filename?: string
@@ -99,25 +101,12 @@ export function FileDetailView({
         setIsExporting(false)
       }
     }
-    const handleFill = useCallback(async () => {
-      try {
-        setIsFilling(true)
-        setErrorMessage(null)
-        
-        // TODO: Implement in Commit 2-3
-        // For now, just show modal
-        setShowFillModal(true)
-        
-        // Placeholder alert
-        alert('Fill PDF feature will be implemented in next commits')
-        
-      } catch (err) {
-        console.error('Fill error:', err)
-        setErrorMessage(err instanceof Error ? err.message : 'Failed to fill PDF')
-      } finally {
-        setIsFilling(false)
-      }
-    }, [submissionId])
+
+const handleFillComplete = useCallback((report: FillReport) => {
+  console.log('Fill completed:', report)
+  setSuccessMessage(`✓ PDF filled successfully! ${report.written} fields written, ${report.skipped} skipped.`)
+  setTimeout(() => setSuccessMessage(null), 5000)
+}, [])
    // Provide actions to parent (MainLayout)
    useEffect(() => {
     if (onActionsReady) {
@@ -127,11 +116,11 @@ export function FileDetailView({
         isExporting,
         isFilling, 
         handleSave: handleSaveChanges,
-        handleExport: handleExport,
-        handleFill   
+        handleExport: async () => setShowExportModal(true),
+        handleFill: () => setShowFillModal(true)
       })
     }
-  }, [hasUnsavedChanges, isSavingChanges, isExporting, isFilling, handleSaveChanges, handleExport, handleFill, onActionsReady])
+  }, [hasUnsavedChanges, isSavingChanges, isExporting, isFilling, handleSaveChanges, onActionsReady])
   // Handle field changes from the form
   const handleFieldsChange = useCallback((updatedFields: ExtractedField[]) => {
     setExtractedData((prev) => {
@@ -410,6 +399,13 @@ export function FileDetailView({
         submissionId={submissionId}
         filename={filename}
         onExport={handleExport}
+      />
+       <FillModal
+        isOpen={showFillModal}
+        onClose={() => setShowFillModal(false)}
+        submissionId={submissionId}
+        filename={filename}
+        onFillComplete={handleFillComplete}
       />
     </div>
   )

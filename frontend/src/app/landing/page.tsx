@@ -44,7 +44,7 @@ export default function LandingPage() {
         </div>
       </header>
 
-      <main className="pt-20">
+      <main>
         {/* HERO SECTION */}
         <section className="relative bg-gradient-to-b from-blue-50 via-white to-white py-20 sm:py-28">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

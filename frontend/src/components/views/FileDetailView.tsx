@@ -102,10 +102,16 @@ export function FileDetailView({
       }
     }
 
-const handleFillComplete = useCallback((report: FillReport) => {
+const handleFillComplete = useCallback(async (report: FillReport) => {
   console.log('Fill completed:', report)
   setSuccessMessage(`✓ PDF filled successfully! ${report.written} fields written, ${report.skipped} skipped.`)
   setTimeout(() => setSuccessMessage(null), 5000)
+  try {
+    const updatedData = await getSubmission(submissionId)
+    setExtractedData(updatedData)
+  } catch (err) {
+    console.error('Failed to reload submission after fill:', err)
+  }
 }, [])
    // Provide actions to parent (MainLayout)
    useEffect(() => {

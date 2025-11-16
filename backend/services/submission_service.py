@@ -39,23 +39,25 @@ class SubmissionService:
         self.outputs_dir = os.path.join(self.storage_dir, 'outputs')
         self.data_dir = os.path.join(self.storage_dir, 'data')
         self.folders_dir = os.path.join(self.storage_dir, 'folders')
-        self.template_path = 'templates/ACORD_126.pdf'
+
         self.client_service = ClientService()
+        self.filler = Acord126Filler()  # filler knows how to find its own template(s)
+
         # Create directories if they don't exist
         os.makedirs(self.uploads_dir, exist_ok=True)
         os.makedirs(self.outputs_dir, exist_ok=True)
         os.makedirs(self.data_dir, exist_ok=True)
         os.makedirs(self.folders_dir, exist_ok=True)
-        # Initialize extractor and filler
- 
+
         self.version_service = VersionService(self.storage_dir)
         self.comparison_service = ComparisonService(self.storage_dir)
         self.form_generator = FormGenerator()
         self.export_service = ExportService(self.storage_dir)
+
         self.classifier = classifier_registry.create_composite(
-        classifier_names=['mime', 'keyword', 'table'],
-        strategy='highest_confidence'
-        )
+            classifier_names=['mime', 'keyword', 'table'],
+            strategy='highest_confidence'
+    )
     def upload_and_extract(self, file, folder_id: str = None, progress_callback=None):
         """
         Upload PDF and extract data with progress tracking.
@@ -287,56 +289,82 @@ class SubmissionService:
     
     def fill_pdf(self, submission_id: str):
         """
-        Fill PDF with data.
-        
+        Fill PDF with data using the canonical extraction output.
+
         Args:
             submission_id: Submission identifier
-        
+
         Returns:
-            Fill report
+            FillReport
         """
-        # Load metadata
-        metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
-        
-        if not os.path.exists(metadata_path):
-            raise ValueError("Submission not found")
-        
-        with open(metadata_path, 'r') as f:
-            metadata = json.load(f)
-        
-        # Load data
-        data_path = os.path.join(self.data_dir, f"{submission_id}.json")
-        
-        with open(data_path, 'r') as f:
-            data = json.load(f)
-        
-        # Check template exists
-        if not os.path.exists(self.template_path):
-            raise ValueError(f"Template not found: {self.template_path}")
-        
-        # Determine output path
-        folder_id = metadata.get('folder_id')
-        if folder_id:
-            from services.folder_service import FolderService
-            folder_service = FolderService()
-            output_dir = folder_service.get_outputs_path(folder_id)
-        else:
-            output_dir = self.outputs_dir
-        
-        # Fill PDF
-        output_path = os.path.join(output_dir, f"{submission_id}_filled.pdf")
-        fill_report = self.filler.fill(self.template_path, data, output_path)
-        
-        # Update metadata
-        metadata['status'] = 'filled'
-        metadata['output_path'] = output_path
-        metadata['filled_at'] = datetime.utcnow().isoformat()
-        metadata['fill_report'] = fill_report
-        
-        with open(metadata_path, 'w') as f:
-            json.dump(metadata, f, indent=2)
-        
-        return fill_report
+        try:
+            # 1) Load metadata
+            metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
+            if not os.path.exists(metadata_path):
+                raise ValueError("Submission not found")
+
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+
+            # 2) Load canonical extracted data (what extractor.to_dict() wrote)
+            data_path = os.path.join(self.data_dir, f"{submission_id}.json")
+            if not os.path.exists(data_path):
+                raise ValueError("Extracted data not found")
+
+            with open(data_path, 'r') as f:
+                canonical_data = json.load(f)
+
+            # 3) Decide which template_id to use (decoupled from file path)
+            # Prefer a template_type stored in metadata; fallback to a default.
+            # Example: "acord_126", "acord_126_2016_09", etc. as understood by TemplateLoader.
+            template_id = metadata.get("template_type") or ""
+
+            # 4) Determine output directory
+            folder_id = metadata.get('folder_id')
+            if folder_id:
+                from services.folder_service import FolderService
+                folder_service = FolderService()
+                output_dir = folder_service.get_outputs_path(folder_id)
+            else:
+                output_dir = self.outputs_dir
+
+            os.makedirs(output_dir, exist_ok=True)
+
+            # 5) Build output PDF path
+            output_path = os.path.join(output_dir, f"{submission_id}_filled.pdf")
+
+            # 6) Call filler – it will:
+            #   - load the right template via TemplateLoader
+            #   - map canonical_data -> flat pdf fields
+            #   - write the filled PDF to output_path
+            fill_report = self.filler.fill(
+                canonical_data=canonical_data,
+                output_path=output_path,
+                template_id=template_id,   # logical name, not file path
+            )
+
+            # 7) Update metadata (make FillReport JSON-serializable)
+            metadata['status'] = 'filled'
+            metadata['output_path'] = output_path
+            metadata['filled_at'] = datetime.utcnow().isoformat()
+            metadata['fill_report'] = {
+                "success": fill_report.success,
+                "coverage": fill_report.coverage,
+                "filled_fields": fill_report.filled_fields,
+                "unmapped_fields": fill_report.unmapped_fields,
+                "warnings": fill_report.warnings,
+                "errors": fill_report.errors,
+            }
+
+            with open(metadata_path, 'w') as f:
+                json.dump(metadata, f, indent=2)
+
+            return fill_report
+
+        except Exception as e:
+            print("error occured in fill_pdf", str(e))
+            raise
+
     
     def get_output_path(self, submission_id: str):
         """

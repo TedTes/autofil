@@ -317,8 +317,7 @@ class SubmissionService:
             # 3) Decide which template_id to use (decoupled from file path)
             # Prefer a template_type stored in metadata; fallback to a default.
             # Example: "acord_126", "acord_126_2016_09", etc. as understood by TemplateLoader.
-            template_id = metadata.get("template_type") or ""
-
+            template_id = metadata.get("template_type") or "acord_126_2016.pdf"
             # 4) Determine output directory
             folder_id = metadata.get('folder_id')
             if folder_id:

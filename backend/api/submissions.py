@@ -197,16 +197,20 @@ def delete_submission(submission_id):
 def fill_pdf(submission_id):
     """Fill a single submission's PDF with extracted data."""
     try:
-        result = submission_service.fill_pdf(submission_id)
+        report = submission_service.fill_pdf(submission_id)
+        
         return jsonify({
             "success": True,
             "data": {
-                "written": result["written"],
-                "skipped": result["skipped"],
-                "warnings": result.get("notes", []),
-                "download_url": f"/api/{submission_id}/download",
+                "written": report.filled_fields,
+                "skipped": len(report.unmapped_fields),
+                "coverage": report.coverage,
+                "unmapped_fields": report.unmapped_fields,
+                "warnings": report.warnings,
+                "errors": report.errors,
+                "submission_id": submission_id
             },
-            "message": "PDF filled successfully",
+            "message": "PDF filled successfully" if report.success else "PDF fill completed with issues"
         }), 200
     except ValueError as e:
         return jsonify({"error": str(e)}), 400

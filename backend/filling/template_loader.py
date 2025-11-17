@@ -1,15 +1,3 @@
-"""
-Template Loader — loads PDF template metadata (JSON config)
-from either:
-- Local disk (development)
-- Cloud storage (Supabase/S3/GCS) in production
-
-Supports:
-- template_id (e.g. "acord_126")
-- versioning (e.g. "v2016_09")
-- caching
-"""
-
 import json
 from pathlib import Path
 from dataclasses import dataclass
@@ -24,7 +12,7 @@ class TemplateConfig:
     field_map: Dict[str, str]        # canonical → pdf field name
     repeaters: Dict[str, Any]        # table configs
     raw: Dict[str, Any]              # original JSON contents
-    pdf_url: Optional[str] = None    # remote PDF
+    pdf_url: Optional[str] = None    # remote or local PDF path
     version: Optional[str] = None    # e.g. "v2016_09"
 
 
@@ -34,9 +22,15 @@ class TemplateLoader:
         - Local filesystem (default)
         - Cloud storage (if TEMPLATE_CLOUD_BASE_URL is set)
 
-    Example cloud structure:
-        {base_url}/acord_126/v2016_09/template.json
-        {base_url}/acord_126/v2016_09/template.pdf
+    Local layouts supported:
+
+    1) Versioned:
+        filling/templates/acord_126_2016/v2016_09/template.json
+        filling/templates/acord_126_2016/v2016_09/template.pdf
+
+    2) Simple (no version folders):
+        filling/templates/acord_126_2016/template.json
+        filling/templates/acord_126_2016/template.pdf
     """
 
     local_template_dir = Path(__file__).parent / "templates"
@@ -46,9 +40,13 @@ class TemplateLoader:
     def load(cls, template_id: str, version: str = "latest") -> Optional[TemplateConfig]:
         """
         High-level loader:
-            1) Try cloud (if configured)
-            2) Fallback to local disk
+            1) Normalize template_id
+            2) Try cloud (if configured)
+            3) Fallback to local disk
         """
+
+        # Normalize: accept "acord_126_2016.pdf" or "acord_126_2016"
+        template_id = Path(template_id).stem
         # 1. Try cloud storage
         if cls.cloud_base_url:
             config = cls._load_from_cloud(template_id, version)
@@ -81,7 +79,7 @@ class TemplateLoader:
                 repeaters=raw.get("repeaters", {}),
                 raw=raw,
                 pdf_url=raw.get("pdf_url"),
-                version=raw.get("version", version)
+                version=raw.get("version", version),
             )
 
         except Exception as e:
@@ -95,20 +93,41 @@ class TemplateLoader:
     def _load_from_local(cls, template_id: str, version: str) -> Optional[TemplateConfig]:
         """
         Local template layout:
-            filling/templates/acord_126/v2016_09/template.json
+
+        Versioned:
+            filling/templates/{template_id}/{version}/template.json
+        Simple:
+            filling/templates/{template_id}/template.json
         """
 
         template_dir = cls.local_template_dir / template_id
+        print("template _ dir")
+        print(template_dir)
+        if not template_dir.exists():
+            print(f"[template_loader] template_dir does not exist: {template_dir}")
+            return None
 
         # Version folder:
         if version == "latest":
-            # Pick the newest version folder
-            version_dirs = sorted([d for d in template_dir.iterdir() if d.is_dir()])
-            if not version_dirs:
-                print("[template_loader] no versions found")
+            # If template_dir is a file, treat as error and bail
+            if not template_dir.is_dir():
+                print(f"[template_loader] expected directory, got file: {template_dir}")
                 return None
-            version_dir = version_dirs[-1]  # last = latest
+
+            try:
+                version_dirs = [d for d in template_dir.iterdir() if d.is_dir()]
+            except OSError as e:
+                print(f"[template_loader] iterdir error on {template_dir}: {e}")
+                return None
+
+            if version_dirs:
+                # Versioned layout → pick the newest
+                version_dir = sorted(version_dirs)[-1]
+            else:
+                # No version subfolders → treat template_dir itself as version_dir
+                version_dir = template_dir
         else:
+            # Explicit version
             version_dir = template_dir / version
 
         json_path = version_dir / "template.json"
@@ -127,7 +146,7 @@ class TemplateLoader:
                 repeaters=raw.get("repeaters", {}),
                 raw=raw,
                 pdf_url=str(version_dir / "template.pdf"),
-                version=raw.get("version", version)
+                version=raw.get("version", version),
             )
         except Exception as e:
             print(f"[template_loader] local load error: {e}")

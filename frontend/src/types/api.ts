@@ -19,13 +19,13 @@ export interface ApiResponse<T=unknown> {
   }
   
   export interface FillResponse {
-    submission_id?: string
-    fill_report: {
-      written: number
-      skipped: number
-      warnings: string[]
-    }
-    download_url: string
+    submission_id: string
+    written?:number | 0
+    skipped? : number | 0
+    coverage?:number;
+    unmapped_fields?:string[];
+    warnings?:string[];
+    errors?:string[];
   }
   
   export interface SubmissionDetail {

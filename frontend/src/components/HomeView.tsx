@@ -5,7 +5,7 @@ import {
   CheckSquare, Calendar, Download, FileText, TrendingUp, Zap, Clock, 
   CheckCircle2, Upload, File, FileSpreadsheet, X, Eye, Check
 } from 'lucide-react'
-import { uploadPdf, getSubmission, downloadPdf,bulkSaveSubmissions, updateSubmissionStatus,getRecentSubmissions } from '@/lib/api-client'
+import { uploadPdf, getSubmission,bulkSaveSubmissions, updateSubmissionStatus,getRecentSubmissions } from '@/lib/api-client'
 import { ConfidenceBadgeCompact } from '@/components/ConfidenceBadge'
 import {formatDate,formatFileSize, formatFileType} from "../lib/utils";
 import { ExtractionReviewPanel } from './extraction'

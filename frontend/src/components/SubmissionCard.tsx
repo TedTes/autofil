@@ -6,7 +6,7 @@
 
 import { useState } from 'react'
 import { Download, Eye, RotateCcw, Trash2, ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
-import { fillPdf, downloadPdf } from '@/lib/api-client'
+import { fillPdf, downloadPDF } from '@/lib/api-client'
 import type { CardSubmission, FillReport } from '@/types'
 
 interface SubmissionCardProps {
@@ -36,7 +36,7 @@ export default function SubmissionCard({ submission, onReset }: SubmissionCardPr
 
   const handleDownload = async () => {
     try {
-      await downloadPdf(submission.id)
+      await downloadPDF(submission.id)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Download failed')
     }
@@ -161,7 +161,7 @@ export default function SubmissionCard({ submission, onReset }: SubmissionCardPr
                     <ul className="space-y-1">
                       <li>• {fillReport.written} fields written ✅</li>
                       <li>• {fillReport.skipped} fields skipped</li>
-                      {fillReport.warnings.length > 0 && (
+                      {fillReport.warnings && fillReport.warnings.length > 0 && (
                         <li>• {fillReport.warnings.length} warnings ⚠️</li>
                       )}
                     </ul>

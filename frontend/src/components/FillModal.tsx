@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { X, FileText, Loader2, CheckCircle2, Download, Eye } from 'lucide-react'
-import { fillPdf } from '@/lib/api-client'
+import { fillPdf,downloadPDF } from '@/lib/api-client'
 import type { FillReport } from '@/types'
 
 interface FillModalProps {
@@ -30,7 +30,6 @@ export function FillModal({
   const handleFill = async () => {
     setIsFilling(true)
     setError(null)
-    
     try {
       const report = await fillPdf(submissionId)
       setFillReport(report)
@@ -44,10 +43,9 @@ export function FillModal({
     }
   }
 
-  const handleDownload = () => {
-    if (fillReport?.downloadUrl) {
-      window.open(fillReport.downloadUrl, '_blank')
-    }
+  const handleDownload = async () => {
+    if (!fillReport) return
+    await downloadPDF(fillReport.submission_id)
   }
 
   return (

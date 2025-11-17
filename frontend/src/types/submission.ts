@@ -15,10 +15,13 @@ export interface CardSubmission {
 }
 
 export interface FillReport {
-  written: number
-  skipped: number
-  warnings: string[]
-  downloadUrl: string
+  submission_id: string
+  written?:number | 0 
+  skipped? : number | 0 
+  coverage?:number;
+  unmapped_fields?:string[];
+  warnings?:string[];
+  errors?:string[];
 }
 
 

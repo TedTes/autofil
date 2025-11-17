@@ -599,7 +599,6 @@ function FileDetailActions({
 }) {
   if (!actions) return null
   
-  // ADD isFilling and handleFill here ↓
   const { hasChanges, isSaving, isExporting, isFilling, handleSave, handleExport, handleFill } = actions
   
   return (

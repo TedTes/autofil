@@ -188,9 +188,16 @@ export async function fillPdf(id: string): Promise<FillReport> {
   if (!response.data.success) {
     throw new Error(response.data.error || 'Fill failed')
   }
-
-  const { fill_report, download_url } = response.data.data!
-  return { ...fill_report, downloadUrl: download_url! }
+  const { coverage,errors,skipped,submission_id,unmapped_fields,warnings,written} = response.data.data!
+  return { 
+    submission_id,
+    written,
+    skipped,
+    coverage,
+    unmapped_fields,
+    warnings,
+    errors 
+  }
 }
 
 /**
@@ -207,7 +214,7 @@ export async function fillMultiplePdfs(ids: string[]): Promise<FillReport[]> {
 /**
  * Download filled PDF.
  */
-export async function downloadPdf(
+export async function downloadPDF(
   id: string,
   filename?: string
 ): Promise<void> {

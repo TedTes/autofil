@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Dict, Any, Optional
 import os
 import requests
+import yaml
 
 
 @dataclass
@@ -130,24 +131,45 @@ class TemplateLoader:
             # Explicit version
             version_dir = template_dir / version
 
-        json_path = version_dir / "template.json"
-
-        if not json_path.exists():
-            print(f"[template_loader] missing local file: {json_path}")
+        template_path = cls._find_template_file(version_dir)
+        if not template_path:
+            print(f"[template_loader] missing local template file in {version_dir}")
             return None
 
         try:
-            with open(json_path, "r") as f:
-                raw = json.load(f)
+            raw = cls._load_template_contents(template_path)
+            pdf_url = raw.get("pdf_url")
+            if pdf_url:
+                pdf_path = Path(pdf_url)
+                if not pdf_path.is_absolute():
+                    pdf_path = (version_dir / pdf_path).resolve()
+            else:
+                pdf_path = (version_dir / "template.pdf").resolve()
 
             return TemplateConfig(
                 template_id=raw.get("template_id", template_id),
                 field_map=raw.get("field_map", {}),
                 repeaters=raw.get("repeaters", {}),
                 raw=raw,
-                pdf_url=str(version_dir / "template.pdf"),
+                pdf_url=str(pdf_path),
                 version=raw.get("version", version),
             )
         except Exception as e:
             print(f"[template_loader] local load error: {e}")
             return None
+
+    @classmethod
+    def _find_template_file(cls, version_dir: Path) -> Optional[Path]:
+        for name in ("template.yaml", "template.yml", "template.json"):
+            candidate = version_dir / name
+            if candidate.exists():
+                return candidate
+        return None
+
+    @classmethod
+    def _load_template_contents(cls, path: Path) -> Dict[str, Any]:
+        if path.suffix.lower() in (".yaml", ".yml"):
+            with open(path, "r") as f:
+                return yaml.safe_load(f) or {}
+        with open(path, "r") as f:
+            return json.load(f)

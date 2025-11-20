@@ -1,0 +1,63 @@
+template_id: acord_126_2016
+form_type: ACORD_126
+version: "2016_09"
+description: ACORD 126 Commercial General Liability Section (2016/09) — fillable PDF template mapping to canonical fields.
+pdf_url: template.pdf
+
+field_map:
+  InsuredName: NamedInsured_FullName_A
+  ProducerName: Producer_FullName_A
+  Carrier: Insurer_FullName_A
+  PolicyNumber: Policy_PolicyNumberIdentifier_A
+  EffectiveDate: Policy_EffectiveDate_A
+  GrossSales: ProductAndCompletedOperations_AnnualGrossSalesAmount_A
+  NumberOfEmployees: Contractors_FullTimeEmployeeCount_A
+  CoverageOccurrenceIndicator: GeneralLiability_OccurrenceIndicator_A
+  CoverageClaimsMadeIndicator: GeneralLiability_ClaimsMadeIndicator_A
+  CoverageOtherIndicator: GeneralLiability_OtherCoverageIndicator_A
+  CoverageOtherDescription: GeneralLiability_OtherCoverageDescription_A
+  CoverageOwnersAndContractorsProtective: GeneralLiability_OwnersAndContractorsProtectiveIndicator_A
+  ClaimsMadeRetroactiveDate: GeneralLiability_ClaimsMade_ProposedRetroactiveDate_A
+  ClaimsMadeUninterruptedCoverageEntryDate: GeneralLiability_ClaimsMade_UninterruptedCoverageEntryDate_A
+  GeneralAggregateLimit: GeneralLiability_GeneralAggregate_LimitAmount_A
+  ProductsCompletedOpsLimit: GeneralLiability_ProductsAndCompletedOperations_AggregateLimitAmount_A
+  PersonalAdvertisingInjuryLimit: GeneralLiability_PersonalAndAdvertisingInjury_LimitAmount_A
+  EachOccurrenceLimit: GeneralLiability_EachOccurrence_LimitAmount_A
+  FireDamageLimit: GeneralLiability_FireDamageRentedPremises_EachOccurrenceLimitAmount_A
+  MedicalExpenseLimit: GeneralLiability_MedicalExpense_EachPersonLimitAmount_A
+  EmployeeBenefitsLimit: GeneralLiability_EmployeeBenefits_LimitAmount_A
+  OtherCoverageLimitAmount: GeneralLiability_OtherCoverageLimitAmount_A
+  PropertyDamageDeductibleIndicator: GeneralLiability_PropertyDamage_DeductibleIndicator_A
+  PropertyDamageDeductibleAmount: GeneralLiability_PropertyDamage_DeductibleAmount_A
+  BodilyInjuryDeductibleIndicator: GeneralLiability_BodilyInjury_DeductibleIndicator_A
+  BodilyInjuryDeductibleAmount: GeneralLiability_BodilyInjury_DeductibleAmount_A
+  OtherDeductibleIndicator: GeneralLiability_OtherDeductibleIndicator_A
+  OtherDeductibleDescription: GeneralLiability_OtherDeductibleDescription_A
+  OtherDeductibleAmount: GeneralLiability_OtherDeductibleAmount_A
+  DeductiblePerClaimIndicator: GeneralLiability_DeductiblePerClaimIndicator_A
+  DeductiblePerOccurrenceIndicator: GeneralLiability_DeductiblePerOccurrenceIndicator_A
+  EmployeeBenefitsPerClaimDeductible: GeneralLiability_EmployeeBenefits_PerClaimDeductibleAmount_A
+  EmployeeBenefitsEmployeeCount: GeneralLiability_EmployeeBenefits_EmployeeCoveredCount_A
+  EmployeeBenefitsRetroactiveDate: GeneralLiability_EmployeeBenefits_RetroactiveDate_A
+  PremiumPremisesOperations: GeneralLiability_PremisesOperations_PremiumAmount_A
+  PremiumProducts: GeneralLiability_Products_PremiumAmount_A
+  PremiumOtherCoverage: GeneralLiability_OtherCoveragePremiumAmount_A
+  PremiumTotal: GeneralLiabilityLineOfBusiness_TotalPremiumAmount_A
+
+repeaters:
+  Classification:
+    description: GL Hazard / Classification schedule rows
+    row_ids: ["A", "B", "C"]
+    columns:
+      class_code: GeneralLiability_Hazard_ClassCode_{row_id}
+      premium_basis: GeneralLiability_Hazard_PremiumBasisCode_{row_id}
+      exposure: GeneralLiability_Hazard_Exposure_{row_id}
+      territory: GeneralLiability_Hazard_TerritoryCode_{row_id}
+      prem_ops_rate: GeneralLiability_Hazard_PremisesOperationsRate_{row_id}
+      products_rate: GeneralLiability_Hazard_ProductsRate_{row_id}
+      prem_ops_premium: GeneralLiability_Hazard_PremisesOperationsPremiumAmount_{row_id}
+      products_premium: GeneralLiability_Hazard_ProductsPremiumAmount_{row_id}
+
+metadata:
+  min_fillable_confidence: 0.95
+  supports_alias_fallback: true

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Iterable, Optional
 import re
 from functools import lru_cache
 
@@ -8,6 +8,11 @@ from ..core.document import Document
 from ..extractors.extractor_base import BaseExtractor
 from ..parsers.pdf_field_parser import PdfFieldParser
 from ..extractors.mfc import MFC
+from ..templates.versioned_template_loader import (
+    VersionedTemplateLoader,
+    TemplateRecognizer,
+    TemplateConfig,
+)
 
 
 class ACORD126Extractor(BaseExtractor):
@@ -15,8 +20,9 @@ class ACORD126Extractor(BaseExtractor):
     LOB = "General Liability"
 
     def __init__(self):
-        # No templates_dir, no recognizer
         self.pdf_parser = PdfFieldParser()
+        self.template_loader = VersionedTemplateLoader()
+        self.template_recognizer = TemplateRecognizer()
 
     def extract(self, doc: Document) -> CanonicalOutput:
         entities: Dict[str, List[EntityValue]] = {}
@@ -29,9 +35,15 @@ class ACORD126Extractor(BaseExtractor):
             if raw_fields:
                 confidence = 0.98
 
-        # 2) Alias-based mapping only
+        template_config: Optional[TemplateConfig] = None
         if raw_fields:
-            self._map_alias_fields(raw_fields, entities, confidence)
+            detected = self.template_recognizer.detect(raw_fields.keys())
+            if detected:
+                template_config = self.template_loader.load(detected)
+
+        # 2) Map fields using template (with alias fallback)
+        if raw_fields:
+            self._map_fields(raw_fields, entities, confidence, template_config)
 
         # (optional) future: OCR/tables to patch Classification if still missing
 
@@ -56,11 +68,12 @@ class ACORD126Extractor(BaseExtractor):
     # ---------------------------------------------------------- #
     # Alias-based mapping
     # ---------------------------------------------------------- #
-    def _map_alias_fields(
+    def _map_fields(
         self,
         raw_fields: Dict[str, Any],
         entities: Dict[str, List[EntityValue]],
         confidence: float,
+        template_config: Optional[TemplateConfig],
     ) -> None:
         """
         Map each raw PDF field name to a canonical_id by:
@@ -77,7 +90,12 @@ class ACORD126Extractor(BaseExtractor):
                 self._map_classification_field(field_name, value, entities, confidence)
                 continue
 
-            canonical_id = self._map_pdf_field_to_canonical(field_name)
+            canonical_id: Optional[str] = None
+            if template_config:
+                canonical_id = self._map_via_template(field_name, template_config)
+
+            if not canonical_id:
+                canonical_id = self._map_pdf_field_to_canonical(field_name)
             if not canonical_id:
                 # Unknown / unmapped field, ignore for now
                 continue
@@ -189,6 +207,23 @@ class ACORD126Extractor(BaseExtractor):
     # ---------------------------------------------------------- #
     # Helpers
     # ---------------------------------------------------------- #
+    def _map_via_template(
+        self, field_name: str, template_config: TemplateConfig
+    ) -> Optional[str]:
+        pdf_to_canonical = template_config.pdf_to_canonical
+
+        candidates = [
+            field_name,
+            field_name.lstrip("/"),
+            re.sub(r"\s+", "", field_name),
+        ]
+
+        for candidate in candidates:
+            if candidate in pdf_to_canonical:
+                return pdf_to_canonical[candidate]
+
+        return None
+
     def _map_pdf_field_to_canonical(self, field_name: str) -> str | None:
         canonical = self._target_index().get(field_name)
         if canonical:

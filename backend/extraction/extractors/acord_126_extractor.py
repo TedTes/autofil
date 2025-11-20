@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Dict, Any, List
 import re
+from functools import lru_cache
 
 from ..core.schema import CanonicalOutput, EntityValue, SourceRef, Metadata, SourceInfo
 from ..core.document import Document
@@ -189,23 +190,33 @@ class ACORD126Extractor(BaseExtractor):
     # Helpers
     # ---------------------------------------------------------- #
     def _map_pdf_field_to_canonical(self, field_name: str) -> str | None:
-        # Remove trailing _A / _B etc.
+        canonical = self._target_index().get(field_name)
+        if canonical:
+            return canonical
+
         normalized = re.sub(r"_[A-Z0-9]+$", "", field_name)
-
-        # Lowercase
         lower = normalized.lower()
-
-        # Remove all non-alphanumeric for comparison
         field_norm = re.sub(r"[^a-z0-9]", "", lower)
 
-        for fid, defn in MFC._load()["fields"].items():
-            aliases = defn.get("aliases", [])
-            for alias in aliases:
+        for fid, defn in MFC._load().get("fields", {}).items():
+            for alias in defn.get("aliases", []):
                 alias_norm = re.sub(r"[^a-z0-9]", "", alias.lower())
                 if alias_norm and alias_norm in field_norm:
                     return fid
 
         return None
+
+    @lru_cache(maxsize=1)
+    def _target_index(self) -> Dict[str, str]:
+        mapping: Dict[str, str] = {}
+        for fid, meta in MFC._load().get("fields", {}).items():
+            targets = meta.get("targets", {})
+            pdf_target = targets.get("acord_126_pdf")
+            if not pdf_target:
+                continue
+            if isinstance(pdf_target, str):
+                mapping[pdf_target] = fid
+        return mapping
 
     def _clean_value(self, field_id: str, raw: str):
         """

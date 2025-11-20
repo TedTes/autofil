@@ -10,8 +10,6 @@ class TemplateLoader:
         
         with path.open("r", encoding="utf-8") as f:
             tpl = json.load(f)
-        print("result")
-        print(tpl)
         # sanity check
         if tpl.get("template_id") != template_id:
             raise ValueError(f"Template {template_id} has mismatched template_id")

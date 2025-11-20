@@ -22,7 +22,7 @@ class ACORD126Extractor(BaseExtractor):
     def __init__(self):
         self.pdf_parser = PdfFieldParser()
         self.template_loader = VersionedTemplateLoader()
-        self.template_recognizer = TemplateRecognizer()
+        self.template_recognizer = TemplateRecognizer(base_dir=self.template_loader.base_dir)
 
     def extract(self, doc: Document) -> CanonicalOutput:
         entities: Dict[str, List[EntityValue]] = {}

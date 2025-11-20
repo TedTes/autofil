@@ -47,23 +47,37 @@ class VersionedTemplateLoader:
 
 class TemplateRecognizer:
     """
-    Simple heuristics to decide which ACORD 126 template version is being processed.
+    Detects which template mapping should be used by checking for signature fields.
+    Signatures are defined in each template YAML under `signature_fields`.
     """
 
-    def __init__(self):
-        self.known_signatures = {
-            "acord_126_2016": {
-                "required_fields": {
-                    "GeneralLiability_OccurrenceIndicator_A",
-                    "GeneralLiabilityLineOfBusiness_TotalPremiumAmount_A",
-                }
-            }
-        }
+    def __init__(self, base_dir: Optional[str] = None):
+        self.base_dir = Path(base_dir) if base_dir else VersionedTemplateLoader().base_dir
+        self.signatures = self._load_signatures()
 
     def detect(self, field_names: Iterable[str]) -> Optional[str]:
         names = set(field_names)
-        for template_id, cfg in self.known_signatures.items():
-            if cfg["required_fields"].issubset(names):
+        for template_id, signature in self.signatures.items():
+            if signature and signature.issubset(names):
                 return template_id
-        # Default to latest known template if nothing matches
-        return "acord_126_2016" if names else None
+
+        # fallback: if it only know one template, return it to preserve legacy behavior
+        if len(self.signatures) == 1:
+            return next(iter(self.signatures))
+        return None
+
+    def _load_signatures(self) -> Dict[str, set]:
+        signatures: Dict[str, set] = {}
+        if not self.base_dir.exists():
+            return signatures
+
+        for template_file in self.base_dir.glob("*.yaml"):
+            try:
+                with open(template_file, "r") as f:
+                    data = yaml.safe_load(f) or {}
+                fields = data.get("signature_fields", [])
+                if fields:
+                    signatures[template_file.stem] = set(fields)
+            except Exception:
+                continue
+        return signatures

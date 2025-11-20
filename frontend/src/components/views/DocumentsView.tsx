@@ -183,8 +183,6 @@ const loadFiles = async () => {
     const data = await getAllSubmissions({ 
       status: ['saved', 'finalized'] 
     })
-    console.log("from document view")
-    console.log(data)
     setFiles(data)
   } catch (error) {
     console.error('Failed to refresh submissions:', error)

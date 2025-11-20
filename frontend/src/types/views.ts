@@ -19,6 +19,7 @@ export type ViewType =
   | 'upload'         // Upload view
   | 'files'          // Files view
   | 'folders'        // Folders view
+  | 'dashboard'
 
 /**
  * Type mapping for view-specific data
@@ -38,6 +39,7 @@ export type ViewDataMap = {
   'upload': undefined
   'files': undefined
   'folders': undefined
+  'dashboard':undefined
 }
 
 /**

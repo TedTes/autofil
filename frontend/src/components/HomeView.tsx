@@ -91,7 +91,7 @@ if (totalSubmissions === 0) {
     <div className="space-y-6">
       {/* Welcome Banner */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl shadow-sm p-8 text-white">
-        <h2 className="text-3xl font-bold mb-2">Welcome to AutoFil</h2>
+      <h2 className="text-3xl font-bold mb-2">Dashboard</h2>
         <p className="text-blue-100 text-lg">
           Intelligent document processing with automated extraction, version control, and export capabilities
         </p>

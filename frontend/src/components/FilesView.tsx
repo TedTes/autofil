@@ -64,7 +64,7 @@ export function FilesView({
             onChange={onFolderChange}
           />
           <button
-            onClick={() => onNavigate('upload', undefined, ['Home', 'Upload'])}
+            onClick={() => onNavigate('upload', undefined, ['Dashboard', 'Upload'])}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
           >
             Upload
@@ -83,7 +83,7 @@ export function FilesView({
               key={file.id}
               onClick={() =>
                 onNavigate('file-detail', file, [
-                  'Home',
+                  'Dashboard',
                   'Documents',
                   currentFolder ? currentFolder.name : 'All',
                   file.name,

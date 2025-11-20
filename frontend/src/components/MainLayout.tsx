@@ -2,8 +2,6 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import {
-  Home,
-  FolderTree,
   Download,
   Settings,
   HelpCircle,
@@ -59,8 +57,8 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(false)
   const [fileDetailActions, setFileDetailActions] = useState<FileDetailActions | null>(null)
   const [currentView, setCurrentView] = useState<ViewState>({
-    type: 'home',
-    breadcrumbs: ['Home'],
+    type: 'dashboard',
+    breadcrumbs: ['Dashboard'],
   })
   
   // Navigation history for back button
@@ -95,6 +93,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
     })()
   }, [])
 
+
   // Enhanced navigation with unsaved changes guard
   const navigateTo = useCallback((
     type: ViewType,
@@ -102,7 +101,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
     breadcrumbs?: string[]
   ) => {
     // Check if navigating away from home with unsaved changes
-    if (currentView.type === 'home' && type !== 'home' && hasUnsavedChanges) {
+    if (currentView.type === 'dashboard' && type !== 'dashboard' && hasUnsavedChanges) {
       setPendingNavigation({ type, data, breadcrumbs })
       setShowNavigationWarning(true)
       return
@@ -124,6 +123,28 @@ export default function MainLayout({ children }: MainLayoutProps) {
       setDesktopSidebarCollapsed(false)
     }
   }, [currentView, hasUnsavedChanges, desktopSidebarCollapsed])
+
+
+
+  const handleBreadcrumbClick = useCallback((index: number, crumb: string) => {
+    const breadcrumbMap: Record<string, ViewType> = {
+      'Dashboard': 'dashboard',
+      'Clients': 'clients',
+      'Submissions': 'submissions',
+      'Templates': 'templates',
+      'Documents': 'documents',
+      'Reports': 'reports',
+      'Settings': 'settings',
+      'Help': 'help',
+    }
+  
+    const viewType = breadcrumbMap[crumb]
+    
+    if (viewType) {
+      const newBreadcrumbs = currentView.breadcrumbs.slice(0, index + 1)
+      navigateTo(viewType, undefined, newBreadcrumbs)
+    }
+  }, [currentView.breadcrumbs, navigateTo])
 
   // Handle confirmed navigation (from warning dialog)
   const handleConfirmNavigation = useCallback(() => {
@@ -160,21 +181,21 @@ export default function MainLayout({ children }: MainLayoutProps) {
       setViewHistory((prev) => prev.slice(0, -1))
     } else {
       // Default to home if no history
-      navigateTo('home', undefined, ['Home'])
+      navigateTo('dashboard', undefined, ['Dashboard'])
     }
   }, [viewHistory, navigateTo])
 
   // Handle file click - navigate to file detail view
   const handleFileClick = useCallback((submissionId: string, filename?: string) => {
-    navigateTo('file-detail', { submissionId, filename }, ['Home', 'Documents', filename || 'File'])
+    navigateTo('file-detail', { submissionId, filename }, ['Dashboard', 'Documents', filename || 'File'])
   }, [navigateTo])
 
   const navigationItems = [
     {
-      id: 'home' as const,
+      id: 'dashboard' as const,
       label: 'Dashboard',
       icon: LayoutDashboard,
-      onClick: () => navigateTo('home', undefined, ['Dashboard']),
+      onClick: () => navigateTo('dashboard', undefined, ['Dashboard']),
       section: 'primary' as const,
     },
     {
@@ -553,7 +574,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
                   </button>
                 )}
              {/* Breadcrumbs */}
-<nav className="hidden lg:flex items-center gap-2 text-sm">
+             <nav className="hidden lg:flex items-center gap-2 text-sm">
   {currentView.breadcrumbs.map((crumb, idx) => (
     <div key={idx} className="flex items-center gap-2">
       {idx > 0 && (
@@ -563,17 +584,13 @@ export default function MainLayout({ children }: MainLayoutProps) {
       )}
       {idx < currentView.breadcrumbs.length - 1 ? (
         <button
-          onClick={() => {
-            if (idx === 0) navigateTo('home', undefined, ['Home'])
-            else if (crumb === 'Documents') navigateTo('documents', undefined, ['Home', 'Documents'])
-            else if (crumb === 'Settings') navigateTo('settings', undefined, ['Home', 'Settings'])
-          }}
-          className="text-gray-600 hover:text-gray-900 transition-colors"
+          onClick={() => handleBreadcrumbClick(idx, crumb)}
+          className="text-gray-600 hover:text-gray-900 transition-colors font-medium"
         >
           {crumb}
         </button>
       ) : (
-        <span className="text-gray-900 font-medium">{crumb}</span>
+        <span className="text-gray-900 font-semibold">{crumb}</span>
       )}
     </div>
   ))}
@@ -602,7 +619,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
           <div className={currentView.type === 'file-detail' ? 'h-full' : 'px-4 sm:px-6 lg:px-8 py-6'}>
             
             {/* Home View */}
-            {currentView.type === 'home' && (
+            {currentView.type === 'dashboard' && (
               <HomeView 
                 totalSubmissions={0}
                 onGoToFile={handleFileClick}
@@ -611,7 +628,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
                   console.log(`${count} document(s) saved`)
                   setDocumentsNeedRefresh(true)
                 }}
-                onNavigateToDocuments={() => navigateTo('documents', undefined, ['Home', 'Documents'])}
+                onNavigateToDocuments={() => navigateTo('documents', undefined, ['dashboard', 'Documents'])}
               />
             )}
 

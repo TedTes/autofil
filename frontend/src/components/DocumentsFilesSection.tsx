@@ -38,7 +38,7 @@ export function FilesSection({
             onChange={onFolderChange}
           />
           <button
-            onClick={() => onNavigate('upload', undefined, ['Home', 'Upload'])}
+            onClick={() => onNavigate('upload', undefined, ['Dashboard', 'Upload'])}
             className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             Upload
@@ -52,7 +52,7 @@ export function FilesSection({
           <button
             key={file.id}
             onClick={() =>
-              onNavigate('file-detail', file, ['Home', 'Documents', file.name])
+              onNavigate('file-detail', file, ['Dashboard', 'Documents', file.name])
             }
             className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors text-left"
           >

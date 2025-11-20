@@ -12,13 +12,22 @@ import {
  Save,  Loader2 ,
   TrendingUp,
   AlertTriangle,
-  FileText
+  FileText,
+  LayoutDashboard,
+  Users,  
+  FileStack,
+  FolderOpen,
+  BarChart3,
 } from 'lucide-react'
 import {
   UploadView,
   HomeView
 } from './'
-import { FileDetailView, DocumentsView } from './views'
+import { FileDetailView, DocumentsView,  ClientsView,
+  SubmissionsView,   
+  TemplatesView,   
+  ReportsView,   
+  HelpView   } from './views'
 
 import {
   getFolders,
@@ -162,19 +171,50 @@ export default function MainLayout({ children }: MainLayoutProps) {
 
   const navigationItems = [
     {
-      id: 'home',
-      label: 'Home',
-      icon: Home,
-      onClick: () => navigateTo('home', undefined, ['Home']),
+      id: 'home' as const,
+      label: 'Dashboard',
+      icon: LayoutDashboard,
+      onClick: () => navigateTo('home', undefined, ['Dashboard']),
+      section: 'primary' as const,
     },
     {
-      id: 'documents',
+      id: 'clients' as const,
+      label: 'Clients',
+      icon: Users,
+      onClick: () => navigateTo('clients', undefined, ['Dashboard', 'Clients']),
+      section: 'primary' as const,
+    },
+    {
+      id: 'submissions' as const,
+      label: 'Submissions',
+      icon: FileStack,
+      onClick: () => navigateTo('submissions', undefined, ['Dashboard', 'Submissions']),
+      section: 'primary' as const,
+      // Optional: Add badge for pending count
+      badge: '12',
+    },
+    {
+      id: 'templates' as const,
+      label: 'Templates & Forms',
+      icon: FileText,
+      onClick: () => navigateTo('templates', undefined, ['Dashboard', 'Templates']),
+      section: 'primary' as const,
+    },
+    {
+      id: 'documents' as const,
       label: 'Documents',
-      icon: FolderTree,
-      onClick: () => navigateTo('documents', undefined, ['Home', 'Documents']),
-    }
+      icon: FolderOpen,
+      onClick: () => navigateTo('documents', undefined, ['Dashboard', 'Documents']),
+      section: 'primary' as const,
+    },
+    {
+      id: 'reports' as const,
+      label: 'Reports',
+      icon: BarChart3,
+      onClick: () => navigateTo('reports', undefined, ['Dashboard', 'Reports']),
+      section: 'primary' as const,
+    },
   ]
-
   // Create folder from Documents view
   const handleCreateFolder = async (name: string) => {
     const newFolder = await createFolder(name)
@@ -224,39 +264,47 @@ export default function MainLayout({ children }: MainLayoutProps) {
         
         {/* Navigation Section */}
         <nav>
-          <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3 px-3">
-            Navigation
-          </h3>
-          <div className="space-y-0.5">
-            {navigationItems.map((item) => {
-              const Icon = item.icon
-              const isActive = currentView.type === item.id
-              return (
-                <button
-                  key={item.id}
-                  onClick={item.onClick}
-                  className={`
-                    w-full flex items-center gap-3 px-3 py-2.5 rounded-lg 
-                    transition-all duration-200 group
-                    ${isActive
-                      ? 'bg-blue-50 text-blue-700 shadow-sm'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                    }
-                  `}
-                >
-                  <Icon className={`w-[18px] h-[18px] flex-shrink-0 ${
-                    isActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
-                  }`} />
-                  <span className="text-[13px] font-medium">{item.label}</span>
-                  
-                  {isActive && (
-                    <div className="ml-auto w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
-                  )}
-                </button>
-              )
-            })}
-          </div>
-        </nav>
+  <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3 px-3">
+    MAIN
+  </h3>
+  <div className="space-y-0.5">
+    {navigationItems.map((item) => {
+      const Icon = item.icon
+      const isActive = currentView.type === item.id
+      return (
+        <button
+          key={item.id}
+          onClick={item.onClick}
+          className={`
+            w-full flex items-center gap-3 px-3 py-2.5 rounded-lg 
+            transition-all duration-200 group
+            ${isActive
+              ? 'bg-blue-50 text-blue-700 shadow-sm'
+              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+            }
+          `}
+        >
+          <Icon className={`w-[18px] h-[18px] flex-shrink-0 ${
+            isActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
+          }`} />
+          <span className="text-[13px] font-medium">{item.label}</span>
+          
+          {/* Badge for counts (optional) */}
+          {item.badge && (
+            <span className="ml-auto text-xs font-semibold px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
+              {item.badge}
+            </span>
+          )}
+          
+          {/* Active indicator dot */}
+          {isActive && !item.badge && (
+            <div className="ml-auto w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
+          )}
+        </button>
+      )
+    })}
+  </div>
+</nav>
       </div>
       
       {/* Spacer to push footer down */}
@@ -289,27 +337,56 @@ export default function MainLayout({ children }: MainLayoutProps) {
 </div>
 
   {/* Footer - Fixed at bottom */}
-<div className="border-t border-gray-100 p-4 flex-shrink-0">
-  <button
-    onClick={() => navigateTo('settings', undefined, ['Home', 'Settings'])}
-    className={`
-      w-full flex items-center gap-3 px-3 py-2.5 rounded-lg 
-      transition-all duration-200 group
-      ${currentView.type === 'settings'
-        ? 'bg-blue-50 text-blue-700 shadow-sm'
-        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-      }
-    `}
-  >
-    <Settings className={`w-[18px] h-[18px] flex-shrink-0 ${
-      currentView.type === 'settings' ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
-    }`} />
-    <span className="text-[13px] font-medium">Settings</span>
+  <div className="border-t border-gray-100 p-4 flex-shrink-0">
+  <div className="space-y-1">
+    <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2 px-3">
+      SUPPORT
+    </h3>
     
-    {currentView.type === 'settings' && (
-      <div className="ml-auto w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
-    )}
-  </button>
+    {/* Settings Button */}
+    <button
+      onClick={() => navigateTo('settings', undefined, ['Dashboard', 'Settings'])}
+      className={`
+        w-full flex items-center gap-3 px-3 py-2.5 rounded-lg 
+        transition-all duration-200 group
+        ${currentView.type === 'settings'
+          ? 'bg-blue-50 text-blue-700 shadow-sm'
+          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+        }
+      `}
+    >
+      <Settings className={`w-[18px] h-[18px] flex-shrink-0 ${
+        currentView.type === 'settings' ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
+      }`} />
+      <span className="text-[13px] font-medium">Settings</span>
+      
+      {currentView.type === 'settings' && (
+        <div className="ml-auto w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
+      )}
+    </button>
+
+    {/* Help Button */}
+    <button
+      onClick={() => navigateTo('help', undefined, ['Dashboard', 'Help'])}
+      className={`
+        w-full flex items-center gap-3 px-3 py-2.5 rounded-lg 
+        transition-all duration-200 group
+        ${currentView.type === 'help'
+          ? 'bg-blue-50 text-blue-700 shadow-sm'
+          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+        }
+      `}
+    >
+      <HelpCircle className={`w-[18px] h-[18px] flex-shrink-0 ${
+        currentView.type === 'help' ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
+      }`} />
+      <span className="text-[13px] font-medium">Help & Support</span>
+      
+      {currentView.type === 'help' && (
+        <div className="ml-auto w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
+      )}
+    </button>
+  </div>
 </div>
 </aside>
 
@@ -350,58 +427,102 @@ export default function MainLayout({ children }: MainLayoutProps) {
           
           {/* Navigation */}
           <nav>
-            <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3 px-3">
-              Navigation
-            </h3>
-            <div className="space-y-0.5">
-              {navigationItems.map((item) => {
-                const Icon = item.icon
-                const isActive = currentView.type === item.id
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      item.onClick()
-                      setMobileSidebarOpen(false)
-                    }}
-                    className={`
-                      w-full flex items-center gap-3 px-3 py-2.5 rounded-lg 
-                      transition-all duration-200 group
-                      ${isActive
-                        ? 'bg-blue-50 text-blue-700 shadow-sm'
-                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                      }
-                    `}
-                  >
-                    <Icon className={`w-[18px] h-[18px] flex-shrink-0 ${
-                      isActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
-                    }`} />
-                    <span className="text-[13px] font-medium">{item.label}</span>
-                    
-                    {isActive && (
-                      <div className="ml-auto w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-          </nav>
+  <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3 px-3">
+    MAIN
+  </h3>
+  <div className="space-y-0.5">
+    {navigationItems.map((item) => {
+      const Icon = item.icon
+      const isActive = currentView.type === item.id
+      return (
+        <button
+          key={item.id}
+          onClick={item.onClick}
+          className={`
+            w-full flex items-center gap-3 px-3 py-2.5 rounded-lg 
+            transition-all duration-200 group
+            ${isActive
+              ? 'bg-blue-50 text-blue-700 shadow-sm'
+              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+            }
+          `}
+        >
+          <Icon className={`w-[18px] h-[18px] flex-shrink-0 ${
+            isActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
+          }`} />
+          <span className="text-[13px] font-medium">{item.label}</span>
+          
+          {/* Badge for counts (optional) */}
+          {item.badge && (
+            <span className="ml-auto text-xs font-semibold px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
+              {item.badge}
+            </span>
+          )}
+          
+          {/* Active indicator dot */}
+          {isActive && !item.badge && (
+            <div className="ml-auto w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
+          )}
+        </button>
+      )
+    })}
+  </div>
+</nav>
         </div>
       </div>
 
       {/* Mobile Footer*/}
       <div className="border-t border-gray-100 p-4 flex-shrink-0">
-        <button
-          onClick={() => {
-            /* Settings action */
-            setMobileSidebarOpen(false)
-          }}
-          className="w-full flex items-center gap-3 px-3 py-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
-        >
-          <Settings className="w-[18px] h-[18px]" />
-          <span className="text-[13px] font-medium">Settings</span>
-        </button>
-      </div>
+  <div className="space-y-1">
+    <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2 px-3">
+      SUPPORT
+    </h3>
+    
+    {/* Settings Button */}
+    <button
+      onClick={() => navigateTo('settings', undefined, ['Dashboard', 'Settings'])}
+      className={`
+        w-full flex items-center gap-3 px-3 py-2.5 rounded-lg 
+        transition-all duration-200 group
+        ${currentView.type === 'settings'
+          ? 'bg-blue-50 text-blue-700 shadow-sm'
+          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+        }
+      `}
+    >
+      <Settings className={`w-[18px] h-[18px] flex-shrink-0 ${
+        currentView.type === 'settings' ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
+      }`} />
+      <span className="text-[13px] font-medium">Settings</span>
+      
+      {currentView.type === 'settings' && (
+        <div className="ml-auto w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
+      )}
+    </button>
+
+    {/* Help Button */}
+    <button
+      onClick={() => navigateTo('help', undefined, ['Dashboard', 'Help'])}
+      className={`
+        w-full flex items-center gap-3 px-3 py-2.5 rounded-lg 
+        transition-all duration-200 group
+        ${currentView.type === 'help'
+          ? 'bg-blue-50 text-blue-700 shadow-sm'
+          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+        }
+      `}
+    >
+      <HelpCircle className={`w-[18px] h-[18px] flex-shrink-0 ${
+        currentView.type === 'help' ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
+      }`} />
+      <span className="text-[13px] font-medium">Help & Support</span>
+      
+      {currentView.type === 'help' && (
+        <div className="ml-auto w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
+      )}
+    </button>
+  </div>
+</div>
     </aside>
   </div>
 )}
@@ -532,6 +653,57 @@ export default function MainLayout({ children }: MainLayoutProps) {
     <h2 className="text-2xl font-bold text-gray-900 mb-4">Settings</h2>
     <p className="text-gray-600">Configuration options coming soon...</p>
   </div>
+)}
+{currentView.type === 'clients' && (
+  <ClientsView
+    onClientClick={(clientId) => {
+      // Navigate to client detail view
+      navigateTo('client-detail', { clientId }, ['Dashboard', 'Clients', 'Client Detail'])
+    }}
+    onCreateClient={() => {
+      // TODO: Open create client modal
+      console.log('Create new client')
+    }}
+  />
+)}
+
+{currentView.type === 'submissions' && (
+  <SubmissionsView
+    onSubmissionClick={(submissionId) => {
+      navigateTo('file-detail', { submissionId }, ['Dashboard', 'Submissions', 'Detail'])
+    }}
+  />
+)}
+
+{currentView.type === 'templates' && (
+  <TemplatesView
+    onTemplateClick={(templateId) => {
+      // TODO: Show template preview
+      console.log('View template:', templateId)
+    }}
+    onDownloadTemplate={(templateId) => {
+      // TODO: Download blank template
+      console.log('Download template:', templateId)
+    }}
+  />
+)}
+
+{currentView.type === 'reports' && (
+  <ReportsView
+    onExportReport={() => {
+      // TODO: Export report
+      console.log('Export report')
+    }}
+  />
+)}
+
+{currentView.type === 'help' && (
+  <HelpView
+    onContactSupport={() => {
+      // TODO: Open support chat/modal
+      console.log('Contact support')
+    }}
+  />
 )}
             {children}
           </div>

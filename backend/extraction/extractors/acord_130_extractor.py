@@ -4,12 +4,17 @@ ACORD 130 extractor for Workers Compensation Application forms.
 Extracts workers compensation specific information.
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from datetime import datetime
 from ..interfaces.extractor import IExtractor
 from ..core.document import Document, DocumentType
 from ..models.extraction_result import ExtractionResult
 from ..parsers import PdfFieldParser, TableParser
+from ..templates.versioned_template_loader import (
+    VersionedTemplateLoader,
+    TemplateRecognizer,
+    TemplateConfig,
+)
 
 
 class ACORD130Extractor(IExtractor):
@@ -23,34 +28,14 @@ class ACORD130Extractor(IExtractor):
     - Prior coverage and losses
     """
     
-    FIELD_MAPPINGS = {
-        # Employer Information
-        'employer_name': ['Named Insured', 'Employer Name'],
-        'address': ['Address', 'Mailing Address'],
-        'federal_id': ['FEIN', 'Federal ID'],
-        'state_id': ['State ID', 'State Employer ID'],
-        
-        # Coverage
-        'effective_date': ['Effective Date', 'Policy Period From'],
-        'expiration_date': ['Expiration Date', 'Policy Period To'],
-        'states': ['States', 'Coverage States'],
-        
-        # Experience Modification
-        'experience_mod': ['Experience Mod', 'Experience Modification', 'Mod Factor'],
-        'mod_effective_date': ['Mod Effective Date'],
-        
-        # Prior Coverage
-        'prior_carrier': ['Prior Carrier', 'Current Carrier'],
-        'prior_policy_number': ['Prior Policy Number'],
-        
-        # Total Payroll
-        'total_estimated_payroll': ['Total Estimated Annual Payroll', 'Total Payroll'],
-    }
-    
     def __init__(self):
         """Initialize ACORD 130 extractor."""
         self.pdf_parser = PdfFieldParser()
         self.table_parser = TableParser()
+        self.template_loader = VersionedTemplateLoader()
+        self.template_recognizer = TemplateRecognizer(
+            base_dir=self.template_loader.base_dir
+        )
     
     def extract(self, document: Document) -> ExtractionResult:
         """Extract ACORD 130 data."""
@@ -63,8 +48,15 @@ class ACORD130Extractor(IExtractor):
                 )
             
             # Extract from fillable fields
+            template_config: Optional[TemplateConfig] = None
+            raw_fields = {}
             if self.pdf_parser.is_fillable(document.file_path):
-                result = self._extract_from_fillable(document)
+                raw_fields = self.pdf_parser.extract_fields(document.file_path)
+                if raw_fields:
+                    template_id = self.template_recognizer.detect(raw_fields.keys())
+                    if template_id:
+                        template_config = self.template_loader.load(template_id)
+                result = self._extract_from_fillable(raw_fields, template_config)
                 if result.success:
                     return result
             
@@ -94,44 +86,12 @@ class ACORD130Extractor(IExtractor):
         """Get supported types."""
         return [DocumentType.ACORD_130]
     
-    def _extract_from_fillable(self, document: Document) -> ExtractionResult:
+    def _extract_from_fillable(
+        self, raw_fields: Dict[str, Any], template_config: Optional[TemplateConfig]
+    ) -> ExtractionResult:
         """Extract from fillable fields."""
-        raw_fields = self.pdf_parser.extract_fields(document.file_path)
-        mapped = self._map_fields(raw_fields)
-        
-        data = {
-            'document_type': 'acord_130',
-            'extraction_date': datetime.utcnow().isoformat(),
-            'employer_information': {
-                'name': mapped.get('employer_name', ''),
-                'address': mapped.get('address', ''),
-                'federal_id': mapped.get('federal_id', ''),
-                'state_id': mapped.get('state_id', ''),
-            },
-            'coverage_information': {
-                'effective_date': mapped.get('effective_date', ''),
-                'expiration_date': mapped.get('expiration_date', ''),
-                'states': mapped.get('states', ''),
-            },
-            'experience_modification': {
-                'mod_factor': mapped.get('experience_mod', ''),
-                'mod_effective_date': mapped.get('mod_effective_date', ''),
-            },
-            'prior_coverage': {
-                'carrier': mapped.get('prior_carrier', ''),
-                'policy_number': mapped.get('prior_policy_number', ''),
-            },
-            'payroll_information': {
-                'total_estimated_payroll': mapped.get('total_estimated_payroll', ''),
-            },
-            'classifications': [],  # Extracted from tables
-        }
-        
-        return ExtractionResult(
-            success=True,
-            data=data,
-            confidence=0.8
-        )
+        mapped = self._map_fields(raw_fields, template_config)
+        return ExtractionResult(success=True, data=mapped, confidence=0.8)
     
     def _extract_from_tables(self, document: Document) -> ExtractionResult:
         """Extract classification codes and payroll from tables."""
@@ -162,9 +122,19 @@ class ACORD130Extractor(IExtractor):
             confidence=0.75
         )
     
-    def _map_fields(self, raw_fields: Dict[str, Any]) -> Dict[str, Any]:
+    def _map_fields(
+        self, raw_fields: Dict[str, Any], template_config: Optional[TemplateConfig]
+    ) -> Dict[str, Any]:
         """Map raw fields."""
-        mapped = {}
+        mapped: Dict[str, Any] = {}
+        if template_config:
+            pdf_to_canonical = template_config.pdf_to_canonical
+            for pdf_name, canonical in pdf_to_canonical.items():
+                if pdf_name in raw_fields:
+                    mapped[canonical] = raw_fields[pdf_name]
+            return mapped
+
+        # fallback: alias-based mapping
         for standard_field, possible_names in self.FIELD_MAPPINGS.items():
             for possible_name in possible_names:
                 if possible_name in raw_fields:
@@ -174,3 +144,26 @@ class ACORD130Extractor(IExtractor):
     
     def __repr__(self) -> str:
         return "ACORD130Extractor()"
+    FIELD_MAPPINGS = {
+        # Employer Information
+        "EmployerName": ["Named Insured", "Employer Name"],
+        "EmployerAddressLine1": ["Address", "Mailing Address"],
+        "EmployerAddressLine2": ["Address Line 2"],
+        "EmployerCity": ["City"],
+        "EmployerState": ["State"],
+        "EmployerPostalCode": ["Zip"],
+        "FederalID": ["FEIN", "Federal ID"],
+        "StateID": ["State ID", "State Employer ID"],
+        # Coverage
+        "EffectiveDate": ["Effective Date", "Policy Period From"],
+        "ExpirationDate": ["Expiration Date", "Policy Period To"],
+        "CoverageStates": ["States", "Coverage States"],
+        # Experience Modification
+        "ExperienceModFactor": ["Experience Mod", "Experience Modification", "Mod Factor"],
+        "ExperienceModEffectiveDate": ["Mod Effective Date"],
+        # Prior Coverage
+        "PriorCarrierName": ["Prior Carrier", "Current Carrier"],
+        "PriorPolicyNumber": ["Prior Policy Number"],
+        # Total Payroll
+        "TotalEstimatedPayroll": ["Total Estimated Annual Payroll", "Total Payroll"],
+    }

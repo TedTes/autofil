@@ -9,3 +9,4 @@ export * from "./form";
 export * from "./export";
 export * from './canonical'
 export * from "./workflow";
+export * from "./views";

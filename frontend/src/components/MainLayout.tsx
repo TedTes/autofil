@@ -25,7 +25,7 @@ import {
   createFolder,
 } from '@/lib/api-client'
 
-import type { Folder, ViewType,  FileDetailActions } from '@/types'
+import type { Folder, ViewType,  FileDetailActions,ViewDataMap } from '@/types'
 
 type ViewState = {
   type: ViewType
@@ -35,16 +35,6 @@ type ViewState = {
 
 interface MainLayoutProps {
   children?: React.ReactNode
-}
-// Type mapping for view data based on view type
-type ViewDataMap = {
-  'file-detail': { submissionId: string; filename?: string }
-  'home': undefined
-  'documents': undefined
-  'upload': undefined
-  'files': undefined
-  'folders': undefined
-  'settings': undefined
 }
 
 type ViewStateData = ViewDataMap[ViewType]
@@ -528,7 +518,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
             )}
 
             {/* File Detail View */}
-            {currentView.type === 'file-detail' && currentView.data && (
+            {currentView.type === 'file-detail' && currentView.data && 'submissionId' in currentView.data && (
               <FileDetailView
                 submissionId={currentView.data.submissionId}
                 filename={currentView.data.filename}

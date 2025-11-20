@@ -11,7 +11,11 @@ import type {
   FillReport,
   RecentSubmissionFile,
   RecentSubmission, 
-  RecentSubmissionsQuery
+  RecentSubmissionsQuery,
+  Client,
+  SubmissionListResponse,
+  SubmissionListItem,
+  SubmissionStats
 } from '@/types'
 
 
@@ -197,6 +201,84 @@ export async function fillPdf(id: string): Promise<FillReport> {
     unmapped_fields,
     warnings,
     errors 
+  }
+}
+
+/**
+ * Fetch clients with optional submission summaries.
+ */
+export async function getClients(): Promise<Client[]> {
+  try {
+    const response = await api.get('/clients/')
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to load clients')
+    }
+    return response.data.data as Client[]
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
+/**
+ * Create a new client.
+ */
+export async function createClient(name: string): Promise<Client> {
+  try {
+    const response = await api.post('/clients/', { name })
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to create client')
+    }
+    return response.data.data as Client
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
+/**
+ * List submissions with pagination/status filters.
+ */
+export async function listSubmissions(params?: {
+  limit?: number
+  offset?: number
+  status_filter?: string
+}): Promise<SubmissionListResponse> {
+  try {
+    const response = await api.get('/submissions/list', {
+      params: {
+        limit: params?.limit ?? 100,
+        offset: params?.offset ?? 0,
+        status: params?.status_filter,
+      },
+    })
+
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to load submissions')
+    }
+
+    const payload = response.data.data
+    return {
+      submissions: payload.submissions as SubmissionListItem[],
+      total: payload.total,
+      limit: payload.limit,
+      offset: payload.offset,
+    }
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
+/**
+ * Fetch aggregate submission stats.
+ */
+export async function getSubmissionStats(): Promise<SubmissionStats> {
+  try {
+    const response = await api.get('/submissions/stats')
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to load stats')
+    }
+    return response.data.data as SubmissionStats
+  } catch (error) {
+    handleApiError(error)
   }
 }
 
@@ -701,19 +783,6 @@ export function downloadBlob(blob: Blob, filename: string): void {
   document.body.removeChild(link)
   window.URL.revokeObjectURL(url)
 }
-
-export interface SubmissionListItem {
-  submission_id: string
-  filename: string
-  client_name?: string
-  status: 'ready' | 'extracted' | 'filled'
-  confidence?: number
-  uploaded_at: string
-  file_size?: number
-  file_type?: string
-}
-
-
 
 export async function bulkExportSubmissions(submissionIds: string[]): Promise<{
   success: boolean

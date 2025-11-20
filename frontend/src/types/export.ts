@@ -35,12 +35,7 @@ export interface ExportOptions {
     folder_id?: string
   }
   
-  export interface SubmissionStats {
-    total_submissions: number
-    by_status: Record<string, number>
-    average_confidence: number
-    last_updated: string
-  }
+
   
   export interface ExportManifest {
     export_id: string

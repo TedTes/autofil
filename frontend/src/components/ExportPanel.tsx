@@ -15,7 +15,7 @@ import {
   FileSpreadsheet,
   Loader2
 } from 'lucide-react'
-import type { SubmissionSummary, SubmissionStats, ExportOptions, WebhookConfig } from '@/types/export'
+import type { SubmissionSummary, SubmissionStats, ExportOptions, WebhookConfig } from '@/types'
 
 export default function ExportPanel() {
   const [submissions, setSubmissions] = useState<SubmissionSummary[]>([])

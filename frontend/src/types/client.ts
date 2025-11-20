@@ -19,7 +19,7 @@ export interface Client {
     template_type?: 'property_renewal' | 'wc_quote' | 'gl_new_business' | 'custom'
     created_at: string
     updated_at: string
-    status: 'created' | 'uploading' | 'extracting' | 'ready' | 'filled' | 'error'
+    status: 'created' | 'uploading' | 'extracting' | 'ready' | 'filled' | 'error' | 'extracted'
     file_count: number
     files: SubmissionFile[]
   }

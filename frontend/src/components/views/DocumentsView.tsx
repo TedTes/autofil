@@ -8,12 +8,12 @@ import {
   ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react'
 
-import { getAllSubmissions, type SubmissionListItem , bulkExportSubmissions,
+import { getAllSubmissions , bulkExportSubmissions,
   bulkDeleteSubmissions,
   exportSingleSubmission,
   deleteSubmission,
   downloadBlob,formatDate,bulkExportAsZip} from '@/lib'
-import {Folder,ViewType} from "../../types"
+import type {Folder,ViewType,SubmissionListItem} from "../../types"
 import { ConfidenceBadgeCompact } from '@/components/ConfidenceBadge'
 import {BulkExportProgressModal} from "../BulkExportProgressModal"
 
@@ -1372,22 +1372,22 @@ function FileGridView({
 }
 
 // Status Badge Component
-function StatusBadge({ status }: { status: 'ready' | 'extracted' | 'filled' }) {
-  const styles = {
-    ready: 'bg-gray-100 text-gray-700',
-    extracted: 'bg-blue-100 text-blue-700',
-    filled: 'bg-green-100 text-green-700',
+function StatusBadge({ status }: { status: string }) {
+  const statusMap: Record<string, { style: string; label: string }> = {
+    ready: { style: 'bg-gray-100 text-gray-700', label: 'Ready' },
+    extracted: { style: 'bg-blue-100 text-blue-700', label: 'Extracted' },
+    filled: { style: 'bg-green-100 text-green-700', label: 'Filled' },
+    created: { style: 'bg-gray-100 text-gray-700', label: 'Created' },
+    uploading: { style: 'bg-yellow-100 text-yellow-700', label: 'Uploading' },
+    extracting: { style: 'bg-purple-100 text-purple-700', label: 'Extracting' },
+    error: { style: 'bg-red-100 text-red-700', label: 'Error' },
   }
 
-  const labels = {
-    ready: 'Ready',
-    extracted: 'Extracted',
-    filled: 'Filled',
-  }
+  const config = statusMap[status] || { style: 'bg-gray-100 text-gray-700', label: status }
 
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${styles[status]}`}>
-      {labels[status]}
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${config.style}`}>
+      {config.label}
     </span>
   )
 }

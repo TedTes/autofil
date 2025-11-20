@@ -104,3 +104,30 @@ export interface SubmissionStatusBadge {
   color: 'gray' | 'blue' | 'purple' | 'green' | 'red' | 'yellow'
   icon: string  // Icon name for lucide-react
 }
+
+/**
+ * Lightweight submission list item returned from /api/submissions/list
+ */
+export interface SubmissionListItem {
+  submission_id: string
+  filename: string
+  status: Submission['status']
+  uploaded_at: string
+  confidence?: number
+  folder_id?: string
+  client_name?:string
+}
+
+export interface SubmissionListResponse {
+  submissions: SubmissionListItem[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface SubmissionStats {
+  total_submissions: number
+  by_status: Record<string, number>
+  average_confidence: number
+  last_updated: string
+}

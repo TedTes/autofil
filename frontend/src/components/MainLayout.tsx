@@ -285,9 +285,11 @@ export default function MainLayout({ children }: MainLayoutProps) {
         
         {/* Navigation Section */}
         <nav>
-  <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3 px-3">
-    MAIN
-  </h3>
+        <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3 px-3 flex items-center gap-2">
+  <span className="w-4 h-px bg-gray-300"></span>
+  MAIN
+</h3>
+
   <div className="space-y-0.5">
     {navigationItems.map((item) => {
       const Icon = item.icon
@@ -300,7 +302,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
             w-full flex items-center gap-3 px-3 py-2.5 rounded-lg 
             transition-all duration-200 group
             ${isActive
-              ? 'bg-blue-50 text-blue-700 shadow-sm'
+              ? 'bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-100'
               : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
             }
           `}
@@ -312,9 +314,9 @@ export default function MainLayout({ children }: MainLayoutProps) {
           
           {/* Badge for counts (optional) */}
           {item.badge && (
-            <span className="ml-auto text-xs font-semibold px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
-              {item.badge}
-            </span>
+             <span className="ml-auto text-xs font-bold px-2 py-0.5 bg-blue-600 text-white rounded-full shadow-sm">
+             {item.badge}
+           </span>
           )}
           
           {/* Active indicator dot */}
@@ -343,8 +345,8 @@ export default function MainLayout({ children }: MainLayoutProps) {
             className={`
               w-full p-2.5 rounded-lg transition-colors
               ${isActive
-                ? 'bg-blue-50 text-blue-600'
-                : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+                ? 'bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-100'
+                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
               }
             `}
             title={item.label}
@@ -360,9 +362,10 @@ export default function MainLayout({ children }: MainLayoutProps) {
   {/* Footer - Fixed at bottom */}
   <div className="border-t border-gray-100 p-4 flex-shrink-0">
   <div className="space-y-1">
-    <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2 px-3">
-      SUPPORT
-    </h3>
+  <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3 px-3 flex items-center gap-2">
+  <span className="w-4 h-px bg-gray-300"></span>
+  SUPPORT
+</h3>
     
     {/* Settings Button */}
     <button
@@ -448,9 +451,11 @@ export default function MainLayout({ children }: MainLayoutProps) {
           
           {/* Navigation */}
           <nav>
-  <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3 px-3">
-    MAIN
-  </h3>
+          <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3 px-3 flex items-center gap-2">
+  <span className="w-4 h-px bg-gray-300"></span>
+  MAIN
+</h3>
+
   <div className="space-y-0.5">
     {navigationItems.map((item) => {
       const Icon = item.icon
@@ -463,7 +468,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
             w-full flex items-center gap-3 px-3 py-2.5 rounded-lg 
             transition-all duration-200 group
             ${isActive
-              ? 'bg-blue-50 text-blue-700 shadow-sm'
+              ? 'bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-100'
               : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
             }
           `}
@@ -475,9 +480,9 @@ export default function MainLayout({ children }: MainLayoutProps) {
           
           {/* Badge for counts (optional) */}
           {item.badge && (
-            <span className="ml-auto text-xs font-semibold px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
-              {item.badge}
-            </span>
+             <span className="ml-auto text-xs font-bold px-2 py-0.5 bg-blue-600 text-white rounded-full shadow-sm">
+             {item.badge}
+           </span>
           )}
           
           {/* Active indicator dot */}
@@ -495,9 +500,10 @@ export default function MainLayout({ children }: MainLayoutProps) {
       {/* Mobile Footer*/}
       <div className="border-t border-gray-100 p-4 flex-shrink-0">
   <div className="space-y-1">
-    <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2 px-3">
-      SUPPORT
-    </h3>
+  <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3 px-3 flex items-center gap-2">
+  <span className="w-4 h-px bg-gray-300"></span>
+  SUPPORT
+</h3>
     
     {/* Settings Button */}
     <button

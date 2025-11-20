@@ -87,8 +87,9 @@ export default function FolderItem({
           w-full flex items-center gap-2.5 px-3 py-2 rounded-lg
           transition-all duration-200 cursor-pointer
           ${isActive
-            ? 'bg-blue-50 border-2 border-blue-100'
-            : 'bg-white border-2 border-transparent hover:border-gray-200 hover:bg-gray-50'}
+            ? 'bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-100'
+            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+          }
         `}
       >
         {/* Icon */}

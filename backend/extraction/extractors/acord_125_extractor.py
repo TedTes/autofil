@@ -10,7 +10,7 @@ Uses:
   - validation.validator.validate()
 """
 
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from datetime import datetime
 import re
 
@@ -22,6 +22,11 @@ from ..extractors.mfc import MFC
 from ..validation.validator import validate
 from ..core.document import Document
 from ..parsers import PdfFieldParser, OcrFallbackParser
+from ..templates.versioned_template_loader import (
+    VersionedTemplateLoader,
+    TemplateRecognizer,
+    TemplateConfig,
+)
 from .extractor_base import BaseExtractor
 
 
@@ -30,15 +35,29 @@ class ACORD125Extractor(BaseExtractor):
     def __init__(self):
         self.pdf_parser = PdfFieldParser()
         self.ocr_parser = OcrFallbackParser()
+        self.template_loader = VersionedTemplateLoader()
+        self.template_recognizer = TemplateRecognizer(
+            base_dir=self.template_loader.base_dir
+        )
 
     def extract(self, doc: Document) -> CanonicalOutput:
         entities: Dict[str, List[EntityValue]] = {}
 
         # === 1. Try Fillable PDF Fields (High Confidence) ===
+        template_config: Optional[TemplateConfig] = None
+
         if self.pdf_parser.is_fillable(doc.file_path):
             raw_fields = self.pdf_parser.extract_fields(doc.file_path)
             if raw_fields:
-                self._extract_from_pdf_fields(raw_fields, entities, confidence=0.98)
+                template_id = self.template_recognizer.detect(raw_fields.keys())
+                if template_id:
+                    template_config = self.template_loader.load(template_id)
+                self._extract_from_pdf_fields(
+                    raw_fields,
+                    entities,
+                    confidence=0.98,
+                    template_config=template_config,
+                )
             else:
                 self._extract_from_ocr(doc, entities, confidence=0.65)
         else:
@@ -70,13 +89,24 @@ class ACORD125Extractor(BaseExtractor):
     # --------------------------------------------------------------------- #
     #  Fillable PDF Extraction
     # --------------------------------------------------------------------- #
-    def _extract_from_pdf_fields(self, raw_fields: Dict[str, Any], entities: Dict, confidence: float):
+    def _extract_from_pdf_fields(
+        self,
+        raw_fields: Dict[str, Any],
+        entities: Dict,
+        confidence: float,
+        template_config: Optional[TemplateConfig] = None,
+    ):
         for field_name, value in raw_fields.items():
             if not value or value == "/Off":  # Skip unchecked boxes
                 continue
 
             # Map to canonical field via MFC aliases
-            canonical_id = self._map_pdf_field_to_canonical(field_name)
+            canonical_id = None
+            if template_config:
+                canonical_id = self._map_via_template(field_name, template_config)
+
+            if not canonical_id:
+                canonical_id = self._map_pdf_field_to_canonical(field_name)
             if not canonical_id:
                 continue
 
@@ -166,3 +196,18 @@ class ACORD125Extractor(BaseExtractor):
 
     def __repr__(self) -> str:
         return "ACORD125Extractor()"
+    def _map_via_template(
+        self, field_name: str, template_config: TemplateConfig
+    ) -> Optional[str]:
+        pdf_to_canonical = template_config.pdf_to_canonical
+        candidates = [
+            field_name,
+            field_name.lstrip("/"),
+            re.sub(r"\s+", "", field_name),
+        ]
+
+        for candidate in candidates:
+            canonical = pdf_to_canonical.get(candidate)
+            if canonical:
+                return canonical
+        return None

@@ -1,0 +1,37 @@
+template_id: acord_140_2016
+form_type: ACORD_140
+version: "2016_09"
+description: ACORD 140 Property Section (2016/09) — fillable PDF template mapping to canonical fields.
+pdf_url: template.pdf
+signature_fields:
+  - Form_EditionIdentifier_A
+  - NamedInsured_FullName_A
+  - CommercialStructure_PhysicalAddress_LineOne_A
+
+field_map:
+  InsuredName: NamedInsured_FullName_A
+  LocationNumber: CommercialStructure_Location_ProducerIdentifier_A
+  LocationAddressLine1: CommercialStructure_PhysicalAddress_LineOne_A
+  BuiltYear: CommercialStructure_BuiltYear_A
+  BuildingArea: Construction_BuildingArea_A
+  BuildingValue: CommercialProperty_Premises_LimitAmount_A
+  ContentsLimit: CommercialProperty_Premises_LimitAmount_B
+  BusinessIncomeLimit: CommercialProperty_Premises_LimitAmount_C
+  ConstructionType: Construction_ConstructionCode_A
+  NumberOfStories: Construction_StoreyCount_A
+  SprinklerIndicator: BuildingFireProtection_Alarm_SprinklerPercent_A
+  FireAlarmIndicator: BuildingFireProtection_Alarm_CentralStationIndicator_A
+  BurglarAlarmIndicator: Alarm_Burglar_ProtectionExtentCode_A
+
+repeaters:
+  BlanketSummary:
+    description: Blanket coverage summary rows
+    row_ids: ["A", "B", "C", "D"]
+    columns:
+      blanket_number: CommercialProperty_Summary_BlanketNumberIdentifier_{row_id}
+      blanket_limit: CommercialProperty_Summary_BlanketLimitAmount_{row_id}
+      coverage_type: CommercialCoverage_Summary_BlanketTypeDescription_{row_id}
+
+metadata:
+  min_fillable_confidence: 0.95
+  supports_alias_fallback: true

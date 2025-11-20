@@ -60,7 +60,10 @@ export default function MainLayout({ children }: MainLayoutProps) {
     type: 'dashboard',
     breadcrumbs: ['Dashboard'],
   })
-  
+
+  //state to track closing animation
+const [isMobileClosing, setIsMobileClosing] = useState(false)
+const [isMobileOpening, setIsMobileOpening] = useState(false) 
   // Navigation history for back button
   const [viewHistory, setViewHistory] = useState<ViewState[]>([])
 
@@ -93,6 +96,18 @@ export default function MainLayout({ children }: MainLayoutProps) {
     })()
   }, [])
 
+  useEffect(() => {
+    if (mobileSidebarOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = 'unset'
+    }
+    
+    return () => {
+      document.body.style.overflow = 'unset'
+    }
+  }, [mobileSidebarOpen])
+
 
   // Enhanced navigation with unsaved changes guard
   const navigateTo = useCallback((
@@ -124,7 +139,14 @@ export default function MainLayout({ children }: MainLayoutProps) {
     }
   }, [currentView, hasUnsavedChanges, desktopSidebarCollapsed])
 
-
+//  Update close handler
+const handleMobileSidebarClose = () => {
+  setIsMobileClosing(true)
+  setTimeout(() => {
+    setMobileSidebarOpen(false)
+    setIsMobileClosing(false)
+  }, 300) // Match animation duration
+}
 
   const handleBreadcrumbClick = useCallback((index: number, crumb: string) => {
     const breadcrumbMap: Record<string, ViewType> = {
@@ -341,7 +363,10 @@ export default function MainLayout({ children }: MainLayoutProps) {
         return (
           <button
             key={item.id}
-            onClick={item.onClick}
+            onClick={() => {
+              item.onClick()
+              handleMobileSidebarClose()
+            }}
             className={`
               w-full p-2.5 rounded-lg transition-colors
               ${isActive
@@ -417,31 +442,39 @@ export default function MainLayout({ children }: MainLayoutProps) {
   {/* Mobile Sidebar Overlay */}
 {mobileSidebarOpen && (
   <div
-    className="lg:hidden fixed inset-0 bg-black/50 z-40"
-    onClick={() => setMobileSidebarOpen(false)}
-  >
-    <aside
-      className="absolute left-0 top-0 bottom-0 w-80 bg-white shadow-xl flex flex-col"
+  className={`lg:hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-40 transition-opacity duration-300 ${
+    isMobileClosing ? 'opacity-0' : 'opacity-100'
+  }`}
+  onClick={handleMobileSidebarClose}
+>
+<aside
+      className={`absolute left-0 top-0 bottom-0 w-80 bg-white shadow-xl flex flex-col transition-transform duration-300 ease-out
+        ${isMobileClosing 
+          ? '-translate-x-full' 
+          : isMobileOpening 
+            ? '-translate-x-full opacity-0' 
+            : 'translate-x-0 opacity-100'
+        }`}
       onClick={(e) => e.stopPropagation()}
     >
       {/* Mobile Header*/}
-      <div className="h-16 border-b border-gray-200 flex items-center justify-between px-4 flex-shrink-0">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-            <TrendingUp className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h1 className="text-sm font-bold text-gray-900 leading-tight">AutoFil</h1>
-            <p className="text-[10px] text-gray-500 leading-tight">Smart Form Automation</p>
-          </div>
-        </div>
-        <button
-          onClick={() => setMobileSidebarOpen(false)}
-          className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
-        >
-          <X className="w-5 h-5" />
-        </button>
-      </div>
+      <div className="h-16 border-b border-gray-200 flex items-center justify-between px-4 flex-shrink-0 bg-gradient-to-r from-blue-600 to-blue-700">
+  <div className="flex items-center gap-2.5">
+    <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
+      <TrendingUp className="w-5 h-5 text-blue-600" />
+    </div>
+    <div>
+      <h1 className="text-sm font-bold text-white leading-tight">AutoFil</h1>
+      <p className="text-[10px] text-blue-100 leading-tight">Smart Form Automation</p>
+    </div>
+  </div>
+  <button
+  onClick={handleMobileSidebarClose}
+  className="p-2 text-white/80 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
+>
+  <X className="w-5 h-5" />
+</button>
+</div>
 
       {/* Mobile Content - Scrollable */}
       <div className="flex-1 overflow-y-auto">
@@ -463,9 +496,12 @@ export default function MainLayout({ children }: MainLayoutProps) {
       return (
         <button
           key={item.id}
-          onClick={item.onClick}
+          onClick={() => {
+            item.onClick()
+            handleMobileSidebarClose()
+          }}
           className={`
-            w-full flex items-center gap-3 px-3 py-2.5 rounded-lg 
+            w-full flex items-center gap-3 px-3 py-3.5 rounded-lg 
             transition-all duration-200 group
             ${isActive
               ? 'bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-100'
@@ -509,7 +545,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
     <button
       onClick={() => navigateTo('settings', undefined, ['Dashboard', 'Settings'])}
       className={`
-        w-full flex items-center gap-3 px-3 py-2.5 rounded-lg 
+        w-full flex items-center gap-3 px-3 py-3.5 rounded-lg 
         transition-all duration-200 group
         ${currentView.type === 'settings'
           ? 'bg-blue-50 text-blue-700 shadow-sm'
@@ -531,7 +567,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
     <button
       onClick={() => navigateTo('help', undefined, ['Dashboard', 'Help'])}
       className={`
-        w-full flex items-center gap-3 px-3 py-2.5 rounded-lg 
+        w-full flex items-center gap-3 px-3 py-3.5 rounded-lg 
         transition-all duration-200 group
         ${currentView.type === 'help'
           ? 'bg-blue-50 text-blue-700 shadow-sm'
@@ -564,7 +600,11 @@ export default function MainLayout({ children }: MainLayoutProps) {
             <div className="flex items-center justify-between h-16">
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => setMobileSidebarOpen(true)}
+                  onClick={() => {
+                    setMobileSidebarOpen(true)
+                    setIsMobileOpening(true)
+                    setTimeout(() => setIsMobileOpening(false), 50) // Quick reset
+                  }}
                   className="lg:hidden p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
                 >
                   <Menu className="w-5 h-5" />

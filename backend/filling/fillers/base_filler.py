@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Dict
 
 
 @dataclass
@@ -21,6 +21,9 @@ class BaseFiller:
     def __init__(self):
         pass
 
+    # -------------------------------------------------------------- #
+    # Public API
+    # -------------------------------------------------------------- #
     def fill_from_canonical(self, canonical_data: dict, output_path: str, template_id: str):
         """
         Child classes must implement this.
@@ -29,15 +32,94 @@ class BaseFiller:
             f"{self.__class__.__name__}.fill_from_canonical must be implemented by subclass."
         )
 
-    def fill(self, canonical_data: dict, output_path: str, template_id: Optional[str] = None):
+    def fill(
+        self,
+        canonical_data: dict,
+        output_path: str,
+        template_id: Optional[str] = None,
+        template_version: str = "latest",
+    ):
         """
-        Public wrapper. In future, can add logging, metrics, tracing, etc.
+        Thin wrapper around fill_from_canonical.
+
+        Child fillers can ignore template_version if they don't need it.
         """
         return self.fill_from_canonical(
             canonical_data=canonical_data,
             output_path=output_path,
-            template_id=template_id
+            template_id=template_id or "",
+            template_version=template_version,
         )
+
+    # -------------------------------------------------------------- #
+    # Shared canonical → template mapping
+    # -------------------------------------------------------------- #
+    def _canonical_to_template_fields(
+        self,
+        canonical: Dict[str, Any],
+        template: Any = None,   # TemplateConfig-like, but not strictly required
+    ) -> Dict[str, Any]:
+        """
+        Map CanonicalOutput.to_dict() -> flat fields for the filler.
+
+        Strategy:
+          - For most entities: take the first .value
+          - For 'Classification': build a list of row dicts from .value
+          - Optionally could filter by template.field_map keys in future.
+
+        Expected canonical structure:
+
+        {
+          "entities": {
+            "InsuredName": [
+              { "value": "Acme Inc", "confidence": 0.98, ... },
+              ...
+            ],
+            "Classification": [
+              { "value": { "class_code": "1234", "exposure": "10000", ... }, ... },
+              ...
+            ]
+          },
+          ...
+        }
+        """
+        entities = canonical.get("entities", {}) or {}
+        flat: Dict[str, Any] = {}
+
+        # --- 1) Generic scalar mapping: first value of each entity ----------
+        for field_id, values in entities.items():
+            if not values:
+                continue
+
+            # Classification is handled separately below
+            if field_id == "Classification":
+                continue
+
+            first = values[0]
+            value = first.get("value")
+
+            # Skip empty / None
+            if value is None or value == "":
+                continue
+
+            flat[field_id] = value
+
+        # --- 2) Classification repeater mapping -----------------------------
+        class_entities = entities.get("Classification") or []
+        rows = []
+
+        for ev in class_entities:
+            row = ev.get("value")
+            # Expect row to be a dict with columns like { "class_code": "...", ... }
+            if isinstance(row, dict):
+                # Filter out completely empty rows {} or all empty/None
+                if any(v not in ("", None, "") for v in row.values()):
+                    rows.append(row)
+
+        if rows:
+            flat["Classification"] = rows
+
+        return flat
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__} form_type={self.form_type}>"

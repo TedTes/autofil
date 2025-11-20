@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Dict, Any, List
+import re
 
 from ..core.schema import CanonicalOutput, EntityValue, SourceRef, Metadata, SourceInfo
 from ..core.document import Document
@@ -7,18 +8,14 @@ from ..extractors.extractor_base import BaseExtractor
 from ..parsers.pdf_field_parser import PdfFieldParser
 from ..extractors.mfc import MFC
 
-from .template_recognizer import TemplateRecognizer
-from .template_loader import TemplateLoader
-
 
 class ACORD126Extractor(BaseExtractor):
     FORM_TYPE = "ACORD_126"
     LOB = "General Liability"
 
-    def __init__(self, templates_dir: str):
+    def __init__(self):
+        # No templates_dir, no recognizer
         self.pdf_parser = PdfFieldParser()
-        self.recognizer = TemplateRecognizer(templates_dir)
-        self.templates_dir = templates_dir
 
     def extract(self, doc: Document) -> CanonicalOutput:
         entities: Dict[str, List[EntityValue]] = {}
@@ -31,32 +28,19 @@ class ACORD126Extractor(BaseExtractor):
             if raw_fields:
                 confidence = 0.98
 
-        # 2) Try to recognize template
-        template_id = None
-        template = None
+        # 2) Alias-based mapping only
         if raw_fields:
-            template_id = self.recognizer.recognize(raw_fields, doc.raw_text or "")
-            if template_id:
-                template = TemplateLoader.load(self.templates_dir, template_id)
+            self._map_alias_fields(raw_fields, entities, confidence)
 
-        # 3) Map fields
-        if template:
-            self._map_template_fields(template, raw_fields, entities, confidence)
-            self._map_template_checkboxes(template, raw_fields, entities, confidence)
-            self._map_template_repeaters(template, raw_fields, entities, confidence)
-        else:
-            # fallback to old alias-based mapping
-            self._fallback_map(raw_fields, entities, confidence)
+        # (optional) future: OCR/tables to patch Classification if still missing
 
-        # (optional) OCR/tables to patch Classification if still missing
-
-        # 4) Build CanonicalOutput
+        # 3) Build CanonicalOutput
         return CanonicalOutput(
             job_id=doc.job_id,
             source=SourceInfo(
                 file_name=doc.file_name,
                 file_type="pdf",
-                extraction_method="fillable_pdf_template" if template else "fillable_pdf_fallback",
+                extraction_method="fillable_pdf_alias",
                 extracted_at=datetime.utcnow(),
             ),
             entities=entities,
@@ -64,123 +48,181 @@ class ACORD126Extractor(BaseExtractor):
                 form_type_detected=self.FORM_TYPE,
                 line_of_business=self.LOB,
                 schema_version="1.0",
-                template_id=template_id or "unknown",
+                # no template id in alias mode
             ),
         )
 
-    # ----------------- template mapping helpers ----------------- #
-
-    def _map_template_fields(self, template: dict, raw_fields: Dict[str, Any],
-                             entities: Dict, confidence: float) -> None:
-        for canonical_id, pdf_name in template.get("field_map", {}).items():
-            raw_val = raw_fields.get(pdf_name)
-            if not raw_val or str(raw_val).strip() in ("", "/Off", "Off"):
-                continue
-
-            value = self._clean_value(canonical_id, raw_val)
-            ev = EntityValue(
-                value=value,
-                confidence=confidence,
-                source=SourceRef(page=1, extraction_rule="pdf_field_template"),
-                tags=["fillable_pdf", "template", template["template_id"]],
-            )
-            entities.setdefault(canonical_id, []).append(ev)
-
-    def _map_template_checkboxes(self, template: dict, raw_fields: Dict[str, Any],
-                                 entities: Dict, confidence: float) -> None:
-        for canonical_id, pdf_name in template.get("checkbox_map", {}).items():
-            raw_val = raw_fields.get(pdf_name)
-            if raw_val is None:
-                continue
-            checked = str(raw_val).strip().lower() not in ("off", "/off", "0", "false")
-            ev = EntityValue(
-                value=checked,
-                confidence=confidence,
-                source=SourceRef(page=1, extraction_rule="pdf_field_checkbox"),
-                tags=["fillable_pdf", "checkbox", template["template_id"]],
-            )
-            entities.setdefault(canonical_id, []).append(ev)
-
-    def _map_template_repeaters(self, template: dict, raw_fields: Dict[str, Any],
-                                entities: Dict, confidence: float) -> None:
-        for canonical_id, spec in template.get("repeaters", {}).items():
-            rows: List[EntityValue] = []
-            row_ids = spec.get("row_ids", [])
-            columns = spec.get("columns", {})
-
-            for rid in row_ids:
-                row_obj: Dict[str, Any] = {}
-                non_empty = False
-                for logical_key, pattern in columns.items():
-                    pdf_field_name = pattern.format(row=rid)
-                    raw_val = raw_fields.get(pdf_field_name)
-                    if not raw_val or str(raw_val).strip() in ("", "/Off", "Off"):
-                        continue
-                    cleaned = self._clean_value(canonical_id, raw_val)
-                    row_obj[logical_key] = cleaned
-                    non_empty = True
-
-                if non_empty:
-                    rows.append(
-                        EntityValue(
-                            value=row_obj,
-                            confidence=confidence,
-                            source=SourceRef(
-                                page=1,
-                                extraction_rule="pdf_field_repeater",
-                                row=rid,
-                            ),
-                            tags=["fillable_pdf", "repeater", canonical_id, template["template_id"]],
-                        )
-                    )
-
-            if rows:
-                entities[canonical_id] = rows
-
-    # ----------------- fallback & helpers ----------------- #
-
-    def _fallback_map(self, raw_fields: Dict[str, Any], entities: Dict,
-                      confidence: float) -> None:
-        """Your old MFC alias-based logic lives here."""
+    # ---------------------------------------------------------- #
+    # Alias-based mapping
+    # ---------------------------------------------------------- #
+    def _map_alias_fields(
+        self,
+        raw_fields: Dict[str, Any],
+        entities: Dict[str, List[EntityValue]],
+        confidence: float,
+    ) -> None:
+        """
+        Map each raw PDF field name to a canonical_id by:
+          - normalizing name
+          - matching against MFC aliases
+          - handling special cases (Classification rows, etc. if you want)
+        """
         for field_name, value in raw_fields.items():
-            if not value or str(value).strip() in ("", "/Off", "Off"):
+            if value is None or str(value).strip() in ("", "/Off", "Off"):
+                continue
+
+            # Example: treat certain patterns as Classification table
+            if self._looks_like_classification_field(field_name):
+                self._map_classification_field(field_name, value, entities, confidence)
                 continue
 
             canonical_id = self._map_pdf_field_to_canonical(field_name)
             if not canonical_id:
+                # Unknown / unmapped field, ignore for now
                 continue
 
+            cleaned_value = self._clean_value(canonical_id, str(value))
+
             ev = EntityValue(
-                value=self._clean_value(canonical_id, value),
+                value=cleaned_value,
                 confidence=confidence,
-                source=SourceRef(page=1, extraction_rule="pdf_field_fallback"),
-                tags=["fillable_pdf", "fallback"],
+                source=SourceRef(
+                    page=1,
+                    extraction_rule="pdf_field_alias",
+                ),
+                tags=["fillable_pdf", "alias"],
             )
             entities.setdefault(canonical_id, []).append(ev)
 
+    # ---------------------------------------------------------- #
+    # Classification (optional alias-based).
+    #  NOTE: simplify/remove this if not needed.
+    # ---------------------------------------------------------- #
+    def _looks_like_classification_field(self, field_name: str) -> bool:
+        lower = field_name.lower()
+        return bool(
+            re.search(
+                r"(classcode|classification|exposure|premiumbasis|premisesoperationsrate|productsrate|territorycode)",
+                lower,
+            )
+        )
+
+    def _map_classification_field(
+        self,
+        field_name: str,
+        value: Any,
+        entities: Dict[str, List[EntityValue]],
+        confidence: float,
+    ) -> None:
+        """
+        Simple heuristic: group classification row fields by trailing index/letter.
+        Example field names:
+          GeneralLiability_Hazard_ClassCode_A
+          GeneralLiability_Hazard_Exposure_1
+        """
+        # Try to find a row id at the end
+        m = re.search(r"[_\-]([A-Za-z0-9])$", field_name)
+        if not m:
+            return
+
+        row_id = m.group(1)
+        lower = field_name.lower()
+
+        # Decide which logical column this is
+        if "classcode" in lower:
+            key = "class_code"
+        elif "class" in lower:
+            key = "description"
+        elif "exposure" in lower:
+            key = "exposure"
+        elif "premiumbasis" in lower or "basis" in lower:
+            key = "premium_basis"
+        elif "premisesoperationsrate" in lower or "prem_ops" in lower:
+            key = "prem_ops_rate"
+        elif "productsrate" in lower:
+            key = "products_rate"
+        elif "territory" in lower:
+            key = "territory"
+        else:
+            return
+
+        # Prepare Classification list
+        if "Classification" not in entities:
+            entities["Classification"] = []
+
+        # Map row_id → index
+        # 'A'→0, 'B'→1 ... or numeric indexing
+        if row_id.isdigit():
+            idx = int(row_id) - 1
+        else:
+            idx = ord(row_id.upper()) - ord("A")
+
+        # Ensure we have enough rows
+        while len(entities["Classification"]) <= idx:
+            entities["Classification"].append(
+                EntityValue(
+                    value={},  # row dict
+                    confidence=confidence,
+                    source=SourceRef(
+                        page=1,
+                        extraction_rule="pdf_field_classification",
+                    ),
+                    tags=["fillable_pdf", "classification"],
+                )
+            )
+
+        row_ev = entities["Classification"][idx]
+        row_dict = row_ev.value
+
+        clean_val = str(value).strip()
+        # Basic numeric conversion for exposure/rates
+        if key in ("exposure", "prem_ops_rate", "products_rate"):
+            try:
+                clean_val = float(re.sub(r"[^\d.]", "", clean_val))
+            except Exception:
+                pass
+
+        row_dict[key] = clean_val
+        row_ev.value = row_dict  # reassign (probably not strictly needed)
+
+    # ---------------------------------------------------------- #
+    # Helpers
+    # ---------------------------------------------------------- #
     def _map_pdf_field_to_canonical(self, field_name: str) -> str | None:
-        # reuse your existing implementation here
+        # Remove trailing _A / _B etc.
         normalized = re.sub(r"_[A-Z0-9]+$", "", field_name)
-        normalized = re.sub(r"(?<!^)(?=[A-Z])", " ", normalized)
+
+        # Lowercase
         lower = normalized.lower()
 
+        # Remove all non-alphanumeric for comparison
+        field_norm = re.sub(r"[^a-z0-9]", "", lower)
+
         for fid, defn in MFC._load()["fields"].items():
-            aliases = [a.lower() for a in defn.get("aliases", [])]
-            if any(alias in lower for alias in aliases):
-                return fid
+            aliases = defn.get("aliases", [])
+            for alias in aliases:
+                alias_norm = re.sub(r"[^a-z0-9]", "", alias.lower())
+                if alias_norm and alias_norm in field_norm:
+                    return fid
+
         return None
 
     def _clean_value(self, field_id: str, raw: str):
-        # reuse your _clean_value logic from the old class
+        """
+        Normalize value according to type in MFC schema (money, integer, etc.)
+        """
         raw = raw.strip()
         if not raw:
             return raw
         field = MFC.field(field_id)
         if not field:
             return raw
+
         t = field.get("type")
         if t == "money":
             return float(re.sub(r"[^\d.]", "", raw)) if re.search(r"\d", raw) else 0.0
         if t == "integer":
             return int(re.sub(r"\D", "", raw)) if re.search(r"\d", raw) else 0
+
+        # future: dates, bools, etc.
         return raw

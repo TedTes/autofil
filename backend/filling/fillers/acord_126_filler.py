@@ -19,7 +19,6 @@ from pdfrw import (
 )
 
 from ..template_loader import TemplateLoader, TemplateConfig
-from filling.utils import canonical_to_template_fields
 from .base_filler import BaseFiller, FillReport
 
 
@@ -30,7 +29,7 @@ class Acord126Filler(BaseFiller):
     Inputs:
         - canonical_data: Dict from CanonicalOutput.to_dict() — extracted entities
         - output_path: Path to save filled PDF
-        - template_id: Optional template family (e.g., "acord_126")
+        - template_id: Optional template family (e.g., "acord_126_2016")
         - template_version: Optional version (e.g., "v2016_09" or "latest")
 
     Outputs:
@@ -52,168 +51,198 @@ class Acord126Filler(BaseFiller):
         self,
         canonical_data: Dict[str, Any],
         output_path: str,
-        template_id: str = "acord_126",
+        template_id: str = "acord_126_2016",
         template_version: str = "latest",
     ) -> FillReport:
         """
-        Fill ACORD 126 PDF from canonical extracted data.
-
-        Args:
-            canonical_data: Dict from CanonicalOutput.to_dict()
-            output_path: Path to save filled PDF (e.g., "filled_126.pdf")
-            template_id: Template family (defaults to "acord_126")
-            template_version: Version string (defaults to "latest")
-
-        Returns:
-            FillReport with coverage stats, warnings, errors
+        Fill an ACORD PDF from canonical extracted data.
         """
-        # ---- 1. Load template config (cloud → local) -------------------
-        template: Optional[TemplateConfig] = TemplateLoader.load(
-            template_id=template_id,
-            version=template_version,
-        )
-        if not template:
-            return FillReport(
-                success=False,
-                coverage=0.0,
-                filled_fields=0,
-                unmapped_fields=[],
-                warnings=[f"No template found for {template_id} ({template_version})"],
-                errors=["Template loading failed"],
+        try:
+            # ---- 1. Load template config (cloud → local) -------------------
+            template: Optional[TemplateConfig] = TemplateLoader.load(
+                template_id=template_id,
+                version=template_version,
             )
+            print("output")
+            print(template)
 
-        # ---- 2. Map canonical data to flat fields ----------------------
-        flat_fields = canonical_to_template_fields(canonical_data, template)
+            if not template:
+                return FillReport(
+                    success=False,
+                    coverage=0.0,
+                    filled_fields=0,
+                    unmapped_fields=[],
+                    warnings=[f"No template found for {template_id} ({template_version})"],
+                    errors=["Template loading failed"],
+                )
 
-        # ---- 3. Resolve PDF template path ------------------------------
-        if not template.pdf_url:
-            return FillReport(
-                success=False,
-                coverage=0.0,
-                filled_fields=0,
-                unmapped_fields=list(template.field_map.keys()),
-                warnings=[f"Template config has no pdf_url for {template.template_id}"],
-                errors=["Missing pdf_url in template"],
-            )
+            # ---- 2. Map canonical data to flat fields ----------------------
+            # flat_fields MUST be keyed by canonical names
+            flat_fields = self._canonical_to_template_fields(canonical_data, template)
 
-        pdf_source = template.pdf_url
+            # ---- 3. Resolve PDF template path ------------------------------
+            if not template.pdf_url:
+                return FillReport(
+                    success=False,
+                    coverage=0.0,
+                    filled_fields=0,
+                    unmapped_fields=list(template.field_map.keys()),
+                    warnings=[f"Template config has no pdf_url for {template.template_id}"],
+                    errors=["Missing pdf_url in template"],
+                )
 
-        # If cloud loader returned an HTTP URL, you could add download logic here.
-        # For now we assume pdf_source is a local file path (as your local loader sets it).
-        template_pdf_path = Path(pdf_source)
+            template_pdf_path = Path(template.pdf_url)
+            if not template_pdf_path.exists():
+                return FillReport(
+                    success=False,
+                    coverage=0.0,
+                    filled_fields=0,
+                    unmapped_fields=list(template.field_map.keys()),
+                    warnings=[f"Template PDF missing: {template_pdf_path}"],
+                    errors=["PDF template not found"],
+                )
 
-        if not template_pdf_path.exists():
-            return FillReport(
-                success=False,
-                coverage=0.0,
-                filled_fields=0,
-                unmapped_fields=list(template.field_map.keys()),
-                warnings=[f"Template PDF missing: {template_pdf_path}"],
-                errors=["PDF template not found"],
-            )
+            pdf = PdfReader(str(template_pdf_path))
+            acro_form = getattr(pdf.Root, "AcroForm", None)
+            if not acro_form:
+                return FillReport(
+                    success=False,
+                    coverage=0.0,
+                    filled_fields=0,
+                    unmapped_fields=list(flat_fields.keys()),
+                    warnings=["PDF has no AcroForm — cannot fill fields"],
+                    errors=["Non-fillable PDF template"],
+                )
 
-        pdf = PdfReader(str(template_pdf_path))
-        acro_form = getattr(pdf.Root, "AcroForm", None)
-        if not acro_form:
-            return FillReport(
-                success=False,
-                coverage=0.0,
-                filled_fields=0,
-                unmapped_fields=list(flat_fields.keys()),
-                warnings=["PDF has no AcroForm — cannot fill fields"],
-                errors=["Non-fillable PDF template"],
-            )
+            filled_count = 0
+            unmapped: List[str] = []
+            warnings: List[str] = []
 
-        filled_count = 0
-        unmapped: List[str] = []
-        warnings: List[str] = []
+            # ---- 4. Fill simple fields (non-repeater) ----------------------
+            for canonical_key, value in flat_fields.items():
+                # Skip repeater keys here; they are handled separately
+                if canonical_key in template.repeaters:
+                    continue
 
-        # ---- 4. Fill simple fields -------------------------------------
-        # template.field_map: {canonical_key -> pdf_field_name}
-        for canonical_key, pdf_key in template.field_map.items():
-            if canonical_key in flat_fields:
-                value = flat_fields[canonical_key]
+                pdf_key = template.field_map.get(canonical_key)
+
+                # Strict: only fill if the template explicitly knows about this field
+                if not pdf_key:
+                    warnings.append(
+                        f"Canonical field has no mapping for this template: {canonical_key}"
+                    )
+                    continue
+
                 ok = self._set_pdf_field(pdf, acro_form, pdf_key, value)
                 if ok:
                     filled_count += 1
                 else:
                     unmapped.append(pdf_key)
-                    warnings.append(f"PDF field not found: {pdf_key}")
-            else:
-                unmapped.append(pdf_key)
-                warnings.append(f"Missing data for canonical field: {canonical_key}")
+                    warnings.append(
+                        f"PDF field not found: {pdf_key} (from canonical {canonical_key})"
+                    )
 
-        # ---- 5. Fill repeaters (e.g., Classification table) ------------
-        for repeater_key, repeater_config in template.repeaters.items():
-            rows_data = flat_fields.get(repeater_key)
-            if not rows_data:
-                warnings.append(f"No data for repeater: {repeater_key}")
-                continue
+            # ---- 5. Repeaters (Classification, etc.) -----------------------
+            for repeater_key, repeater_config in template.repeaters.items():
+                rows_data = flat_fields.get(repeater_key)
 
-            if not isinstance(rows_data, list):
-                warnings.append(
-                    f"Repeater {repeater_key} expected list of rows, got {type(rows_data)}"
-                )
-                continue
+                if not rows_data:
+                    warnings.append(f"No data for repeater: {repeater_key}")
+                    continue
 
-            max_rows = repeater_config.get("max_rows", 6)
-            row_pattern: str = repeater_config["row_pattern"]
-            columns: Dict[str, str] = repeater_config["columns"]
+                if not isinstance(rows_data, list):
+                    warnings.append(
+                        f"Repeater {repeater_key} expected list of rows, got {type(rows_data)}"
+                    )
+                    continue
 
-            for row_idx, row_data in enumerate(rows_data[:max_rows]):
-                row_num = row_idx + 1
-                for canonical_col, pdf_col_suffix in columns.items():
-                    value = row_data.get(canonical_col)
-                    if value is None:
-                        continue
-                    field_name = row_pattern.format(row=row_num) + pdf_col_suffix
-                    ok = self._set_pdf_field(pdf, acro_form, field_name, value)
-                    if ok:
-                        filled_count += 1
-                    else:
-                        unmapped.append(field_name)
+                row_ids: List[str] = repeater_config.get("row_ids", [])
+                columns: Dict[str, str] = repeater_config.get("columns", {})
 
-            if len(rows_data) > max_rows:
-                warnings.append(
-                    f"Truncated {repeater_key} to {max_rows} rows (original: {len(rows_data)})"
-                )
+                if not row_ids or not columns:
+                    warnings.append(
+                        f"Repeater {repeater_key} misconfigured (missing row_ids or columns)"
+                    )
+                    continue
 
-        # ---- 6. Coverage calculation -----------------------------------
-        total_expected_simple = len(template.field_map)
+                max_rows = min(len(rows_data), len(row_ids))
+                for row_idx in range(max_rows):
+                    row_data = rows_data[row_idx] or {}
+                    row_id = row_ids[row_idx]
 
-        total_expected_repeaters = 0
-        for k, r in template.repeaters.items():
-            rows = flat_fields.get(k, [])
-            if isinstance(rows, list):
-                max_rows = r.get("max_rows", 1)
-                total_expected_repeaters += min(len(rows), max_rows) * len(
-                    r.get("columns", {})
-                )
+                    for canonical_col, pattern in columns.items():
+                        value = row_data.get(canonical_col)
+                        if value is None:
+                            continue
 
-        total_expected = total_expected_simple + total_expected_repeaters
-        coverage = filled_count / total_expected if total_expected > 0 else 0.0
+                        # pattern has {row_id} placeholder, e.g. "GeneralLiability_Hazard_ClassCode_{row_id}"
+                        field_name = pattern.format(row_id=row_id)
 
-        # ---- 7. Ensure NeedAppearances is set on AcroForm -------------
-        if acro_form is not None:
-            acro_form.update(PdfDict(NeedAppearances=PdfObject("true")))
-            pdf.Root.AcroForm = acro_form
+                        ok = self._set_pdf_field(pdf, acro_form, field_name, value)
+                        if ok:
+                            filled_count += 1
+                        else:
+                            unmapped.append(field_name)
+                            warnings.append(
+                                f"PDF field not found for repeater {repeater_key}: {field_name}"
+                            )
 
-        # ---- 8. Save filled PDF ----------------------------------------
-        output_path = Path(output_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+                if len(rows_data) > max_rows:
+                    warnings.append(
+                        f"Truncated {repeater_key} to {max_rows} rows (original: {len(rows_data)})"
+                    )
 
-        writer = PdfWriter()
-        writer.write(str(output_path), pdf)
+            # ---- 6. Coverage calculation -----------------------------------
+            simple_keys = [
+                k for k in flat_fields.keys()
+                if k not in template.repeaters
+            ]
+            total_expected_simple = len(simple_keys)
 
-        # ---- 9. Build and return FillReport ----------------------------
-        return FillReport(
-            success=True,
-            coverage=coverage,
-            filled_fields=filled_count,
-            unmapped_fields=unmapped,
-            warnings=warnings,
-            errors=[],
-        )
+            total_expected_repeaters = 0
+            for repeater_key, repeater_config in template.repeaters.items():
+                rows = flat_fields.get(repeater_key, [])
+                if isinstance(rows, list):
+                    row_ids: List[str] = repeater_config.get("row_ids", [])
+                    columns: Dict[str, str] = repeater_config.get("columns", {})
+                    max_rows = min(len(rows), len(row_ids))
+                    total_expected_repeaters += max_rows * len(columns)
+
+            total_expected = total_expected_simple + total_expected_repeaters
+            coverage = filled_count / total_expected if total_expected > 0 else 0.0
+
+            # ---- 7. Ensure NeedAppearances is set on AcroForm -------------
+            if acro_form is not None:
+                acro_form.update(PdfDict(NeedAppearances=PdfObject("true")))
+                pdf.Root.AcroForm = acro_form
+
+            # ---- 8. Save filled PDF ----------------------------------------
+            output_path = Path(output_path)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+
+            writer = PdfWriter()
+            writer.write(str(output_path), pdf)
+
+            # ---- 9. Build and return FillReport ----------------------------
+            return FillReport(
+                success=True,
+                coverage=coverage,
+                filled_fields=filled_count,
+                unmapped_fields=unmapped,
+                warnings=warnings,
+                errors=[],
+            )
+
+        except Exception as e:
+            print("fill_from_canonical error:", str(e))
+            return FillReport(
+                success=False,
+                coverage=0.0,
+                filled_fields=0,
+                unmapped_fields=[],
+                warnings=[],
+                errors=[str(e)],
+            )
 
     # ------------------------------------------------------------------ #
     # Internal Helpers

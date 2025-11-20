@@ -63,9 +63,6 @@ class Acord126Filler(BaseFiller):
                 template_id=template_id,
                 version=template_version,
             )
-            print("output")
-            print(template)
-
             if not template:
                 return FillReport(
                     success=False,
@@ -92,6 +89,7 @@ class Acord126Filler(BaseFiller):
                 )
 
             template_pdf_path = Path(template.pdf_url)
+
             if not template_pdf_path.exists():
                 return FillReport(
                     success=False,
@@ -222,7 +220,6 @@ class Acord126Filler(BaseFiller):
 
             writer = PdfWriter()
             writer.write(str(output_path), pdf)
-
             # ---- 9. Build and return FillReport ----------------------------
             return FillReport(
                 success=True,

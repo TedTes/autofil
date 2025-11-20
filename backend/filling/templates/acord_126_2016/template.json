@@ -3,7 +3,7 @@
     "form_type": "ACORD_126",
     "version": "2016_09",
     "description": "ACORD 126 Commercial General Liability Section (2016/09) — fillable PDF template mapping to canonical fields.",
-    "pdf_url": "filling/fillers/templates/acord_126_2016/template.pdf",
+    "pdf_url": "template.pdf",
   
     "field_map": {
       "InsuredName": "NamedInsured_FullName_A",

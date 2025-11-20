@@ -5,11 +5,11 @@ import {
   CheckSquare, Calendar, Download, FileText, TrendingUp, Zap, Clock, 
   CheckCircle2, Upload, File, FileSpreadsheet, X, Eye, Check
 } from 'lucide-react'
-import { uploadPdf, getSubmission,bulkSaveSubmissions, updateSubmissionStatus,getRecentSubmissions } from '@/lib/api-client'
+import { uploadPdf, getSubmission,bulkSaveSubmissions, updateSubmissionStatus,getRecentSubmissions,getClients } from '@/lib/api-client'
 import { ConfidenceBadgeCompact } from '@/components/ConfidenceBadge'
 import {formatDate,formatFileSize, formatFileType} from "../lib/utils";
 import { ExtractionReviewPanel } from './extraction'
-import type { WorkflowFile, WorkflowStep,RecentSubmission  } from '@/types'
+import type { WorkflowFile, WorkflowStep,RecentSubmission, Client  } from '@/types'
 import { UnsavedChangesDialog } from './shared/UnsavedChangesDialog'
 import RecentSubmissionsCard from './dashboard/RecentSubmissionsCard'
 
@@ -43,14 +43,42 @@ type HomeViewProps = {
   onUnsavedChangesUpdate?: (hasChanges: boolean) => void
   onDocumentsSaved?: (count: number) => void
   onNavigateToDocuments?: () => void
+  onNavigateToClients?: () => void
 }
 
-export function HomeView({ totalSubmissions, onUploadComplete, onGoToFile ,onUnsavedChangesUpdate,onDocumentsSaved,onNavigateToDocuments}: HomeViewProps) {
+export function HomeView({
+  totalSubmissions,
+  onUploadComplete,
+  onGoToFile,
+  onUnsavedChangesUpdate,
+  onDocumentsSaved,
+  onNavigateToDocuments,
+  onNavigateToClients,
+}: HomeViewProps) {
   const [recentSubmissions, setRecentSubmissions] = useState<RecentSubmission[]>([])
 const [loadingRecent, setLoadingRecent] = useState(false)
+const [clients, setClients] = useState<Client[]>([])
+const [selectedClient, setSelectedClient] = useState<string>('')
+const [uploadMenuOpen, setUploadMenuOpen] = useState(false)
+const [loadingClients, setLoadingClients] = useState(false)
 
 useEffect(() => {
   loadRecentSubmissions()
+}, [])
+useEffect(() => {
+  const loadClients = async () => {
+    try {
+      setLoadingClients(true)
+      const data = await getClients()
+      setClients(data)
+      if (data.length > 0) setSelectedClient(data[0].client_id)
+    } catch (error) {
+      console.error('Failed to load clients', error)
+    } finally {
+      setLoadingClients(false)
+    }
+  }
+  void loadClients()
 }, [])
 // Load recent submissions
 const loadRecentSubmissions = async () => {
@@ -74,15 +102,20 @@ const handleRecentSubmissionClick = (submissionId: string) => {
     onGoToFile(submissionId)
   }
 }
-if (totalSubmissions === 0) {
+  if (totalSubmissions === 0) {
     return (
       <EmptyDashboardState
         onUploadComplete={onUploadComplete}
         onGoToFile={onGoToFile}
-         onUnsavedChangesUpdate={onUnsavedChangesUpdate}
-         onDocumentsSaved= {onDocumentsSaved}
-         onRecentSubmissionClick={handleRecentSubmissionClick}
-         onNavigateToDocuments={onNavigateToDocuments}
+        onUnsavedChangesUpdate={onUnsavedChangesUpdate}
+        onDocumentsSaved={onDocumentsSaved}
+        onRecentSubmissionClick={handleRecentSubmissionClick}
+        onNavigateToDocuments={onNavigateToDocuments}
+        onNavigateToClients={onNavigateToClients}
+        clients={clients}
+        selectedClient={selectedClient}
+        onClientChange={setSelectedClient}
+        loadingClients={loadingClients}
       />
     )
   }
@@ -114,14 +147,24 @@ function EmptyDashboardState({
   onUnsavedChangesUpdate,
   onDocumentsSaved,
   onRecentSubmissionClick,
-  onNavigateToDocuments
+  onNavigateToDocuments,
+  onNavigateToClients,
+  clients,
+  selectedClient,
+  onClientChange,
+  loadingClients,
 }: {
   onUploadComplete?: (uploadedCount: number) => void
   onGoToFile?: (submissionId: string, filename?: string) => void
   onUnsavedChangesUpdate?: (hasChanges: boolean) => void
   onDocumentsSaved?: (count: number) => void,
   onRecentSubmissionClick?: (submissionId: string) => void
-  onNavigateToDocuments?:()=>void
+  onNavigateToDocuments?: () => void
+  onNavigateToClients?: () => void
+  clients: Client[]
+  selectedClient: string
+  onClientChange: (clientId: string) => void
+  loadingClients: boolean
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isUploading, setIsUploading] = useState(false)
@@ -136,12 +179,18 @@ function EmptyDashboardState({
   const [uploaded, setUploaded] = useState<UploadedRow[]>([])
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)
   const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null)
+  const selectedClientData = clients.find((c) => c.client_id === selectedClient)
+  const canUpload = Boolean(selectedClient)
 
-  const triggerFilePicker = () => {
-    handleNavigationAttempt(() => {
-      fileInputRef.current?.click()
-    })
+const triggerFilePicker = () => {
+  if (!selectedClient) {
+    setError('Please select a client before uploading.')
+    return
   }
+  handleNavigationAttempt(() => {
+    fileInputRef.current?.click()
+  })
+}
 
   // Helper to detect file type
   const getFileType = (filename: string): 'pdf' | 'excel' | 'csv' | 'other' => {
@@ -622,7 +671,56 @@ const handleSaveAll = async (fileIds: string[]) => {
         multiple
         accept="text/csv,.pdf,.csv,.xlsx,.xls,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
       />
-      
+
+      {/* Client selection + quick links */}
+      <div className="bg-white border border-gray-200 rounded-2xl p-6 space-y-4 shadow-sm">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-gray-700 mb-2">Upload documents for</p>
+            <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+              <select
+                value={selectedClient}
+                disabled={loadingClients || clients.length === 0}
+                onChange={(e) => onClientChange(e.target.value)}
+                className="w-full sm:w-72 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400"
+              >
+                {clients.length === 0 ? (
+                  <option value="">No clients available</option>
+                ) : (
+                  clients.map((client) => (
+                    <option key={client.client_id} value={client.client_id}>
+                      {client.name}
+                    </option>
+                  ))
+                )}
+              </select>
+              <button
+                type="button"
+                onClick={onNavigateToClients}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50"
+              >
+                Manage clients
+              </button>
+            </div>
+            {selectedClientData && (
+              <p className="mt-2 text-sm text-gray-500">
+                {selectedClientData.submission_count ?? selectedClientData.submissions?.length ?? 0} submissions • Last
+                updated {new Date(selectedClientData.updated_at).toLocaleDateString()}
+              </p>
+            )}
+          </div>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={onNavigateToDocuments}
+              className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50"
+            >
+              View documents
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Show upload zone when no files or on upload step */}
       {workflowStep === 'upload' && (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
@@ -641,7 +739,7 @@ const handleSaveAll = async (fileIds: string[]) => {
               </div>
 
               <h3 className="text-2xl font-bold text-gray-900 mb-3">
-                Upload your documents
+                {selectedClientData ? `Upload for ${selectedClientData.name}` : 'Upload your documents'}
               </h3>
               <p className="text-gray-600 mb-8 max-w-md mx-auto">
                 Drag and drop your PDFs here, or click to browse
@@ -654,7 +752,7 @@ const handleSaveAll = async (fileIds: string[]) => {
                   triggerFilePicker()
                 }}
                 className="inline-flex items-center gap-2 px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-sm hover:shadow transition-all duration-150 disabled:opacity-60"
-                disabled={isUploading}
+                disabled={isUploading || !canUpload}
               >
                 {isUploading ? (
                   <>
@@ -670,6 +768,11 @@ const handleSaveAll = async (fileIds: string[]) => {
               </button>
 
               <p className="text-sm text-gray-500 mt-6">PDF, Excel, CSV • Up to 50 MB per file</p>
+              {!canUpload && (
+                <p className="text-sm text-red-500 mt-2">
+                  Select or create a client before uploading documents.
+                </p>
+              )}
 
               {(isUploading || message || error) && (
                 <div className="mt-8 max-w-md mx-auto">

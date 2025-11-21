@@ -42,7 +42,7 @@ export interface RecentSubmission {
   template_type?: 'property_renewal' | 'wc_quote' | 'gl_new_business' | 'custom'
   created_at: string
   updated_at: string
-  status: 'created' | 'uploading' | 'extracting' | 'ready' | 'filled' | 'error' | 'extracted'
+  status: 'created' | 'uploading' | 'extracting' | 'ready' | 'filled' | 'error' | 'extracted' | 'uploaded'
   
   // Aggregated file info
   file_count: number

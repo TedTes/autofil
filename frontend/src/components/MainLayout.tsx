@@ -25,7 +25,7 @@ import { FileDetailView, DocumentsView,  ClientsView,
   SubmissionsView,   
   TemplatesView,   
   ReportsView,   
-  HelpView   } from './views'
+  HelpView ,ClientDetailView  } from './views'
 
 import {
   getFolders,
@@ -721,12 +721,20 @@ const handleMobileSidebarClose = () => {
   <ClientsView
     onClientClick={(clientId) => {
       // Navigate to client detail view
-      navigateTo('client-detail', { clientId }, ['Dashboard', 'Clients', 'Client Detail'])
+      navigateTo('client-detail', { clientId, clientName: 'Client' }, ['Dashboard', 'Clients', 'Client'])
     }}
     onCreateClient={() => {
       // TODO: Open create client modal
       console.log('Create new client')
     }}
+  />
+)}
+{currentView.type === 'client-detail' && currentView.data && 'clientId' in currentView.data && currentView.data.clientId && (
+  <ClientDetailView
+    clientId={currentView.data.clientId}
+    clientName={('clientName' in currentView.data ? currentView.data.clientName : undefined)}
+    onNavigateBack={() => navigateTo('clients', undefined, ['Dashboard', 'Clients'])}
+    onFileClick={handleFileClick}
   />
 )}
 

@@ -666,17 +666,13 @@ const handleMobileSidebarClose = () => {
             
             {/* Home View */}
             {currentView.type === 'dashboard' && (
-              <HomeView 
-                totalSubmissions={0}
-                onGoToFile={handleFileClick}
-                onUnsavedChangesUpdate={setHasUnsavedChanges}
-                onDocumentsSaved={(count) => {
-                  console.log(`${count} document(s) saved`)
-                  setDocumentsNeedRefresh(true)
-                }}
-                onNavigateToDocuments={() => navigateTo('documents', undefined, ['dashboard', 'Documents'])}
-              />
-            )}
+  <HomeView 
+    totalSubmissions={0}  // TODO: Get real count from API
+    onGoToFile={handleFileClick}
+    onNavigateToDocuments={() => navigateTo('documents', undefined, ['Dashboard', 'Documents'])}
+    onNavigateToClients={() => navigateTo('clients', undefined, ['Dashboard', 'Clients'])}
+  />
+)}
 
             {/* Documents View */}
             {currentView.type === 'documents' && (

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, useCallback } from 'react'
 import {
   ArrowLeft,
   Building2,
@@ -13,14 +13,300 @@ import {
   Clock,
   TrendingUp,
   FileStack,
-  Mail,
-  Phone,
+  Check,
+  X,
+  Eye,
 } from 'lucide-react'
-import type { Client, Submission } from '@/types'
+import type { Client } from '@/types'
 import type { RecentSubmission } from '@/types/submission'
-import { getClients, uploadPdf, getRecentSubmissions } from '@/lib/api-client'
+import { getClients, uploadPdf, getRecentSubmissions, getSubmission } from '@/lib/api-client'
 import { formatDate } from '@/lib/utils'
+import { ConfidenceBadgeCompact } from '@/components/ConfidenceBadge'
 
+type UploadedRow = {
+  submissionId: string
+  filename: string
+  uploadedAt: string
+  fileType: 'pdf' | 'excel' | 'csv' | 'other'
+  fileSize: number
+  uploadPercent: number
+  extractionStatus: 'pending' | 'extracting' | 'extracted' | 'error'
+  extractionProgress: number
+  extractionError?: string
+  confidence?: number
+}
+
+function ClientWorkflowPanel({
+  rows,
+  isUploading,
+  isExtracting,
+  uploadStatus,
+  message,
+  error,
+  onUploadMore,
+  onExtract,
+  onRemove,
+  onView,
+}: {
+  rows: UploadedRow[]
+  isUploading: boolean
+  isExtracting: boolean
+  uploadStatus: string | null
+  message: string | null
+  error: string | null
+  onUploadMore: () => void
+  onExtract: (selectedIds: string[]) => Promise<void> | void
+  onRemove: (submissionId: string) => void
+  onView?: (submissionId: string, filename?: string) => void
+}) {
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      const next = new Set<string>()
+      rows.forEach((row) => {
+        if (prev.has(row.submissionId)) {
+          next.add(row.submissionId)
+        }
+      })
+      return next
+    })
+  }, [rows])
+
+  const selectableIds = rows
+    .filter((row) => row.extractionStatus !== 'extracting')
+    .map((row) => row.submissionId)
+  const allSelected =
+    selectableIds.length > 0 &&
+    selectableIds.every((id) => selectedIds.has(id))
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(selectableIds))
+    }
+  }
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  const handleExtract = async () => {
+    if (selectedIds.size === 0) return
+    await onExtract(Array.from(selectedIds))
+    setSelectedIds(new Set())
+  }
+
+  if (rows.length === 0) {
+    return (
+      <div className="border border-dashed border-gray-300 rounded-xl p-8 text-center">
+        <p className="text-gray-600 mb-4">
+          No client documents uploaded yet. Start by adding files.
+        </p>
+        <button
+          onClick={onUploadMore}
+          className="inline-flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-semibold"
+          disabled={isUploading}
+        >
+          <Upload className="w-4 h-4" />
+          {isUploading ? 'Uploading…' : 'Upload files'}
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="border border-gray-200 rounded-xl">
+      <div className="px-5 py-3 border-b border-gray-100 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={toggleSelectAll}
+              className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                allSelected
+                  ? 'bg-blue-600 border-blue-600'
+                  : 'border-gray-300 hover:border-blue-400'
+              }`}
+              title={allSelected ? 'Clear selection' : 'Select all'}
+            >
+              {allSelected && <Check className="w-3 h-3 text-white" />}
+            </button>
+            <span className="text-sm font-semibold text-gray-900">
+              {rows.length} file{rows.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+          {uploadStatus && (
+            <p className="text-xs text-gray-500 mt-1">{uploadStatus}</p>
+          )}
+          {message && (
+            <p className="text-xs text-green-600 mt-1">{message}</p>
+          )}
+          {error && (
+            <p className="text-xs text-red-600 mt-1">{error}</p>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={onUploadMore}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
+          >
+            <Upload className="w-4 h-4" />
+            Upload more
+          </button>
+          <button
+            onClick={handleExtract}
+            disabled={selectedIds.size === 0 || isExtracting}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg disabled:bg-gray-300 transition-colors"
+          >
+            {isExtracting ? 'Extracting…' : 'Extract'}
+          </button>
+        </div>
+      </div>
+
+      <div className="px-4 py-4 space-y-3 max-h-[400px] overflow-y-auto">
+        {rows.map((row) => (
+          <WorkflowRow
+            key={row.submissionId}
+            row={row}
+            isSelected={selectedIds.has(row.submissionId)}
+            onToggleSelect={() => toggleSelect(row.submissionId)}
+            onRemove={() => onRemove(row.submissionId)}
+            onView={onView}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function WorkflowRow({
+  row,
+  isSelected,
+  onToggleSelect,
+  onRemove,
+  onView,
+}: {
+  row: UploadedRow
+  isSelected: boolean
+  onToggleSelect: () => void
+  onRemove: () => void
+  onView?: (submissionId: string, filename?: string) => void
+}) {
+  const selectable = row.extractionStatus !== 'extracting'
+
+  const renderStatus = () => {
+    if (row.uploadPercent < 100) {
+      return (
+        <p className="text-xs font-medium text-gray-500 mt-1">
+          Uploading — {row.uploadPercent}%
+        </p>
+      )
+    }
+
+    switch (row.extractionStatus) {
+      case 'pending':
+        return (
+          <p className="text-xs font-medium text-gray-400 mt-1">
+            Ready to extract
+          </p>
+        )
+      case 'extracting':
+        return (
+          <p className="text-xs font-medium text-blue-600 mt-1">
+            Extracting — {row.extractionProgress}%
+          </p>
+        )
+      case 'extracted':
+        return (
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            <span className="text-xs font-medium text-green-600">
+              Extracted
+            </span>
+            {row.confidence !== undefined && (
+              <ConfidenceBadgeCompact confidence={row.confidence} />
+            )}
+            {onView && (
+              <button
+                onClick={() => onView(row.submissionId, row.filename)}
+                className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                View data
+              </button>
+            )}
+          </div>
+        )
+      case 'error':
+        return (
+          <div className="flex items-center gap-2 text-xs text-red-600 mt-1">
+            <AlertCircle className="w-3.5 h-3.5" />
+            <span>{row.extractionError || 'Failed'}</span>
+          </div>
+        )
+      default:
+        return null
+    }
+  }
+
+  return (
+    <div className="flex items-start gap-3 p-3 border border-gray-200 rounded-xl">
+      <button
+        onClick={onToggleSelect}
+        className={`w-5 h-5 rounded border-2 flex items-center justify-center mt-1 transition-colors ${
+          isSelected ? 'bg-blue-600 border-blue-600' : 'border-gray-300'
+        }`}
+        disabled={!selectable}
+      >
+        {isSelected && <Check className="w-3 h-3 text-white" />}
+      </button>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-gray-900 truncate">{row.filename}</p>
+        <p className="text-xs text-gray-500">
+          {formatFileType(row.fileType)} • {formatFileSize(row.fileSize)} • {formatDate(row.uploadedAt)}
+        </p>
+        {renderStatus()}
+      </div>
+      {selectable && (
+        <button
+          onClick={onRemove}
+          className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+          title="Remove"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      )}
+    </div>
+  )
+}
+
+function formatFileType(type: UploadedRow['fileType']): string {
+  switch (type) {
+    case 'pdf':
+      return 'PDF'
+    case 'excel':
+      return 'Excel'
+    case 'csv':
+      return 'CSV'
+    default:
+      return 'Document'
+  }
+}
+
+function formatFileSize(size: number): string {
+  if (!size) return '0 KB'
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`
+}
 interface ClientDetailViewProps {
   clientId: string
   clientName?: string
@@ -39,7 +325,52 @@ export function ClientDetailView({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const [isExtracting, setIsExtracting] = useState(false)
+  const [uploadStatusText, setUploadStatusText] = useState<string | null>(null)
+  const [workflowMessage, setWorkflowMessage] = useState<string | null>(null)
+  const [workflowError, setWorkflowError] = useState<string | null>(null)
+  const [uploadedRows, setUploadedRows] = useState<UploadedRow[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const tempIdRef = useRef(0)
+
+  const getFileType = (filename: string): UploadedRow['fileType'] => {
+    const ext = filename.split('.').pop()?.toLowerCase()
+    if (ext === 'pdf') return 'pdf'
+    if (ext === 'xlsx' || ext === 'xls') return 'excel'
+    if (ext === 'csv') return 'csv'
+    return 'other'
+  }
+
+  const addRow = (row: UploadedRow) => {
+    setUploadedRows((prev) => [row, ...prev])
+  }
+
+  const updateRow = (submissionId: string, updates: Partial<UploadedRow>) => {
+    setUploadedRows((prev) =>
+      prev.map((row) =>
+        row.submissionId === submissionId ? { ...row, ...updates } : row
+      )
+    )
+  }
+
+  const removeRow = (submissionId: string) => {
+    setUploadedRows((prev) => prev.filter((row) => row.submissionId !== submissionId))
+  }
+
+  const refreshSubmissions = useCallback(async () => {
+    try {
+      const submissionsData = await getRecentSubmissions({
+        limit: 20,
+        include_files: true,
+      })
+      const clientSubmissions = submissionsData.filter(
+        (s) => s.client_id === clientId
+      )
+      setSubmissions(clientSubmissions)
+    } catch (err) {
+      console.error('Failed to load submissions', err)
+    }
+  }, [clientId])
 
   // Load client details and submissions
   useEffect(() => {
@@ -58,18 +389,7 @@ export function ClientDetailView({
         
         setClient(foundClient)
 
-        // Fetch client-specific submissions
-        const submissionsData = await getRecentSubmissions({
-          limit: 20,
-          include_files: true,
-        })
-        
-        // Filter submissions for this client
-        const clientSubmissions = submissionsData.filter(
-          (s) => s.client_id === clientId
-        )
-        
-        setSubmissions(clientSubmissions)
+        await refreshSubmissions()
         setError(null)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load client data')
@@ -79,40 +399,116 @@ export function ClientDetailView({
     }
 
     void loadClientData()
-  }, [clientId])
+  }, [clientId, refreshSubmissions])
 
-  // Handle file upload
-  const handleFileUpload = async (files: FileList | null) => {
-    if (!files || files.length === 0) return
+  const doUpload = async (files: File[]) => {
+    if (!files.length) return
+    setIsUploading(true)
+    setWorkflowMessage(null)
+    setWorkflowError(null)
+    setUploadStatusText(null)
 
-    try {
-      setIsUploading(true)
-      
-      // Upload files
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i]
-        await uploadPdf(file)
-      }
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      const tempId = `tmp-${clientId}-${Date.now()}-${tempIdRef.current++}`
+      const uploadedAt = new Date().toISOString()
 
-      // Reload submissions after upload
-      const submissionsData = await getRecentSubmissions({
-        limit: 20,
-        include_files: true,
+      addRow({
+        submissionId: tempId,
+        filename: file.name,
+        uploadedAt,
+        fileType: getFileType(file.name),
+        fileSize: file.size,
+        uploadPercent: 0,
+        extractionStatus: 'pending',
+        extractionProgress: 0,
       })
-      const clientSubmissions = submissionsData.filter(
-        (s) => s.client_id === clientId
-      )
-      setSubmissions(clientSubmissions)
-    } catch (err) {
-      console.error('Upload failed:', err)
-      alert(err instanceof Error ? err.message : 'Upload failed')
-    } finally {
-      setIsUploading(false)
+
+      try {
+        const result = await uploadPdf(file, (progress) => {
+          setUploadStatusText(`Uploading ${file.name} (${progress}%)`)
+          updateRow(tempId, { uploadPercent: progress })
+        })
+
+        setUploadedRows((prev) =>
+          prev.map((row) =>
+            row.submissionId === tempId
+              ? {
+                  ...row,
+                  submissionId: result.submission_id,
+                  uploadPercent: 100,
+                  extractionStatus: 'pending',
+                  extractionProgress: 0,
+                }
+              : row
+          )
+        )
+        setWorkflowMessage(`Uploaded ${file.name}`)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Upload failed'
+        updateRow(tempId, {
+          extractionStatus: 'error',
+          extractionError: message,
+        })
+        setWorkflowError(message)
+      }
     }
+
+    setIsUploading(false)
+    setUploadStatusText(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const handleFileInputChange: React.ChangeEventHandler<HTMLInputElement> = (event) => {
+    const files = Array.from(event.target.files ?? [])
+    void doUpload(files)
+    event.target.value = ''
   }
 
   const triggerFileUpload = () => {
     fileInputRef.current?.click()
+  }
+
+  const handleExtractSelected = async (selectedIds: string[]) => {
+    if (!selectedIds.length) return
+    setIsExtracting(true)
+    setWorkflowMessage(null)
+    setWorkflowError(null)
+
+    for (const submissionId of selectedIds) {
+      updateRow(submissionId, {
+        extractionStatus: 'extracting',
+        extractionProgress: 0,
+        extractionError: undefined,
+      })
+
+      try {
+        for (let progress = 20; progress <= 80; progress += 20) {
+          await new Promise((resolve) => setTimeout(resolve, 120))
+          updateRow(submissionId, { extractionProgress: progress })
+        }
+
+        const submission = await getSubmission(submissionId)
+        updateRow(submissionId, {
+          extractionStatus: 'extracted',
+          extractionProgress: 100,
+          confidence: submission.confidence,
+        })
+        setWorkflowMessage('Extraction complete')
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Extraction failed'
+        updateRow(submissionId, {
+          extractionStatus: 'error',
+          extractionError: message,
+        })
+        setWorkflowError(message)
+      }
+    }
+
+    await refreshSubmissions()
+    setIsExtracting(false)
   }
 
   // Calculate stats
@@ -187,7 +583,7 @@ export function ClientDetailView({
         ref={fileInputRef}
         type="file"
         className="hidden"
-        onChange={(e) => handleFileUpload(e.target.files)}
+        onChange={handleFileInputChange}
         multiple
         accept=".pdf,.csv,.xlsx,.xls,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
       />
@@ -283,24 +679,35 @@ export function ClientDetailView({
         </div>
 
         {/* Upload Section */}
-        <div className="bg-white rounded-xl border border-gray-200 p-8 mb-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            Quick Upload
-          </h2>
-          <div
-            onClick={triggerFileUpload}
-            className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all"
-          >
-            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Upload className="w-8 h-8 text-blue-600" />
+        <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Document workflow</h2>
+              <p className="text-sm text-gray-600">
+                Upload files, then run extraction when ready.
+              </p>
             </div>
-            <p className="text-gray-900 font-medium mb-2">
-              Drag and drop files here, or click to browse
-            </p>
-            <p className="text-sm text-gray-600">
-              PDF, Excel, CSV • Up to 50 MB per file
-            </p>
+            <button
+              onClick={triggerFileUpload}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
+              disabled={isUploading}
+            >
+              <Upload className="w-4 h-4" />
+              {isUploading ? 'Uploading…' : 'Upload files'}
+            </button>
           </div>
+          <ClientWorkflowPanel
+            rows={uploadedRows}
+            isUploading={isUploading}
+            isExtracting={isExtracting}
+            uploadStatus={uploadStatusText}
+            message={workflowMessage}
+            error={workflowError}
+            onUploadMore={triggerFileUpload}
+            onExtract={handleExtractSelected}
+            onRemove={removeRow}
+            onView={onFileClick}
+          />
         </div>
 
         {/* Submissions List */}

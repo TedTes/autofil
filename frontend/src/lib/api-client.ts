@@ -72,10 +72,16 @@ export async function healthCheck(): Promise<boolean> {
  */
 export async function uploadPdf(
   file: File,
-  onProgress?: (progress: number) => void
+  onProgress?: (progress: number) => void,
+  options?: {
+    clientId?: string
+  }
 ): Promise<SubmissionResponse> {
   const formData = new FormData()
   formData.append('file', file)
+  if (options?.clientId) {
+    formData.append('client_id', options.clientId)
+  }
 
   const response = await api.post('/submissions/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
@@ -102,12 +108,16 @@ export async function uploadPdf(
  */
 export async function uploadMultiplePdfs(
   files: File[],
-  onProgress?: (fileIndex: number, progress: number) => void
+  onProgress?: (fileIndex: number, progress: number) => void,
+  options?: {
+    clientId?: string
+  }
 ): Promise<SubmissionResponse[]> {
   const results: SubmissionResponse[] = []
   for (let i = 0; i < files.length; i++) {
     const result = await uploadPdf(files[i], (progress) =>
-      onProgress?.(i, progress)
+      onProgress?.(i, progress),
+      options
     )
     results.push(result)
   }
@@ -1072,7 +1082,7 @@ export async function getRecentSubmissions(
       throw new Error(response.data.error || 'Failed to fetch recent submissions')
     }
 
-    const rawSubmissions: Partial<RecentSubmissionFile>[] = response.data?.data?.submissions || []
+    const rawSubmissions: Partial<RecentSubmissionFile & { client_id?: string }>[] = response.data?.data?.submissions || []
     
     const submissions: RecentSubmission[] = rawSubmissions.map(sub => {
       // Use available timestamp fields
@@ -1095,7 +1105,7 @@ export async function getRecentSubmissions(
       
       return {
         submission_id: sub.submission_id || '',
-        client_id: '',
+        client_id: sub.client_id || '',
         name: sub.filename || `Submission ${(sub.submission_id || '').slice(0, 8)}`,
         template_type: undefined, 
         created_at: sub.uploaded_at || '',
@@ -1228,7 +1238,7 @@ export async function getRecentSubmissionById(
       throw new Error(response.data.error || 'Failed to fetch submission')
     }
     
-    const sub: Partial<RecentSubmissionFile> = response.data.submission
+    const sub: Partial<RecentSubmissionFile & { client_id?: string }> = response.data.submission
     
     // Use available timestamp fields
     const timestamp = sub.last_activity_at || sub.updated_at || sub.uploaded_at || ''
@@ -1248,9 +1258,9 @@ export async function getRecentSubmissionById(
       folder_id: sub.folder_id,
     }] : []
     
-    return {
-      submission_id: sub.submission_id || '',
-      client_id: '',
+      return {
+        submission_id: sub.submission_id || '',
+        client_id: sub.client_id || '',
       name: sub.filename || `Submission ${(sub.submission_id || '').slice(0, 8)}`,
       template_type: undefined,
       created_at: sub.uploaded_at || '',

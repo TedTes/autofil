@@ -58,7 +58,13 @@ class SubmissionService:
             classifier_names=['mime', 'keyword', 'table'],
             strategy='highest_confidence'
     )
-    def upload_and_extract(self, file, folder_id: str = None, progress_callback=None):
+    def upload_and_extract(
+        self,
+        file,
+        folder_id: str = None,
+        client_id: str = None,
+        progress_callback=None,
+    ):
         """
         Upload PDF and extract data with progress tracking.
         
@@ -71,6 +77,9 @@ class SubmissionService:
             Dictionary with submission_id, extracted data, and metadata
         """
         try:
+            if folder_id and client_id:
+                raise ValueError("Cannot specify both folder_id and client_id")
+
             # Generate unique submission ID
             submission_id = str(uuid.uuid4())
             
@@ -79,21 +88,37 @@ class SubmissionService:
                 progress_callback(submission_id, 0, 'starting', 'Initializing upload...')
             
             # Determine storage path
-            if folder_id:
+            upload_dir = self.uploads_dir
+            client_submission_path = None
+            client_outputs_path = None
+
+            if client_id:
+                client = self.client_service.get_client(client_id)
+                if not client:
+                    raise ValueError("Client not found")
+                submissions_root = self.client_service.get_submissions_path(client_id)
+                os.makedirs(submissions_root, exist_ok=True)
+                client_submission_path = os.path.join(submissions_root, submission_id)
+                os.makedirs(client_submission_path, exist_ok=True)
+                upload_dir = os.path.join(client_submission_path, "inputs")
+                os.makedirs(upload_dir, exist_ok=True)
+                client_outputs_path = os.path.join(client_submission_path, "outputs")
+                os.makedirs(client_outputs_path, exist_ok=True)
+                self.client_service.add_submission(client_id, submission_id)
+            elif folder_id:
                 # Store in folder structure
                 from services.folder_service import FolderService
                 folder_service = FolderService()
                 upload_dir = folder_service.get_inputs_path(folder_id)
-            else:
-                # Store in legacy uploads directory
-                upload_dir = self.uploads_dir
+
             # Progress: 10% - Saving file
             if progress_callback:
                 progress_callback(submission_id, 10, 'uploading', 'Saving file...')
             
             # Save uploaded file
             filename = secure_filename(file.filename)
-            upload_path = os.path.join(upload_dir, f"{submission_id}_{filename}")
+            upload_filename = f"{submission_id}_{filename}" if not client_id else filename
+            upload_path = os.path.join(upload_dir, upload_filename)
             file.save(upload_path)
             # Progress: 30% - File saved
             if progress_callback:
@@ -166,9 +191,12 @@ class SubmissionService:
             metadata = {
                 "submission_id": submission_id,
                 "folder_id": folder_id,
+                "client_id": client_id,
                 "filename": filename,
                 "upload_path": upload_path,
                 "data_path": data_path,
+                "client_submission_path": client_submission_path,
+                "outputs_dir": client_outputs_path,
                 "uploaded_at": datetime.utcnow().isoformat(),
                 "status": "extracted",
                 # "confidence": extraction_result.confidence,
@@ -180,6 +208,21 @@ class SubmissionService:
             metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
             with open(metadata_path, 'w') as f:
                 json.dump(metadata, f, indent=2)
+           
+            if client_submission_path:
+                client_metadata = {
+                    "submission_id": submission_id,
+                    "client_id": client_id,
+                    "filename": filename,
+                    "uploaded_at": metadata["uploaded_at"],
+                    "status": metadata["status"],
+                    "inputs": [upload_path],
+                    "data_path": data_path,
+                    "outputs_dir": client_outputs_path,
+                }
+                client_meta_path = os.path.join(client_submission_path, "metadata.json")
+                with open(client_meta_path, 'w') as f:
+                    json.dump(client_metadata, f, indent=2)
            
             # ── link to folder (if any) ─────────────────────────────────────────
             if folder_id:
@@ -200,7 +243,7 @@ class SubmissionService:
             print("upload and extract error:", str(e))
             raise
     
-    def get_submission(self, submission_id: str):
+    def get_submission(self, submission_id: str, client_id: Optional[str] = None):
         """
         Get submission data.
         
@@ -218,12 +261,16 @@ class SubmissionService:
         
         with open(metadata_path, 'r') as f:
             metadata = json.load(f)
+
+        if client_id and metadata.get('client_id') and metadata.get('client_id') != client_id:
+            return None
         
         with open(data_path, 'r') as f:
             data = json.load(f)
         
         return {
             'submission_id': submission_id,
+            'client_id': metadata.get('client_id'),
             'folder_id': metadata.get('folder_id'),
             'filename': metadata['filename'],
             'status': metadata['status'],
@@ -706,6 +753,7 @@ class SubmissionService:
         items = [
             {
                 "submission_id": r.get("submission_id"),
+                "client_id": r.get("client_id"),
                 "filename": r.get("filename"),
                 "status": r.get("status"),
                 "folder_id": r.get("folder_id"),

@@ -23,6 +23,7 @@ def upload_pdf():
     """
     try:
         folder_id = request.form.get("folder_id")
+        client_id = request.form.get("client_id")
         files = (
             [request.files["file"]]
             if "file" in request.files
@@ -47,7 +48,11 @@ def upload_pdf():
                 continue
 
             try:
-                result = submission_service.upload_and_extract(file, folder_id)
+                result = submission_service.upload_and_extract(
+                    file,
+                    folder_id=folder_id,
+                    client_id=client_id,
+                )
                 results.append({
                     "index": idx,
                     "filename": file.filename,

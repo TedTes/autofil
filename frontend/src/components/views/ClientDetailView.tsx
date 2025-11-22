@@ -425,10 +425,14 @@ export function ClientDetailView({
       })
 
       try {
-        const result = await uploadPdf(file, (progress) => {
-          setUploadStatusText(`Uploading ${file.name} (${progress}%)`)
-          updateRow(tempId, { uploadPercent: progress })
-        })
+        const result = await uploadPdf(
+          file,
+          (progress) => {
+            setUploadStatusText(`Uploading ${file.name} (${progress}%)`)
+            updateRow(tempId, { uploadPercent: progress })
+          },
+          { clientId }
+        )
 
         setUploadedRows((prev) =>
           prev.map((row) =>

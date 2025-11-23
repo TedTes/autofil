@@ -16,10 +16,16 @@ import {
   Check,
   X,
   Eye,
+  Download,
+  ChevronDown,
+  ChevronRight,
+  FileSpreadsheet,
+  Table,
+  FolderOpen,
+  Folder,
 } from 'lucide-react'
-import type { Client } from '@/types'
-import type { RecentSubmission } from '@/types/submission'
-import { getClients, uploadPdf, getRecentSubmissions, getSubmission } from '@/lib/api-client'
+import type { Client, ClientSubmissionPackage } from '@/types'
+import { uploadPdf, getClientById, getSubmission, createClientSubmission } from '@/lib/api-client'
 import { formatDate } from '@/lib/utils'
 import { ConfidenceBadgeCompact } from '@/components/ConfidenceBadge'
 
@@ -34,6 +40,68 @@ type UploadedRow = {
   extractionProgress: number
   extractionError?: string
   confidence?: number
+}
+
+type StatusBadgeConfig = {
+  label: string
+  color: string
+  icon: typeof Upload
+}
+
+const statusBadgeFor = (status: string): StatusBadgeConfig => {
+  switch (status) {
+    case 'created':
+    case 'uploading':
+    case 'uploaded':
+      return { label: 'Uploading', color: 'text-blue-600 bg-blue-50', icon: Upload }
+    case 'extracting':
+      return { label: 'Extracting', color: 'text-purple-600 bg-purple-50', icon: Loader2 }
+    case 'ready':
+    case 'extracted':
+      return { label: 'Ready', color: 'text-green-600 bg-green-50', icon: CheckCircle2 }
+    case 'filled':
+      return { label: 'Completed', color: 'text-green-600 bg-green-50', icon: CheckCircle2 }
+    case 'error':
+      return { label: 'Error', color: 'text-red-600 bg-red-50', icon: AlertCircle }
+    default:
+      return { label: status, color: 'text-gray-600 bg-gray-50', icon: Clock }
+  }
+}
+
+function getFileIcon(filename: string) {
+  if(!filename) return;
+  const ext = filename.split('.').pop()?.toLowerCase()
+  switch (ext) {
+    case 'pdf':
+      return <FileText className="w-4 h-4 text-red-500" />
+    case 'xlsx':
+    case 'xls':
+      return <FileSpreadsheet className="w-4 h-4 text-green-600" />
+    case 'csv':
+      return <Table className="w-4 h-4 text-blue-600" />
+    default:
+      return <FileText className="w-4 h-4 text-gray-400" />
+  }
+}
+
+function formatFileType(type: UploadedRow['fileType']): string {
+  switch (type) {
+    case 'pdf':
+      return 'PDF'
+    case 'excel':
+      return 'Excel'
+    case 'csv':
+      return 'CSV'
+    default:
+      return 'Document'
+  }
+}
+
+function formatFileSize(size: number): string {
+  if (!size) return '0 KB'
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`
 }
 
 function ClientWorkflowPanel({
@@ -288,25 +356,269 @@ function WorkflowRow({
   )
 }
 
-function formatFileType(type: UploadedRow['fileType']): string {
-  switch (type) {
-    case 'pdf':
-      return 'PDF'
-    case 'excel':
-      return 'Excel'
-    case 'csv':
-      return 'CSV'
-    default:
-      return 'Document'
+function ClientSubmissionPackages({
+  submissions,
+  activeId,
+  onToggle,
+  onViewFile,
+  onDownloadFile,
+}: {
+  submissions: ClientSubmissionPackage[]
+  activeId?: string | null
+  onToggle?: (pkg: ClientSubmissionPackage) => void
+  onViewFile?: (submissionId: string, filename: string) => void
+  onDownloadFile?: (submissionId: string, filename: string) => void
+}) {
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
+
+  const toggleFolder = (submissionId: string) => {
+    setExpandedFolders(prev => {
+      const next = new Set(prev)
+      if (next.has(submissionId)) {
+        next.delete(submissionId)
+      } else {
+        next.add(submissionId)
+      }
+      return next
+    })
   }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-6">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Folders & Files</h2>
+          <p className="text-sm text-gray-600">
+            Each folder (package) contains input files and generated outputs
+          </p>
+        </div>
+        <span className="text-sm font-medium text-gray-500">
+          {submissions.length} {submissions.length === 1 ? 'folder' : 'folders'}
+        </span>
+      </div>
+
+      {submissions.length === 0 ? (
+        <div className="p-10 text-center text-sm text-gray-600">
+          <FolderOpen className="w-12 h-12 mx-auto text-gray-300 mb-3" />
+          <p className="font-medium mb-1">No folders yet</p>
+          <p className="text-xs text-gray-500">Create a package to start organizing files</p>
+        </div>
+      ) : (
+        <div className="divide-y divide-gray-100">
+          {submissions.map((submission) => {
+            const badge = statusBadgeFor(submission.status)
+            const StatusIcon = badge.icon
+            const isExpanded = expandedFolders.has(submission.submission_id)
+            const isActive = activeId === submission.submission_id
+            const totalFiles = (submission.inputs?.length || 0) + (submission.outputs?.length || 0)
+            const lastUpdated = submission.updated_at || submission.uploaded_at
+
+            return (
+              <div key={submission.submission_id} className={isActive ? 'bg-blue-50/30' : ''}>
+                {/* Folder Header */}
+                <div className="flex items-center gap-3 px-6 py-4 hover:bg-gray-50 transition-colors">
+                  <button
+                    onClick={() => toggleFolder(submission.submission_id)}
+                    className="p-1 hover:bg-gray-200 rounded transition-colors"
+                  >
+                    {isExpanded ? (
+                      <ChevronDown className="w-4 h-4 text-gray-600" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-gray-600" />
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => onToggle?.(submission)}
+                    className="flex-1 flex items-center gap-3 text-left min-w-0"
+                  >
+                    {isExpanded ? (
+                      <FolderOpen className="w-5 h-5 text-blue-500 flex-shrink-0" />
+                    ) : (
+                      <Folder className="w-5 h-5 text-blue-500 flex-shrink-0" />
+                    )}
+                    
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <p className="text-base font-semibold text-gray-900 truncate">
+                          {submission.name}
+                        </p>
+                        {isActive && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-600">
+                        {totalFiles} {totalFiles === 1 ? 'file' : 'files'} • Updated {formatDate(lastUpdated)}
+                      </p>
+                    </div>
+                  </button>
+
+                  <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium ${badge.color}`}>
+                    <StatusIcon className={`w-4 h-4 ${submission.status === 'extracting' ? 'animate-spin' : ''}`} />
+                    {badge.label}
+                  </span>
+                </div>
+
+                {/* Folder Contents */}
+                {isExpanded && (
+                  <div className="px-6 pb-4 bg-gray-50/50">
+                    <div className="ml-8 space-y-4">
+                      {/* Input Files */}
+                      {submission.inputs && submission.inputs.length > 0 && (
+                        <div>
+                          <div className="flex items-center gap-2 mb-2 px-2">
+                            <Upload className="w-3.5 h-3.5 text-gray-500" />
+                            <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+                              Input Files ({submission.inputs.length})
+                            </h4>
+                          </div>
+                          <div className="space-y-1">
+                            {submission.inputs.map((file, idx) => (
+                              <div
+                                key={`${submission.submission_id}-in-${idx}`}
+                                className="flex items-center gap-2 px-2 py-2 hover:bg-white rounded-lg transition-colors group"
+                              >
+                                <div className="flex-shrink-0">
+                                  {getFileIcon(file.filename)}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 truncate">
+                                    {file.filename}
+                                  </p>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    {file.file_size && (
+                                      <span className="text-xs text-gray-500">
+                                        {formatFileSize(file.file_size)}
+                                      </span>
+                                    )}
+                                    {file.uploaded_at && (
+                                      <>
+                                        <span className="text-xs text-gray-400">•</span>
+                                        <span className="text-xs text-gray-500">
+                                          {formatDate(file.uploaded_at)}
+                                        </span>
+                                      </>
+                                    )}
+                                    {file.extraction_status === 'extracted' && (
+                                      <>
+                                        <span className="text-xs text-gray-400">•</span>
+                                        <span className="inline-flex items-center gap-1 text-xs text-green-600">
+                                          <CheckCircle2 className="w-3 h-3" />
+                                          Extracted
+                                        </span>
+                                      </>
+                                    )}
+                                    {file.extraction_status === 'extracting' && (
+                                      <>
+                                        <span className="text-xs text-gray-400">•</span>
+                                        <span className="inline-flex items-center gap-1 text-xs text-blue-600">
+                                          <Loader2 className="w-3 h-3 animate-spin" />
+                                          Extracting
+                                        </span>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                                  {onViewFile && (
+                                    <button
+                                      onClick={() => onViewFile(submission.submission_id, file.filename)}
+                                      className="p-1.5 hover:bg-gray-200 rounded"
+                                      title="View file"
+                                    >
+                                      <Eye className="w-3.5 h-3.5 text-gray-600" />
+                                    </button>
+                                  )}
+                                  {onDownloadFile && (
+                                    <button
+                                      onClick={() => onDownloadFile(submission.submission_id, file.filename)}
+                                      className="p-1.5 hover:bg-gray-200 rounded"
+                                      title="Download file"
+                                    >
+                                      <Download className="w-3.5 h-3.5 text-gray-600" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Output Files */}
+                      {submission.outputs && submission.outputs.length > 0 && (
+                        <div>
+                          <div className="flex items-center gap-2 mb-2 px-2">
+                            <FileStack className="w-3.5 h-3.5 text-gray-500" />
+                            <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+                              Output Files ({submission.outputs.length})
+                            </h4>
+                          </div>
+                          <div className="space-y-1">
+                            {submission.outputs.map((file, idx) => (
+                              <div
+                                key={`${submission.submission_id}-out-${idx}`}
+                                className="flex items-center gap-2 px-2 py-2 hover:bg-white rounded-lg transition-colors group"
+                              >
+                                <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 truncate">
+                                    {file.filename}
+                                  </p>
+                                  {file.file_size && (
+                                    <p className="text-xs text-gray-500">
+                                      {formatFileSize(file.file_size)}
+                                    </p>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                                  {onViewFile && (
+                                    <button
+                                      onClick={() => onViewFile(submission.submission_id, file.filename)}
+                                      className="p-1.5 hover:bg-gray-200 rounded"
+                                      title="View file"
+                                    >
+                                      <Eye className="w-3.5 h-3.5 text-gray-600" />
+                                    </button>
+                                  )}
+                                  {onDownloadFile && (
+                                    <button
+                                      onClick={() => onDownloadFile(submission.submission_id, file.filename)}
+                                      className="p-1.5 hover:bg-gray-200 rounded"
+                                      title="Download file"
+                                    >
+                                      <Download className="w-3.5 h-3.5 text-gray-600" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Empty State */}
+                      {(!submission.inputs || submission.inputs.length === 0) &&
+                        (!submission.outputs || submission.outputs.length === 0) && (
+                          <div className="text-center py-6 text-sm text-gray-500">
+                            <FileText className="w-8 h-8 mx-auto text-gray-300 mb-2" />
+                            <p>No files in this folder yet</p>
+                          </div>
+                        )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
 }
 
-function formatFileSize(size: number): string {
-  if (!size) return '0 KB'
-  if (size < 1024) return `${size} B`
-  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`
-}
 interface ClientDetailViewProps {
   clientId: string
   clientName?: string
@@ -321,7 +633,6 @@ export function ClientDetailView({
   onFileClick,
 }: ClientDetailViewProps) {
   const [client, setClient] = useState<Client | null>(null)
-  const [submissions, setSubmissions] = useState<RecentSubmission[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
@@ -332,6 +643,9 @@ export function ClientDetailView({
   const [uploadedRows, setUploadedRows] = useState<UploadedRow[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const tempIdRef = useRef(0)
+  const [isCreatingPackage, setIsCreatingPackage] = useState(false)
+  const [submissionPackages, setSubmissionPackages] = useState<ClientSubmissionPackage[]>([])
+  const [activePackageId, setActivePackageId] = useState<string | null>(null)
 
   const getFileType = (filename: string): UploadedRow['fileType'] => {
     const ext = filename.split('.').pop()?.toLowerCase()
@@ -357,52 +671,50 @@ export function ClientDetailView({
     setUploadedRows((prev) => prev.filter((row) => row.submissionId !== submissionId))
   }
 
-  const refreshSubmissions = useCallback(async () => {
+  const loadClientData = useCallback(async () => {
     try {
-      const submissionsData = await getRecentSubmissions({
-        limit: 20,
-        include_files: true,
-      })
-      const clientSubmissions = submissionsData.filter(
-        (s) => s.client_id === clientId
-      )
-      setSubmissions(clientSubmissions)
+      setLoading(true)
+      const detail = await getClientById(clientId)
+      if (!detail) {
+        setError('Client not found')
+        return
+      }
+      setClient(detail)
+      setSubmissionPackages(detail.submissions_detailed || [])
+      setError(null)
     } catch (err) {
-      console.error('Failed to load submissions', err)
+      setError(err instanceof Error ? err.message : 'Failed to load client data')
+    } finally {
+      setLoading(false)
     }
   }, [clientId])
 
-  // Load client details and submissions
   useEffect(() => {
-    const loadClientData = async () => {
-      try {
-        setLoading(true)
-        
-        // Fetch client details
-        const clientsData = await getClients()
-        const foundClient = clientsData.find((c) => c.client_id === clientId)
-        
-        if (!foundClient) {
-          setError('Client not found')
-          return
-        }
-        
-        setClient(foundClient)
-
-        await refreshSubmissions()
-        setError(null)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load client data')
-      } finally {
-        setLoading(false)
-      }
-    }
-
     void loadClientData()
-  }, [clientId, refreshSubmissions])
+  }, [loadClientData])
+
+  useEffect(() => {
+    if (submissionPackages.length === 0) {
+      setActivePackageId(null)
+      return
+    }
+    setActivePackageId((prev) =>
+      prev && submissionPackages.some((pkg) => pkg.submission_id === prev)
+        ? prev
+        : submissionPackages[0].submission_id
+    )
+  }, [submissionPackages])
+
+  const activePackage = activePackageId
+    ? submissionPackages.find((pkg) => pkg.submission_id === activePackageId)
+    : undefined
 
   const doUpload = async (files: File[]) => {
     if (!files.length) return
+    if (!activePackageId) {
+      setWorkflowError('Create or select a folder before uploading.')
+      return
+    }
     setIsUploading(true)
     setWorkflowMessage(null)
     setWorkflowError(null)
@@ -431,7 +743,7 @@ export function ClientDetailView({
             setUploadStatusText(`Uploading ${file.name} (${progress}%)`)
             updateRow(tempId, { uploadPercent: progress })
           },
-          { clientId }
+          { clientId, submissionId: activePackageId }
         )
 
         setUploadedRows((prev) =>
@@ -463,6 +775,9 @@ export function ClientDetailView({
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
+
+    await loadClientData()
+    setUploadedRows([])
   }
 
   const handleFileInputChange: React.ChangeEventHandler<HTMLInputElement> = (event) => {
@@ -473,6 +788,33 @@ export function ClientDetailView({
 
   const triggerFileUpload = () => {
     fileInputRef.current?.click()
+  }
+
+  const handleUploadMore = () => {
+    if (!activePackageId) {
+      setWorkflowError('Create or select a folder before uploading.')
+      return
+    }
+    triggerFileUpload()
+  }
+
+  const handleCreatePackage = async () => {
+    const defaultName = `Package ${submissionPackages.length + 1}`
+    const name = window.prompt('Enter folder name', defaultName)
+    if (!name) return
+    try {
+      setIsCreatingPackage(true)
+      const created = await createClientSubmission(clientId, name.trim())
+      await loadClientData()
+      if (created?.submission_id) {
+        setActivePackageId(created.submission_id)
+      }
+    } catch (err) {
+      console.error('Create package failed:', err)
+      setWorkflowError(err instanceof Error ? err.message : 'Failed to create folder')
+    } finally {
+      setIsCreatingPackage(false)
+    }
   }
 
   const handleExtractSelected = async (selectedIds: string[]) => {
@@ -511,44 +853,33 @@ export function ClientDetailView({
       }
     }
 
-    await refreshSubmissions()
+    await loadClientData()
     setIsExtracting(false)
+  }
+
+  const handleViewFile = (submissionId: string, filename: string) => {
+    console.log('View file:', submissionId, filename)
+    onFileClick?.(submissionId, filename)
+  }
+
+  const handleDownloadFile = (submissionId: string, filename: string) => {
+    console.log('Download file:', submissionId, filename)
+    // Implement download logic here
   }
 
   // Calculate stats
   const stats = {
-    total: submissions.length,
-    active: submissions.filter((s) => 
+    total: submissionPackages.length,
+    active: submissionPackages.filter((s) =>
       s.status === 'extracting' || s.status === 'uploaded' || s.status === 'ready'
     ).length,
-    completed: submissions.filter((s) => s.status === 'filled' || s.status === 'extracted').length,
-    errors: submissions.filter((s) => s.status === 'error').length,
+    completed: submissionPackages.filter((s) => s.status === 'filled' || s.status === 'extracted').length,
+    errors: submissionPackages.filter((s) => s.status === 'error').length,
   }
 
   const successRate = stats.total > 0
     ? Math.round((stats.completed / stats.total) * 100)
     : 0
-
-  // Get status badge config
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'created':
-      case 'uploading':
-      case 'uploaded':
-        return { label: 'Uploading', color: 'text-blue-600 bg-blue-50', icon: Upload }
-      case 'extracting':
-        return { label: 'Extracting', color: 'text-purple-600 bg-purple-50', icon: Loader2 }
-      case 'ready':
-      case 'extracted':
-        return { label: 'Ready', color: 'text-green-600 bg-green-50', icon: CheckCircle2 }
-      case 'filled':
-        return { label: 'Completed', color: 'text-green-600 bg-green-50', icon: CheckCircle2 }
-      case 'error':
-        return { label: 'Error', color: 'text-red-600 bg-red-50', icon: AlertCircle }
-      default:
-        return { label: status, color: 'text-gray-600 bg-gray-50', icon: Clock }
-    }
-  }
 
   if (loading) {
     return (
@@ -614,19 +945,19 @@ export function ClientDetailView({
             </div>
           </div>
           <button
-            onClick={triggerFileUpload}
-            disabled={isUploading}
+            onClick={handleCreatePackage}
+            disabled={isCreatingPackage}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50"
           >
-            {isUploading ? (
+            {isCreatingPackage ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Uploading...
+                Creating...
               </>
             ) : (
               <>
-                <Upload className="w-4 h-4" />
-                Upload Documents
+                <Folder className="w-4 h-4" />
+                New Folder
               </>
             )}
           </button>
@@ -639,8 +970,8 @@ export function ClientDetailView({
             <span>Created {formatDate(client.created_at)}</span>
           </div>
           <div className="flex items-center gap-2">
-            <FileStack className="w-4 h-4" />
-            <span>{stats.total} submissions</span>
+            <Folder className="w-4 h-4" />
+            <span>{stats.total} {stats.total === 1 ? 'folder' : 'folders'}</span>
           </div>
         </div>
       </div>
@@ -651,8 +982,8 @@ export function ClientDetailView({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-600">Total Documents</span>
-              <FileText className="w-5 h-5 text-blue-600" />
+              <span className="text-sm font-medium text-gray-600">Total Folders</span>
+              <Folder className="w-5 h-5 text-blue-600" />
             </div>
             <p className="text-3xl font-bold text-gray-900">{stats.total}</p>
           </div>
@@ -682,100 +1013,16 @@ export function ClientDetailView({
           </div>
         </div>
 
-        {/* Upload Section */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">Document workflow</h2>
-              <p className="text-sm text-gray-600">
-                Upload files, then run extraction when ready.
-              </p>
-            </div>
-            <button
-              onClick={triggerFileUpload}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
-              disabled={isUploading}
-            >
-              <Upload className="w-4 h-4" />
-              {isUploading ? 'Uploading…' : 'Upload files'}
-            </button>
-          </div>
-          <ClientWorkflowPanel
-            rows={uploadedRows}
-            isUploading={isUploading}
-            isExtracting={isExtracting}
-            uploadStatus={uploadStatusText}
-            message={workflowMessage}
-            error={workflowError}
-            onUploadMore={triggerFileUpload}
-            onExtract={handleExtractSelected}
-            onRemove={removeRow}
-            onView={onFileClick}
-          />
-        </div>
-
-        {/* Submissions List */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900">Recent Submissions</h2>
-          </div>
-
-          {submissions.length === 0 ? (
-            <div className="p-12 text-center">
-              <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                No submissions yet
-              </h3>
-              <p className="text-gray-600 mb-6">
-                Upload documents to get started with this client
-              </p>
-              <button
-                onClick={triggerFileUpload}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
-              >
-                <Upload className="w-4 h-4" />
-                Upload First Document
-              </button>
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-200">
-              {submissions.map((submission) => {
-                const statusBadge = getStatusBadge(submission.status)
-                const StatusIcon = statusBadge.icon
-
-                return (
-                  <button
-                    key={submission.submission_id}
-                    onClick={() => onFileClick?.(submission.submission_id, submission.name)}
-                    className="w-full px-6 py-4 text-left hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-3 mb-2">
-                          <FileText className="w-5 h-5 text-gray-400 flex-shrink-0" />
-                          <h3 className="font-medium text-gray-900 truncate">
-                            {submission.name}
-                          </h3>
-                        </div>
-                        <div className="flex items-center gap-4 text-sm text-gray-600">
-                          <span>{submission.file_count} file{submission.file_count !== 1 ? 's' : ''}</span>
-                          <span>•</span>
-                          <span>Updated {formatDate(submission.updated_at)}</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 ml-4">
-                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium ${statusBadge.color}`}>
-                          <StatusIcon className={`w-4 h-4 ${submission.status === 'extracting' ? 'animate-spin' : ''}`} />
-                          {statusBadge.label}
-                        </span>
-                      </div>
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
+        {/* Folders & Files Section */}
+        <ClientSubmissionPackages
+          submissions={submissionPackages}
+          activeId={activePackageId}
+          onToggle={(pkg) => setActivePackageId((prev) =>
+            prev === pkg.submission_id ? null : pkg.submission_id
           )}
-        </div>
+          onViewFile={handleViewFile}
+          onDownloadFile={handleDownloadFile}
+        />
       </div>
     </div>
   )

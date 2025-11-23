@@ -24,6 +24,9 @@ def upload_pdf():
     try:
         folder_id = request.form.get("folder_id")
         client_id = request.form.get("client_id")
+        submission_id = request.form.get("submission_id")
+        if submission_id:
+            client_id = client_id or None
         files = (
             [request.files["file"]]
             if "file" in request.files
@@ -35,6 +38,9 @@ def upload_pdf():
         )
         if not files:
             return jsonify({"error": "No files provided"}), 400
+
+        if submission_id and len(files) > 1:
+            return jsonify({"error": "Cannot upload multiple files to the same submission package at once"}), 400
 
         results, errors = [], []
 
@@ -52,6 +58,7 @@ def upload_pdf():
                     file,
                     folder_id=folder_id,
                     client_id=client_id,
+                    submission_id=submission_id,
                 )
                 results.append({
                     "index": idx,

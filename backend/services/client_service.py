@@ -84,6 +84,8 @@ class ClientService:
         with open(metadata_path, 'r') as f:
             metadata = json.load(f)
         
+        # Attach submission package details if available
+        metadata['submissions_detailed'] = self._build_submission_packages(metadata)
         return metadata
     
     def list_clients(self) -> List[Dict[str, Any]]:
@@ -112,6 +114,7 @@ class ClientService:
             with open(metadata_path, 'r') as f:
                 metadata = json.load(f)
             
+            metadata['submissions_detailed'] = self._build_submission_packages(metadata)
             clients.append(metadata)
         
         # Sort by name ascending
@@ -196,6 +199,74 @@ class ClientService:
                 json.dump(metadata, f, indent=2)
         
         return True
+
+    def _build_submission_packages(self, client_metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
+        submissions: List[Dict[str, Any]] = []
+        client_id = client_metadata.get('client_id')
+        if not client_id:
+            return submissions
+
+        submissions_dir = self.get_submissions_path(client_id)
+        if not os.path.exists(submissions_dir):
+            return submissions
+
+        for submission_id in client_metadata.get('submissions', []):
+            package = self._load_submission_package(client_metadata, submissions_dir, submission_id)
+            if package:
+                submissions.append(package)
+
+        return submissions
+
+    def _load_submission_package(
+        self,
+        client_metadata: Dict[str, Any],
+        submissions_dir: str,
+        submission_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        submission_path = os.path.join(submissions_dir, submission_id)
+        if not os.path.isdir(submission_path):
+            return None
+
+        metadata_path = os.path.join(submission_path, 'metadata.json')
+        metadata: Dict[str, Any] = {}
+        if os.path.exists(metadata_path):
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+
+        inputs_dir = os.path.join(submission_path, 'inputs')
+        outputs_dir = os.path.join(submission_path, 'outputs')
+
+        def list_files(path: str) -> List[Dict[str, Any]]:
+            files: List[Dict[str, Any]] = []
+            if not os.path.exists(path):
+                return files
+            for filename in sorted(os.listdir(path)):
+                full_path = os.path.join(path, filename)
+                if os.path.isfile(full_path):
+                    files.append({
+                        'filename': filename,
+                        'path': os.path.relpath(full_path, start=self.storage_dir),
+                        'url': None,
+                    })
+            return files
+
+        inputs = metadata.get('inputs') or list_files(inputs_dir)
+        outputs = metadata.get('outputs') or list_files(outputs_dir)
+
+        uploaded_at = metadata.get('uploaded_at') or metadata.get('created_at')
+        updated_at = metadata.get('updated_at') or uploaded_at
+
+        return {
+            'submission_id': submission_id,
+            'client_id': client_metadata.get('client_id'),
+            'name': metadata.get('name') or metadata.get('filename') or f'Submission {submission_id[:8]}',
+            'status': metadata.get('status', 'uploaded'),
+            'uploaded_at': uploaded_at,
+            'updated_at': updated_at,
+            'file_count': metadata.get('file_count') or len(inputs),
+            'inputs': inputs,
+            'outputs': outputs,
+        }
     
     def remove_submission(self, client_id: str, submission_id: str) -> bool:
         """

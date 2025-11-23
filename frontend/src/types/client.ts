@@ -9,7 +9,7 @@ export interface Client {
     updated_at: string
     submission_count: number
     submissions: string[]  // Array of submission IDs
-    submissions_detailed?: Submission[]  // Populated submissions
+    submissions_detailed?: ClientSubmissionPackage[]  // Populated submissions
   }
   
   export interface Submission {
@@ -31,4 +31,25 @@ export interface Client {
     status: 'uploading' | 'uploaded' | 'extracting' | 'ready' | 'error'
     confidence?: number
     document_type?: string
+  }
+
+  export interface ClientSubmissionPackage {
+    submission_id: string
+    client_id: string
+    name: string
+    status: string
+    uploaded_at: string
+    updated_at: string
+    file_count: number
+    inputs: SubmissionPackageFile[]
+    outputs: SubmissionPackageFile[]
+  }
+
+  export interface SubmissionPackageFile {
+    filename: string
+    path?: string
+    url?: string | null
+    file_size?:number;
+    extraction_status: 'extracted' | 'extracting';
+    uploaded_at: string
   }

@@ -63,6 +63,7 @@ class SubmissionService:
         file,
         folder_id: str = None,
         client_id: str = None,
+        submission_id: str = None,
         progress_callback=None,
     ):
         """
@@ -77,39 +78,67 @@ class SubmissionService:
             Dictionary with submission_id, extracted data, and metadata
         """
         try:
-            if folder_id and client_id:
+            if folder_id and client_id and submission_id is None:
                 raise ValueError("Cannot specify both folder_id and client_id")
 
-            # Generate unique submission ID
-            submission_id = str(uuid.uuid4())
-            
-            # Progress: 0% - Starting
-            if progress_callback:
-                progress_callback(submission_id, 0, 'starting', 'Initializing upload...')
-            
-            # Determine storage path
-            upload_dir = self.uploads_dir
+            is_existing_submission = submission_id is not None
+            metadata: Dict[str, Any] = {}
             client_submission_path = None
             client_outputs_path = None
 
-            if client_id:
-                client = self.client_service.get_client(client_id)
-                if not client:
-                    raise ValueError("Client not found")
-                submissions_root = self.client_service.get_submissions_path(client_id)
-                os.makedirs(submissions_root, exist_ok=True)
-                client_submission_path = os.path.join(submissions_root, submission_id)
-                os.makedirs(client_submission_path, exist_ok=True)
-                upload_dir = os.path.join(client_submission_path, "inputs")
-                os.makedirs(upload_dir, exist_ok=True)
-                client_outputs_path = os.path.join(client_submission_path, "outputs")
-                os.makedirs(client_outputs_path, exist_ok=True)
-                self.client_service.add_submission(client_id, submission_id)
-            elif folder_id:
-                # Store in folder structure
-                from services.folder_service import FolderService
-                folder_service = FolderService()
-                upload_dir = folder_service.get_inputs_path(folder_id)
+            if not submission_id:
+                submission_id = str(uuid.uuid4())
+
+            metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
+
+            if progress_callback:
+                progress_callback(submission_id, 0, 'starting', 'Initializing upload...')
+
+            if is_existing_submission:
+                if not os.path.exists(metadata_path):
+                    raise ValueError("Submission not found")
+                with open(metadata_path, 'r') as f:
+                    metadata = json.load(f)
+
+                existing_client_id = metadata.get("client_id")
+                if existing_client_id and client_id and existing_client_id != client_id:
+                    raise ValueError("Submission does not belong to the specified client")
+                client_id = existing_client_id or client_id
+                folder_id = metadata.get("folder_id") or folder_id
+                client_submission_path = metadata.get("client_submission_path")
+                client_outputs_path = metadata.get("outputs_dir")
+
+                if client_submission_path:
+                    upload_dir = os.path.join(client_submission_path, "inputs")
+                    os.makedirs(upload_dir, exist_ok=True)
+                elif folder_id:
+                    from services.folder_service import FolderService
+                    folder_service = FolderService()
+                    upload_dir = folder_service.get_inputs_path(folder_id)
+                else:
+                    upload_dir = self.uploads_dir
+            else:
+                upload_dir = self.uploads_dir
+
+                if client_id:
+                    client = self.client_service.get_client(client_id)
+                    if not client:
+                        raise ValueError("Client not found")
+                    submissions_root = self.client_service.get_submissions_path(client_id)
+                    os.makedirs(submissions_root, exist_ok=True)
+                    client_submission_path = os.path.join(submissions_root, submission_id)
+                    os.makedirs(client_submission_path, exist_ok=True)
+                    upload_dir = os.path.join(client_submission_path, "inputs")
+                    os.makedirs(upload_dir, exist_ok=True)
+                    client_outputs_path = os.path.join(client_submission_path, "outputs")
+                    os.makedirs(client_outputs_path, exist_ok=True)
+                    self.client_service.add_submission(client_id, submission_id)
+                elif folder_id:
+                    from services.folder_service import FolderService
+                    folder_service = FolderService()
+                    upload_dir = folder_service.get_inputs_path(folder_id)
+                else:
+                    upload_dir = self.uploads_dir
 
             # Progress: 10% - Saving file
             if progress_callback:
@@ -170,12 +199,16 @@ class SubmissionService:
             # JSON-compatible dict (handles datetime, UUID, etc.)
             json_data = extraction_result.to_dict()
 
+            version_notes = f"Extraction from {filename}"
+            if is_existing_submission:
+                version_notes = f"Re-extraction from {filename}"
+
             version_id = self.version_service.create_version(
                 submission_id=submission_id,
                 data=json_data,
                 user="system",
                 action="extract",
-                notes=f"Initial extraction from {filename}",
+                notes=version_notes,
             )
           
             # Save extracted JSON
@@ -187,39 +220,64 @@ class SubmissionService:
             if progress_callback:
                 progress_callback(submission_id, 90, "ready", "Finalizing...")
             
-            # Save submission metadata
-            metadata = {
-                "submission_id": submission_id,
-                "folder_id": folder_id,
-                "client_id": client_id,
+            timestamp = datetime.utcnow().isoformat()
+
+            def rel_storage(path: str) -> str:
+                try:
+                    return os.path.relpath(path, start=self.storage_dir)
+                except Exception:
+                    return path
+
+            metadata.setdefault("submission_id", submission_id)
+            metadata["folder_id"] = folder_id
+            metadata["client_id"] = client_id
+            metadata["filename"] = filename
+            metadata.setdefault("name", filename)
+            metadata["upload_path"] = upload_path
+            metadata["data_path"] = data_path
+            metadata["client_submission_path"] = client_submission_path
+            metadata["outputs_dir"] = client_outputs_path
+            metadata.setdefault("uploaded_at", timestamp)
+            metadata["updated_at"] = timestamp
+            metadata["status"] = "extracted"
+            metadata["current_version_id"] = version_id
+            inputs_meta = metadata.setdefault("inputs", [])
+            inputs_meta.append({
                 "filename": filename,
-                "upload_path": upload_path,
-                "data_path": data_path,
-                "client_submission_path": client_submission_path,
-                "outputs_dir": client_outputs_path,
-                "uploaded_at": datetime.utcnow().isoformat(),
-                "status": "extracted",
-                # "confidence": extraction_result.confidence,
-                # "warnings": extraction_result.warnings,
-                "current_version_id": version_id,
-                # "field_confidence": extraction_result.field_confidence,
-            }
+                "path": rel_storage(upload_path),
+                "uploaded_at": timestamp,
+            })
+            metadata["file_count"] = len(inputs_meta)
            
             metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
             with open(metadata_path, 'w') as f:
                 json.dump(metadata, f, indent=2)
            
             if client_submission_path:
-                client_metadata = {
-                    "submission_id": submission_id,
-                    "client_id": client_id,
+                client_meta_path = os.path.join(client_submission_path, "metadata.json")
+                if os.path.exists(client_meta_path):
+                    with open(client_meta_path, 'r') as f:
+                        client_metadata = json.load(f)
+                else:
+                    client_metadata = {
+                        "submission_id": submission_id,
+                        "client_id": client_id,
+                        "name": metadata.get("name", filename),
+                        "created_at": timestamp,
+                        "status": metadata["status"],
+                        "inputs": [],
+                        "outputs": [],
+                    }
+
+                package_inputs = client_metadata.setdefault("inputs", [])
+                package_inputs.append({
                     "filename": filename,
-                    "uploaded_at": metadata["uploaded_at"],
-                    "status": metadata["status"],
-                    "inputs": [upload_path],
-                    "data_path": data_path,
-                    "outputs_dir": client_outputs_path,
-                }
+                    "path": rel_storage(upload_path),
+                    "uploaded_at": timestamp,
+                })
+                client_metadata["file_count"] = len(package_inputs)
+                client_metadata["status"] = metadata["status"]
+                client_metadata["updated_at"] = timestamp
                 client_meta_path = os.path.join(client_submission_path, "metadata.json")
                 with open(client_meta_path, 'w') as f:
                     json.dump(client_metadata, f, indent=2)
@@ -393,6 +451,12 @@ class SubmissionService:
             metadata['status'] = 'filled'
             metadata['output_path'] = output_path
             metadata['filled_at'] = datetime.utcnow().isoformat()
+            outputs_meta = metadata.setdefault('outputs', [])
+            outputs_meta.append({
+                "filename": os.path.basename(output_path),
+                "path": os.path.relpath(output_path, start=self.storage_dir),
+                "generated_at": metadata['filled_at'],
+            })
             metadata['fill_report'] = {
                 "success": fill_report.success,
                 "coverage": fill_report.coverage,
@@ -404,6 +468,31 @@ class SubmissionService:
 
             with open(metadata_path, 'w') as f:
                 json.dump(metadata, f, indent=2)
+
+            client_submission_path = metadata.get("client_submission_path")
+            if client_submission_path:
+                client_meta_path = os.path.join(client_submission_path, "metadata.json")
+                if os.path.exists(client_meta_path):
+                    with open(client_meta_path, 'r') as f:
+                        client_metadata = json.load(f)
+                else:
+                    client_metadata = {
+                        "submission_id": submission_id,
+                        "client_id": metadata.get("client_id"),
+                        "name": metadata.get("name"),
+                        "inputs": [],
+                        "outputs": [],
+                    }
+                package_outputs = client_metadata.setdefault("outputs", [])
+                package_outputs.append({
+                    "filename": os.path.basename(output_path),
+                    "path": os.path.relpath(output_path, start=self.storage_dir),
+                    "generated_at": metadata['filled_at'],
+                })
+                client_metadata["status"] = metadata["status"]
+                client_metadata["updated_at"] = metadata["filled_at"]
+                with open(client_meta_path, 'w') as f:
+                    json.dump(client_metadata, f, indent=2)
 
             return fill_report
 
@@ -491,13 +580,41 @@ class SubmissionService:
             'updated_at': datetime.utcnow().isoformat(),
             'status': 'created',
             'file_count': 0,
-            'files': []
+            'inputs': [],
+            'outputs': []
         }
         
         # Save metadata
         metadata_path = os.path.join(submission_path, 'metadata.json')
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
+
+        data_json_path = os.path.join(self.data_dir, f"{submission_id}.json")
+        with open(data_json_path, 'w') as f:
+            json.dump({}, f, indent=2)
+
+        data_metadata = {
+            "submission_id": submission_id,
+            "client_id": client_id,
+            "folder_id": None,
+            "filename": None,
+            "name": name,
+            "upload_path": None,
+            "data_path": data_json_path,
+            "client_submission_path": submission_path,
+            "outputs_dir": os.path.join(submission_path, 'outputs'),
+            "uploaded_at": None,
+            "updated_at": metadata['updated_at'],
+            "status": 'created',
+            "template_type": template_type,
+            "template_metadata": template_metadata,
+            "inputs": [],
+            "file_count": 0,
+        }
+
+        global_meta_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
+        with open(global_meta_path, 'w') as f:
+            json.dump(data_metadata, f, indent=2)
         
         # Add to client
         self.client_service.add_submission(client_id, submission_id)

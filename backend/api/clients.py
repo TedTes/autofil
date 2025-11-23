@@ -24,18 +24,6 @@ def list_clients():
     try:
         clients = client_service.list_clients()
         
-        # For each client, get their submissions
-        for client in clients:
-            client_id = client['client_id']
-            submissions = []
-            
-            for submission_id in client.get('submissions', []):
-                sub = submission_service.get_submission(client_id, submission_id)
-                if sub:
-                    submissions.append(sub)
-            
-            client['submissions_detailed'] = submissions
-        
         return jsonify({
             'success': True,
             'data':  clients
@@ -98,15 +86,6 @@ def get_client(client_id):
         
         if not client:
             return jsonify({'error': 'Client not found'}), 404
-        
-        # Get detailed submission info
-        submissions = []
-        for submission_id in client.get('submissions', []):
-            sub = submission_service.get_submission(client_id, submission_id)
-            if sub:
-                submissions.append(sub)
-        
-        client['submissions_detailed'] = submissions
         
         return jsonify({
             'success': True,

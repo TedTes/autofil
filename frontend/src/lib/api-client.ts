@@ -13,6 +13,7 @@ import type {
   RecentSubmission, 
   RecentSubmissionsQuery,
   Client,
+  ClientSubmissionPackage,
   SubmissionListResponse,
   SubmissionListItem,
   SubmissionStats
@@ -75,12 +76,16 @@ export async function uploadPdf(
   onProgress?: (progress: number) => void,
   options?: {
     clientId?: string
+    submissionId?: string
   }
 ): Promise<SubmissionResponse> {
   const formData = new FormData()
   formData.append('file', file)
   if (options?.clientId) {
     formData.append('client_id', options.clientId)
+  }
+  if (options?.submissionId) {
+    formData.append('submission_id', options.submissionId)
   }
 
   const response = await api.post('/submissions/upload', formData, {
@@ -111,6 +116,7 @@ export async function uploadMultiplePdfs(
   onProgress?: (fileIndex: number, progress: number) => void,
   options?: {
     clientId?: string
+    submissionId?: string
   }
 ): Promise<SubmissionResponse[]> {
   const results: SubmissionResponse[] = []
@@ -224,6 +230,37 @@ export async function getClients(): Promise<Client[]> {
       throw new Error(response.data.error || 'Failed to load clients')
     }
     return response.data.data as Client[]
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
+export async function getClientById(clientId: string): Promise<Client> {
+  try {
+    const response = await api.get(`/clients/${clientId}`)
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to load client')
+    }
+    return response.data.data as Client
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
+export async function createClientSubmission(
+  clientId: string,
+  name: string,
+  templateType?: string
+): Promise<ClientSubmissionPackage> {
+  try {
+    const response = await api.post(`/clients/${clientId}/submissions`, {
+      name,
+      template_type: templateType,
+    })
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to create submission')
+    }
+    return response.data.data as ClientSubmissionPackage
   } catch (error) {
     handleApiError(error)
   }

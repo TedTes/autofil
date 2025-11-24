@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Client, ClientSubmissionPackage } from '@/types'
-import { getClientById, getSubmission, createClientSubmission, uploadPdf } from '@/lib/api-client'
+import { getClientById, createClientSubmission, uploadPdf } from '@/lib/api-client'
 
 export type UploadedRow = {
   submissionId: string
@@ -9,10 +9,11 @@ export type UploadedRow = {
   fileType: 'pdf' | 'excel' | 'csv' | 'other'
   fileSize: number
   uploadPercent: number
-  extractionStatus: 'pending' | 'extracting' | 'extracted' | 'error'
+  extractionStatus: 'pending' | 'extracted' | 'error'
   extractionProgress: number
   extractionError?: string
   confidence?: number
+  extractionData?: Record<string, unknown>
 }
 
 function getFileType(filename: string): UploadedRow['fileType'] {
@@ -33,7 +34,6 @@ export function useClientSubmissions(clientId: string) {
 
   const [uploadedRows, setUploadedRows] = useState<UploadedRow[]>([])
   const [isUploading, setIsUploading] = useState(false)
-  const [isExtracting, setIsExtracting] = useState(false)
 
   const [statusText, setStatusText] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -151,6 +151,12 @@ export function useClientSubmissions(clientId: string) {
           { clientId, submissionId: activePackageId }
         )
 
+        const extractionResult = result.extraction
+        const extractionPayload = extractionResult?.data as Record<string, unknown> | undefined
+        const payloadConfidence =
+          typeof extractionPayload?.['confidence'] === 'number'
+            ? (extractionPayload['confidence'] as number)
+            : undefined
         setUploadedRows(prev =>
           prev.map(row =>
             row.submissionId === tempId
@@ -158,13 +164,20 @@ export function useClientSubmissions(clientId: string) {
                   ...row,
                   submissionId: result.submission_id,
                   uploadPercent: 100,
-                  extractionStatus: 'pending',
-                  extractionProgress: 0,
+                  extractionStatus: extractionResult ? 'extracted' : 'pending',
+                  extractionProgress: extractionResult ? 100 : 0,
+                  confidence: extractionResult?.confidence ?? payloadConfidence,
+                  extractionData: extractionPayload,
                 }
               : row
           )
         )
-        setMessage(`Uploaded ${file.name}`)
+
+        if (!extractionResult) {
+          setMessage(`Uploaded ${file.name} (awaiting extraction)`)
+        } else {
+          setMessage(`Extracted ${file.name}`)
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Upload failed'
         updateRow(tempId, { extractionStatus: 'error', extractionError: msg })
@@ -174,51 +187,7 @@ export function useClientSubmissions(clientId: string) {
 
     setIsUploading(false)
     setStatusText(null)
-    setUploadedRows([])
     await loadClientData()
-  }
-
-  // ---- extract for selected files ----
-  const extractSelected = async (selectedIds: string[]) => {
-    if (!selectedIds.length) return
-    setIsExtracting(true)
-    setMessage(null)
-    setWorkflowError(null)
-
-    for (const submissionId of selectedIds) {
-      updateRow(submissionId, {
-        extractionStatus: 'extracting',
-        extractionProgress: 0,
-        extractionError: undefined,
-      })
-
-      try {
-        // fake progress – your existing loop
-        for (let progress = 20; progress <= 80; progress += 20) {
-          // eslint-disable-next-line no-await-in-loop
-          await new Promise(resolve => setTimeout(resolve, 120))
-          updateRow(submissionId, { extractionProgress: progress })
-        }
-
-        const submission = await getSubmission(submissionId)
-        updateRow(submissionId, {
-          extractionStatus: 'extracted',
-          extractionProgress: 100,
-          confidence: submission.confidence,
-        })
-        setMessage('Extraction complete')
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Extraction failed'
-        updateRow(submissionId, {
-          extractionStatus: 'error',
-          extractionError: msg,
-        })
-        setWorkflowError(msg)
-      }
-    }
-
-    await loadClientData()
-    setIsExtracting(false)
   }
 
   // ---- stats ----
@@ -232,10 +201,6 @@ export function useClientSubmissions(clientId: string) {
     ).length,
     errors: packages.filter(s => s.status === 'error').length,
   }
-  const successRate = stats.total > 0
-    ? Math.round((stats.completed / stats.total) * 100)
-    : 0
-
   return {
     client,
     loading,
@@ -248,7 +213,6 @@ export function useClientSubmissions(clientId: string) {
 
     uploadedRows,
     isUploading,
-    isExtracting,
     statusText,
     message,
     workflowError,
@@ -256,9 +220,7 @@ export function useClientSubmissions(clientId: string) {
 
     createFolder,
     uploadFilesToActiveFolder,
-    extractSelected,
 
     stats,
-    successRate,
   }
 }

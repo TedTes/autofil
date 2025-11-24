@@ -760,17 +760,6 @@ export async function getSubmissionData(submissionId: string): Promise<{
   }
 }
 
-export async function updateSubmission(
-  submissionId: string,
-  data: Record<string, unknown>
-): Promise<{ success: boolean; message?: string }> {
-  const response = await api.put(`/submissions/${submissionId}`, { data })
-  if (!response.data.success) {
-    throw new Error(response.data.error || 'Failed to update submission')
-  }
-  return { success: true, message: response.data.message }
-}
-
 export async function exportFilledPdf(submissionId: string): Promise<Blob> {
   const response = await api.get(`/submissions/${submissionId}/download`, {
     responseType: 'blob',

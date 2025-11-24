@@ -53,9 +53,11 @@ export function FoldersSection({
         {folders.length === 0 ? (
           <p className="text-xs text-gray-400">No folders yet.</p>
         ) : (
-          folders.map((folder) => (
+          folders.map((folder) => {
+            const folderKey = folder.folder_id || folder.id || folder.name
+            return (
             <button
-              key={folder.id}
+              key={folderKey}
               onClick={() => onSelectFolder(folder)}
               className="flex items-center gap-2 bg-gray-50 hover:bg-gray-100 rounded-lg px-3 py-2 text-left transition"
             >
@@ -69,7 +71,7 @@ export function FoldersSection({
                 )}
               </div>
             </button>
-          ))
+          )})
         )}
       </div>
     </div>

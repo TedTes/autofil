@@ -2,12 +2,12 @@
 
 import { useState } from 'react'
 import { ChevronRight, ChevronDown, Folder, FileText } from 'lucide-react'
-import { Client, Submission } from '@/types/client'
+import { Client, Submission,ClientSubmissionPackage } from '@/types/client'
 
 interface ClientListProps {
   clients: Client[]
   activeSubmission: Submission | null
-  onSubmissionClick: (submission: Submission) => void
+  onSubmissionClick: (submission: ClientSubmissionPackage) => void
   onClientCreate: (name: string) => Promise<void>
   onClientRename: (clientId: string, newName: string) => Promise<void>
   onClientDelete: (clientId: string) => Promise<void>

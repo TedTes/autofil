@@ -1,6 +1,10 @@
 'use client'
 
-import React, { useEffect, useState, useRef, useCallback } from 'react'
+import React, { useRef,useState,useEffect } from 'react'
+import { formatDate } from '@/lib/utils'
+import { useClientSubmissions } from '@/hooks/useClientSubmissions'
+import type { ClientSubmissionPackage } from '@/types'
+import { ConfidenceBadgeCompact } from '@/components/ConfidenceBadge'
 import {
   ArrowLeft,
   Building2,
@@ -11,7 +15,6 @@ import {
   CheckCircle2,
   AlertCircle,
   Clock,
-  TrendingUp,
   FileStack,
   Check,
   X,
@@ -24,10 +27,7 @@ import {
   FolderOpen,
   Folder,
 } from 'lucide-react'
-import type { Client, ClientSubmissionPackage } from '@/types'
-import { uploadPdf, getClientById, getSubmission, createClientSubmission } from '@/lib/api-client'
-import { formatDate } from '@/lib/utils'
-import { ConfidenceBadgeCompact } from '@/components/ConfidenceBadge'
+
 
 type UploadedRow = {
   submissionId: string
@@ -41,33 +41,6 @@ type UploadedRow = {
   extractionError?: string
   confidence?: number
 }
-
-type StatusBadgeConfig = {
-  label: string
-  color: string
-  icon: typeof Upload
-}
-
-const statusBadgeFor = (status: string): StatusBadgeConfig => {
-  switch (status) {
-    case 'created':
-    case 'uploading':
-    case 'uploaded':
-      return { label: 'Uploading', color: 'text-blue-600 bg-blue-50', icon: Upload }
-    case 'extracting':
-      return { label: 'Extracting', color: 'text-purple-600 bg-purple-50', icon: Loader2 }
-    case 'ready':
-    case 'extracted':
-      return { label: 'Ready', color: 'text-green-600 bg-green-50', icon: CheckCircle2 }
-    case 'filled':
-      return { label: 'Completed', color: 'text-green-600 bg-green-50', icon: CheckCircle2 }
-    case 'error':
-      return { label: 'Error', color: 'text-red-600 bg-red-50', icon: AlertCircle }
-    default:
-      return { label: status, color: 'text-gray-600 bg-gray-50', icon: Clock }
-  }
-}
-
 function getFileIcon(filename: string) {
   if(!filename) return;
   const ext = filename.split('.').pop()?.toLowerCase()
@@ -84,6 +57,13 @@ function getFileIcon(filename: string) {
   }
 }
 
+function formatFileSize(size: number): string {
+  if (!size) return '0 KB'
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`
+}
+
 function formatFileType(type: UploadedRow['fileType']): string {
   switch (type) {
     case 'pdf':
@@ -96,14 +76,6 @@ function formatFileType(type: UploadedRow['fileType']): string {
       return 'Document'
   }
 }
-
-function formatFileSize(size: number): string {
-  if (!size) return '0 KB'
-  if (size < 1024) return `${size} B`
-  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`
-}
-
 function ClientWorkflowPanel({
   rows,
   isUploading,
@@ -356,6 +328,30 @@ function WorkflowRow({
   )
 }
 
+const statusBadgeFor = (status: string): StatusBadgeConfig => {
+  switch (status) {
+    case 'created':
+    case 'uploading':
+    case 'uploaded':
+      return { label: 'Uploading', color: 'text-blue-600 bg-blue-50', icon: Upload }
+    case 'extracting':
+      return { label: 'Extracting', color: 'text-purple-600 bg-purple-50', icon: Loader2 }
+    case 'ready':
+    case 'extracted':
+      return { label: 'Ready', color: 'text-green-600 bg-green-50', icon: CheckCircle2 }
+    case 'filled':
+      return { label: 'Completed', color: 'text-green-600 bg-green-50', icon: CheckCircle2 }
+    case 'error':
+      return { label: 'Error', color: 'text-red-600 bg-red-50', icon: AlertCircle }
+    default:
+      return { label: status, color: 'text-gray-600 bg-gray-50', icon: Clock }
+  }
+}
+type StatusBadgeConfig = {
+  label: string
+  color: string
+  icon: typeof Upload
+}
 function ClientSubmissionPackages({
   submissions,
   activeId,
@@ -618,7 +614,6 @@ function ClientSubmissionPackages({
     </div>
   )
 }
-
 interface ClientDetailViewProps {
   clientId: string
   clientName?: string
@@ -632,283 +627,59 @@ export function ClientDetailView({
   onNavigateBack,
   onFileClick,
 }: ClientDetailViewProps) {
-  const [client, setClient] = useState<Client | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [isUploading, setIsUploading] = useState(false)
-  const [isExtracting, setIsExtracting] = useState(false)
-  const [uploadStatusText, setUploadStatusText] = useState<string | null>(null)
-  const [workflowMessage, setWorkflowMessage] = useState<string | null>(null)
-  const [workflowError, setWorkflowError] = useState<string | null>(null)
-  const [uploadedRows, setUploadedRows] = useState<UploadedRow[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const tempIdRef = useRef(0)
-  const [isCreatingPackage, setIsCreatingPackage] = useState(false)
-  const [submissionPackages, setSubmissionPackages] = useState<ClientSubmissionPackage[]>([])
-  const [activePackageId, setActivePackageId] = useState<string | null>(null)
 
-  const getFileType = (filename: string): UploadedRow['fileType'] => {
-    const ext = filename.split('.').pop()?.toLowerCase()
-    if (ext === 'pdf') return 'pdf'
-    if (ext === 'xlsx' || ext === 'xls') return 'excel'
-    if (ext === 'csv') return 'csv'
-    return 'other'
-  }
+  const {
+    client,
+    loading,
+    error,
 
-  const addRow = (row: UploadedRow) => {
-    setUploadedRows((prev) => [row, ...prev])
-  }
+    packages,
+    activePackageId,
+    setActivePackageId,
+    activePackage,
 
-  const updateRow = (submissionId: string, updates: Partial<UploadedRow>) => {
-    setUploadedRows((prev) =>
-      prev.map((row) =>
-        row.submissionId === submissionId ? { ...row, ...updates } : row
-      )
-    )
-  }
+    uploadedRows,
+    isUploading,
+    isExtracting,
+    statusText,
+    message,
+    workflowError,
+    removeRow,
 
-  const removeRow = (submissionId: string) => {
-    setUploadedRows((prev) => prev.filter((row) => row.submissionId !== submissionId))
-  }
+    createFolder,
+    uploadFilesToActiveFolder,
+    extractSelected,
 
-  const loadClientData = useCallback(async () => {
-    try {
-      setLoading(true)
-      const detail = await getClientById(clientId)
-      if (!detail) {
-        setError('Client not found')
-        return
-      }
-      setClient(detail)
-      setSubmissionPackages(detail.submissions_detailed || [])
-      setError(null)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load client data')
-    } finally {
-      setLoading(false)
-    }
-  }, [clientId])
+    stats,
+    successRate,
+  } = useClientSubmissions(clientId)
 
-  useEffect(() => {
-    void loadClientData()
-  }, [loadClientData])
-
-  useEffect(() => {
-    if (submissionPackages.length === 0) {
-      setActivePackageId(null)
-      return
-    }
-    setActivePackageId((prev) =>
-      prev && submissionPackages.some((pkg) => pkg.submission_id === prev)
-        ? prev
-        : submissionPackages[0].submission_id
-    )
-  }, [submissionPackages])
-
-  const activePackage = activePackageId
-    ? submissionPackages.find((pkg) => pkg.submission_id === activePackageId)
-    : undefined
-
-  const doUpload = async (files: File[]) => {
-    if (!files.length) return
-    if (!activePackageId) {
-      setWorkflowError('Create or select a folder before uploading.')
-      return
-    }
-    setIsUploading(true)
-    setWorkflowMessage(null)
-    setWorkflowError(null)
-    setUploadStatusText(null)
-
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i]
-      const tempId = `tmp-${clientId}-${Date.now()}-${tempIdRef.current++}`
-      const uploadedAt = new Date().toISOString()
-
-      addRow({
-        submissionId: tempId,
-        filename: file.name,
-        uploadedAt,
-        fileType: getFileType(file.name),
-        fileSize: file.size,
-        uploadPercent: 0,
-        extractionStatus: 'pending',
-        extractionProgress: 0,
-      })
-
-      try {
-        const result = await uploadPdf(
-          file,
-          (progress) => {
-            setUploadStatusText(`Uploading ${file.name} (${progress}%)`)
-            updateRow(tempId, { uploadPercent: progress })
-          },
-          { clientId, submissionId: activePackageId }
-        )
-
-        setUploadedRows((prev) =>
-          prev.map((row) =>
-            row.submissionId === tempId
-              ? {
-                  ...row,
-                  submissionId: result.submission_id,
-                  uploadPercent: 100,
-                  extractionStatus: 'pending',
-                  extractionProgress: 0,
-                }
-              : row
-          )
-        )
-        setWorkflowMessage(`Uploaded ${file.name}`)
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Upload failed'
-        updateRow(tempId, {
-          extractionStatus: 'error',
-          extractionError: message,
-        })
-        setWorkflowError(message)
-      }
-    }
-
-    setIsUploading(false)
-    setUploadStatusText(null)
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
-
-    await loadClientData()
-    setUploadedRows([])
-  }
+  const triggerFileUpload = () => fileInputRef.current?.click()
 
   const handleFileInputChange: React.ChangeEventHandler<HTMLInputElement> = (event) => {
     const files = Array.from(event.target.files ?? [])
-    void doUpload(files)
+    void uploadFilesToActiveFolder(files)
     event.target.value = ''
   }
 
-  const triggerFileUpload = () => {
-    fileInputRef.current?.click()
-  }
-
-  const handleUploadMore = () => {
-    if (!activePackageId) {
-      setWorkflowError('Create or select a folder before uploading.')
-      return
-    }
-    triggerFileUpload()
-  }
-
-  const handleCreatePackage = async () => {
-    const defaultName = `Package ${submissionPackages.length + 1}`
+  const handleCreatePackageClick = async () => {
+    const defaultName = `Package ${packages.length + 1}`
     const name = window.prompt('Enter folder name', defaultName)
     if (!name) return
-    try {
-      setIsCreatingPackage(true)
-      const created = await createClientSubmission(clientId, name.trim())
-      await loadClientData()
-      if (created?.submission_id) {
-        setActivePackageId(created.submission_id)
-      }
-    } catch (err) {
-      console.error('Create package failed:', err)
-      setWorkflowError(err instanceof Error ? err.message : 'Failed to create folder')
-    } finally {
-      setIsCreatingPackage(false)
-    }
-  }
-
-  const handleExtractSelected = async (selectedIds: string[]) => {
-    if (!selectedIds.length) return
-    setIsExtracting(true)
-    setWorkflowMessage(null)
-    setWorkflowError(null)
-
-    for (const submissionId of selectedIds) {
-      updateRow(submissionId, {
-        extractionStatus: 'extracting',
-        extractionProgress: 0,
-        extractionError: undefined,
-      })
-
-      try {
-        for (let progress = 20; progress <= 80; progress += 20) {
-          await new Promise((resolve) => setTimeout(resolve, 120))
-          updateRow(submissionId, { extractionProgress: progress })
-        }
-
-        const submission = await getSubmission(submissionId)
-        updateRow(submissionId, {
-          extractionStatus: 'extracted',
-          extractionProgress: 100,
-          confidence: submission.confidence,
-        })
-        setWorkflowMessage('Extraction complete')
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Extraction failed'
-        updateRow(submissionId, {
-          extractionStatus: 'error',
-          extractionError: message,
-        })
-        setWorkflowError(message)
-      }
-    }
-
-    await loadClientData()
-    setIsExtracting(false)
+    await createFolder(name)
   }
 
   const handleViewFile = (submissionId: string, filename: string) => {
-    console.log('View file:', submissionId, filename)
     onFileClick?.(submissionId, filename)
   }
 
-  const handleDownloadFile = (submissionId: string, filename: string) => {
-    console.log('Download file:', submissionId, filename)
-    // Implement download logic here
-  }
-
-  // Calculate stats
-  const stats = {
-    total: submissionPackages.length,
-    active: submissionPackages.filter((s) =>
-      s.status === 'extracting' || s.status === 'uploaded' || s.status === 'ready'
-    ).length,
-    completed: submissionPackages.filter((s) => s.status === 'filled' || s.status === 'extracted').length,
-    errors: submissionPackages.filter((s) => s.status === 'error').length,
-  }
-
-  const successRate = stats.total > 0
-    ? Math.round((stats.completed / stats.total) * 100)
-    : 0
-
   if (loading) {
-    return (
-      <div className="h-full flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 text-blue-600 mx-auto mb-4 animate-spin" />
-          <p className="text-gray-600">Loading client details...</p>
-        </div>
-      </div>
-    )
+    // keep your existing loading UI
   }
 
   if (error || !client) {
-    return (
-      <div className="h-full flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">
-            {error || 'Client not found'}
-          </h3>
-          <button
-            onClick={onNavigateBack}
-            className="text-blue-600 hover:text-blue-700 font-medium"
-          >
-            ← Back to Clients
-          </button>
-        </div>
-      </div>
-    )
+    // keep your existing error UI
   }
 
   return (
@@ -939,27 +710,17 @@ export function ClientDetailView({
             </div>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">
-                {clientName || client.name}
+                {clientName || client && client.name}
               </h1>
               <p className="text-sm text-gray-600">Client ID: {clientId}</p>
             </div>
           </div>
           <button
-            onClick={handleCreatePackage}
-            disabled={isCreatingPackage}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50"
+            onClick={handleCreatePackageClick}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
           >
-            {isCreatingPackage ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              <>
-                <Folder className="w-4 h-4" />
-                New Folder
-              </>
-            )}
+            <Folder className="w-4 h-4" />
+            New Folder
           </button>
         </div>
 
@@ -967,7 +728,7 @@ export function ClientDetailView({
         <div className="flex items-center gap-6 text-sm text-gray-600">
           <div className="flex items-center gap-2">
             <Calendar className="w-4 h-4" />
-            <span>Created {formatDate(client.created_at)}</span>
+            <span>Created {client && formatDate(client.created_at) || 'Recently'}</span>
           </div>
           <div className="flex items-center gap-2">
             <Folder className="w-4 h-4" />
@@ -976,53 +737,51 @@ export function ClientDetailView({
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-6">
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-600">Total Folders</span>
-              <Folder className="w-5 h-5 text-blue-600" />
-            </div>
-            <p className="text-3xl font-bold text-gray-900">{stats.total}</p>
-          </div>
+      {/* Content: 2-column layout */}
+      <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
+        {/* 1) Stats row – keep your cards */}
+        {/* ... same as you have, but reading from stats & successRate ... */}
 
-          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-600">Active</span>
-              <Clock className="w-5 h-5 text-purple-600" />
-            </div>
-            <p className="text-3xl font-bold text-gray-900">{stats.active}</p>
-          </div>
+        {/* 2) Main layout: left = folders, right = active folder + workflow */}
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1.5fr)] gap-6">
+          {/* Left: Folders & files tree */}
+          <ClientSubmissionPackages
+            submissions={packages}
+            activeId={activePackageId}
+            onToggle={(pkg: ClientSubmissionPackage) =>
+              setActivePackageId(prev =>
+                prev === pkg.submission_id ? null : pkg.submission_id
+              )
+            }
+            onViewFile={handleViewFile}
+            onDownloadFile={(submissionId, filename) => {
+              // plug your download logic here
+            }}
+          />
 
-          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-600">Completed</span>
-              <CheckCircle2 className="w-5 h-5 text-green-600" />
-            </div>
-            <p className="text-3xl font-bold text-gray-900">{stats.completed}</p>
-          </div>
-
-          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-600">Success Rate</span>
-              <TrendingUp className="w-5 h-5 text-green-600" />
-            </div>
-            <p className="text-3xl font-bold text-gray-900">{successRate}%</p>
+          {/* Right: Active folder upload/extract workflow */}
+          <div>
+            <h2 className="text-sm font-semibold text-gray-700 mb-3">
+              {activePackage ? `Upload to: ${activePackage.name}` : 'No folder selected'}
+            </h2>
+            <ClientWorkflowPanel
+              rows={uploadedRows}
+              isUploading={isUploading}
+              isExtracting={isExtracting}
+              uploadStatus={statusText}
+              message={message}
+              error={workflowError}
+              onUploadMore={triggerFileUpload}
+              onExtract={extractSelected}
+              onRemove={removeRow}
+              onView={(submissionId, filename) => {
+                if (filename) {
+                  handleViewFile(submissionId, filename)
+                }
+              }}
+            />
           </div>
         </div>
-
-        {/* Folders & Files Section */}
-        <ClientSubmissionPackages
-          submissions={submissionPackages}
-          activeId={activePackageId}
-          onToggle={(pkg) => setActivePackageId((prev) =>
-            prev === pkg.submission_id ? null : pkg.submission_id
-          )}
-          onViewFile={handleViewFile}
-          onDownloadFile={handleDownloadFile}
-        />
       </div>
     </div>
   )

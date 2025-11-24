@@ -8,7 +8,7 @@ import {
   ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react'
 
-import { getAllSubmissions , bulkExportSubmissions,
+import { getAllSubmissions ,
   bulkDeleteSubmissions,
   exportSingleSubmission,
   deleteSubmission,
@@ -180,9 +180,7 @@ const loadFiles = async () => {
   try {
     setIsLoading(true)
     setError(null)
-    const data = await getAllSubmissions({ 
-      status: ['saved', 'finalized'] 
-    })
+    const data = await getAllSubmissions()
     setFiles(data)
   } catch (error) {
     console.error('Failed to refresh submissions:', error)

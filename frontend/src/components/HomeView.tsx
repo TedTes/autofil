@@ -21,7 +21,7 @@ import {
   uploadPdf,
   getSubmission,
 } from '@/lib/api-client'
-import type { RecentSubmission, Client } from '@/types'
+import type { RecentSubmission, Client, SubmissionStats } from '@/types'
 import { ConfidenceBadgeCompact } from '@/components/ConfidenceBadge'
 import RecentSubmissionsCard from './dashboard/RecentSubmissionsCard'
 import { formatDate } from '@/lib/utils'
@@ -41,6 +41,7 @@ type UploadedRow = {
 
 type HomeViewProps = {
   totalSubmissions: number
+  submissionStats?: SubmissionStats | null
   onGoToFile?: (submissionId: string, filename?: string) => void
   onNavigateToDocuments?: () => void
   onNavigateToClients?: () => void
@@ -48,6 +49,7 @@ type HomeViewProps = {
 
 export function HomeView({
   totalSubmissions,
+  submissionStats,
   onGoToFile,
   onNavigateToDocuments,
   onNavigateToClients,
@@ -106,16 +108,22 @@ export function HomeView({
   }
 
   // Calculate real stats
-  const activeSubmissions = recentSubmissions.filter(s => 
-    s.status === 'extracting' || s.status === 'uploaded' || s.status === 'ready'
-  ).length
+  const statsByStatus = submissionStats?.by_status || {}
+  const totalSubmissionsCount = submissionStats?.total_submissions ?? totalSubmissions
+  const activeSubmissions = submissionStats
+    ? (statsByStatus.uploading || 0) + (statsByStatus.extracting || 0) + (statsByStatus.ready || 0)
+    : recentSubmissions.filter(s =>
+        s.status === 'extracting' || s.status === 'uploaded' || s.status === 'ready'
+      ).length
 
-  const completedSubmissions = recentSubmissions.filter(s => 
-    s.status === 'filled' || s.status === 'extracted'
-  ).length
+  const completedSubmissions = submissionStats
+    ? (statsByStatus.filled || 0) + (statsByStatus.extracted || 0)
+    : recentSubmissions.filter(s =>
+        s.status === 'filled' || s.status === 'extracted'
+      ).length
 
-  const successRate = totalSubmissions > 0
-    ? Math.round((completedSubmissions / totalSubmissions) * 100)
+  const successRate = totalSubmissionsCount > 0
+    ? Math.round((completedSubmissions / totalSubmissionsCount) * 100)
     : 0
 
   return (
@@ -128,7 +136,7 @@ export function HomeView({
           value={loadingClients ? '...' : clients.length.toString()} 
           color="blue" 
         />
-        <StatCard 
+          <StatCard 
           icon={FileText} 
           label="Active Submissions" 
           value={activeSubmissions.toString()} 

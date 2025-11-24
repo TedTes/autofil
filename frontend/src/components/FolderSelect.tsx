@@ -41,9 +41,11 @@ export function FolderSelect({ folders, value, onChange, onCreate }: FolderSelec
             >
               Unassigned
             </button>
-            {folders.map((folder) => (
+            {folders.map((folder) => {
+              const folderKey = folder.folder_id || folder.id || folder.name
+              return (
               <button
-                key={folder.id}
+                key={folderKey}
                 onClick={() => {
                   onChange(folder)
                   setOpen(false)
@@ -52,7 +54,7 @@ export function FolderSelect({ folders, value, onChange, onCreate }: FolderSelec
               >
                 {folder.name}
               </button>
-            ))}
+            )})}
           </div>
           {onCreate && (
             <button
@@ -61,9 +63,12 @@ export function FolderSelect({ folders, value, onChange, onCreate }: FolderSelec
                 const name = prompt('Folder name?')
                 if (!name) return
                 setCreating(true)
-                await onCreate(name)
-                setCreating(false)
-                setOpen(false)
+                try {
+                  await onCreate(name)
+                  setOpen(false)
+                } finally {
+                  setCreating(false)
+                }
               }}
               className="flex w-full items-center gap-2 px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 border-t border-gray-100"
             >

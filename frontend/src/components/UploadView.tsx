@@ -11,10 +11,12 @@ export function UploadView({
   currentFolder,
   folders,
   onFolderChange,
+  onCreateFolder,
 }: {
   currentFolder: Folder | null
   folders: Folder[]
   onFolderChange: (folder: Folder | null) => void
+  onCreateFolder?: (name: string) => Promise<Folder | void>
 }) {
   const [uploading, setUploading] = useState(false)
 
@@ -23,8 +25,9 @@ export function UploadView({
     if (!file) return
     setUploading(true)
     try {
-      if (currentFolder?.id) {
-        await uploadPdfToFolder(currentFolder.id, file)
+      const folderId = currentFolder?.folder_id || currentFolder?.id
+      if (folderId) {
+        await uploadPdfToFolder(folderId, file)
       } else {
         await uploadPdf(file)
       }
@@ -47,11 +50,16 @@ export function UploadView({
           folders={folders}
           value={currentFolder}
           onChange={onFolderChange}
-          onCreate={async (name) => {
-            // we can reuse your createFolder here if you want
-            // but better to let MainLayout handle adding it to state
-            // so leave empty or lift it
-          }}
+          onCreate={
+            onCreateFolder
+              ? async (name: string) => {
+                  const newFolder = await onCreateFolder(name)
+                  if (newFolder) {
+                    onFolderChange(newFolder)
+                  }
+                }
+              : undefined
+          }
         />
       </div>
 

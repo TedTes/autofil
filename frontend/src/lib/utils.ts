@@ -109,6 +109,7 @@ export function transformFormFieldsToApi(fields: ExtractedField[]): Record<strin
 
 export const formatDate = (dateString: string): string => {
   try {
+    if(!dateString) return 'Recently';
     const date = new Date(dateString)
     const now = new Date()
     const diffMs = now.getTime() - date.getTime()

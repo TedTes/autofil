@@ -2,12 +2,12 @@
 
 import { useState } from 'react'
 import { ChevronRight, ChevronDown, Folder as FolderIcon, FileText, Plus, X, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
-import type { Client, Submission } from '@/types'
+import type { Client, Submission,ClientSubmissionPackage } from '@/types'
 
 interface FolderPanelProps {
   clients: Client[]
   activeSubmission: Submission | null
-  onSubmissionClick: (submission: Submission) => void
+  onSubmissionClick: (submission: ClientSubmissionPackage) => void
   onNewClient: () => void
   onNewSubmission: (clientId: string) => void
   isMobileOpen: boolean
@@ -40,7 +40,7 @@ export default function FolderPanel({
   }
 
 
-  const getStatusBadge = (submission: Submission) => {
+  const getStatusBadge = (submission: ClientSubmissionPackage) => {
     const fileCount = submission.file_count
 
     // Processing states

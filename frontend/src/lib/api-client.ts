@@ -384,7 +384,7 @@ export async function getFolders(): Promise<Folder[]> {
   if (!response.data.success) {
     throw new Error(response.data.error || 'Failed to get folders')
   }
-  return response.data.folders || []
+  return (response.data.data as Folder[]) || []
 }
 
 export async function createFolder(name: string): Promise<Folder> {
@@ -392,18 +392,15 @@ export async function createFolder(name: string): Promise<Folder> {
   if (!response.data.success) {
     throw new Error(response.data.error || 'Failed to create folder')
   }
-  return response.data.folder
+  return response.data.data as Folder
 }
 
 export async function renameFolder(id: string, name: string): Promise<Folder> {
-  const response = await api.put<ApiResponse<{ folder: Folder }>>(
-    `/folders/${id}`,
-    { name }
-  )
+  const response = await api.put(`/folders/${id}`, { name })
   if (!response.data.success) {
     throw new Error(response.data.error || 'Failed to rename folder')
   }
-  return response.data.data!.folder
+  return response.data.data as Folder
 }
 
 export async function getFolder(id: string): Promise<Folder> {
@@ -411,7 +408,7 @@ export async function getFolder(id: string): Promise<Folder> {
   if (!response.data.success) {
     throw new Error(response.data.error || 'Failed to get folder')
   }
-  return response.data.folder
+  return response.data.data as Folder
 }
 
 export async function deleteFolder(id: string): Promise<void> {
@@ -744,39 +741,6 @@ export async function extractBatchDocuments(
   return response.data.results
 }
 
-export async function getBatchExtractionStatus(batchId: string): Promise<{
-  batch_id: string
-  status: 'pending' | 'processing' | 'completed' | 'failed'
-  total_files: number
-  completed: number
-  failed: number
-  results: Array<{ file_id: string; status: string; error?: string }>
-}> {
-  const response = await api.get(`/extraction/batch/${batchId}`)
-  if (!response.data.success) {
-    throw new Error(response.data.error || 'Failed to get batch status')
-  }
-  return response.data.data
-}
-
-export async function downloadBatchResults(
-  batchId: string,
-  filename?: string
-): Promise<void> {
-  const response = await api.get(`/extraction/batch/${batchId}/download`, {
-    responseType: 'blob',
-  })
-
-  const url = window.URL.createObjectURL(new Blob([response.data]))
-  const link = document.createElement('a')
-  link.href = url
-  link.setAttribute('download', filename || `batch_extraction_${batchId}.zip`)
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  window.URL.revokeObjectURL(url)
-}
-
 export async function getSubmissionData(submissionId: string): Promise<{
   data: Record<string, unknown>
   confidence: number
@@ -787,7 +751,7 @@ export async function getSubmissionData(submissionId: string): Promise<{
   if (!response.data.success) {
     throw new Error(response.data.error || 'Failed to get submission')
   }
-  const s = response.data.submission
+  const s = response.data.data
   return {
     data: s.data || {},
     confidence: s.confidence || 0,
@@ -808,11 +772,9 @@ export async function updateSubmission(
 }
 
 export async function exportFilledPdf(submissionId: string): Promise<Blob> {
-  const response = await api.post(
-    `/submissions/${submissionId}/export`,
-    {},
-    { responseType: 'blob' }
-  )
+  const response = await api.get(`/submissions/${submissionId}/download`, {
+    responseType: 'blob',
+  })
   return response.data
 }
 
@@ -831,25 +793,9 @@ export function downloadBlob(blob: Blob, filename: string): void {
   window.URL.revokeObjectURL(url)
 }
 
-export async function bulkExportSubmissions(submissionIds: string[]): Promise<{
-  success: boolean
-  results: { id: string; success: boolean; error?: string }[]
-}> {
-  const response = await api.post('/submissions/bulk/export', {
-    submission_ids: submissionIds,
-  })
-  if (!response.data.success) {
-    throw new Error(response.data.error || 'Bulk export failed')
-  }
-  return {
-    success: true,
-    results: response.data.results || [],
-  }
-}
-
 export async function bulkDeleteSubmissions(submissionIds: string[]): Promise<void> {
   try {
-    await api.delete('/submissions/bulk/delete', { data: { submission_ids: submissionIds } })
+    await api.delete('/bulk/delete', { data: { submission_ids: submissionIds } })
   } catch (error) {
     if (axios.isAxiosError(error) && error.response?.status === 404) {
       console.warn('Bulk delete endpoint not implemented')
@@ -879,35 +825,6 @@ export function downloadZip(blob: Blob, filename: string = 'exported_files.zip')
  * Bulk save submissions to Documents
  * Updates workflow_status to 'saved' for multiple submissions
  */
-export async function bulkSaveSubmissions(submissionIds: string[]): Promise<{
-  success: boolean
-  saved_count: number
-  failed: string[]
-  errors: Record<string, string>
-}> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/submissions/bulk-save`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        submission_ids: submissionIds,
-      }),
-    })
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
-    }
-
-    return await response.json()
-  } catch (error) {
-    console.error('Bulk save error:', error)
-    throw error
-  }
-}
-
 
 /**
  * Get all submissions with optional filtering
@@ -995,7 +912,7 @@ export async function getSubmissionForEdit(submissionId: string): Promise<{
       throw new Error(response.data.error || 'Failed to fetch submission')
     }
     
-    return response.data
+    return response.data.data
   } catch (error) {
     console.error('Get submission for edit error:', error)
     throw error
@@ -1035,7 +952,7 @@ export async function updateSubmissionData(
  */
 export async function bulkExportAsZip(submissionIds: string[]): Promise<Blob> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/submissions/bulk/export-zip`, {
+    const response = await fetch(`${API_BASE_URL}/api/bulk/export-zip`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1053,31 +970,6 @@ export async function bulkExportAsZip(submissionIds: string[]): Promise<Blob> {
     return await response.blob()
   } catch (error) {
     console.error('Bulk export ZIP error:', error)
-    throw error
-  }
-}
-
-/**
- * Get bulk export progress (for long-running exports)
- */
-export async function getBulkExportProgress(jobId: string): Promise<{
-  status: 'pending' | 'processing' | 'completed' | 'failed'
-  progress: number
-  total: number
-  current: number
-  download_url?: string
-  error?: string
-}> {
-  try {
-    const response = await api.get(`/bulk-export/status/${jobId}`)
-    
-    if (!response.data.success) {
-      throw new Error(response.data.error || 'Failed to get export progress')
-    }
-    
-    return response.data
-  } catch (error) {
-    console.error('Get export progress error:', error)
     throw error
   }
 }

@@ -30,9 +30,10 @@ import { FileDetailView, DocumentsView,  ClientsView,
 import {
   getFolders,
   createFolder,
+  getSubmissionStats,
 } from '@/lib/api-client'
 
-import type { Folder, ViewType,  FileDetailActions,ViewDataMap } from '@/types'
+import type { Folder, ViewType,  FileDetailActions,ViewDataMap, SubmissionStats } from '@/types'
 
 type ViewState = {
   type: ViewType
@@ -76,6 +77,7 @@ const [isMobileOpening, setIsMobileOpening] = useState(false)
     data?: unknown
     breadcrumbs?: string[]
   } | null>(null)
+  const [submissionStats, setSubmissionStats] = useState<SubmissionStats | null>(null)
 
   // Folders data
   const [folders, setFolders] = useState<Folder[]>([])
@@ -92,6 +94,17 @@ const [isMobileOpening, setIsMobileOpening] = useState(false)
         }
       } catch (err) {
         console.warn('Failed to load folders', err)
+      }
+    })()
+  }, [])
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const stats = await getSubmissionStats()
+        setSubmissionStats(stats)
+      } catch (err) {
+        console.warn('Failed to load submission stats', err)
       }
     })()
   }, [])
@@ -259,11 +272,16 @@ const handleMobileSidebarClose = () => {
     },
   ]
   // Create folder from Documents view
-  const handleCreateFolder = async (name: string) => {
+  const handleCreateFolder = useCallback(async (name: string) => {
     const newFolder = await createFolder(name)
     setFolders((prev) => [newFolder, ...prev])
     setCurrentFolder(newFolder)
-  }
+    return newFolder
+  }, [])
+
+  const handleCreateFolderNoReturn = useCallback(async (name: string) => {
+    await handleCreateFolder(name)
+  }, [handleCreateFolder])
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -667,7 +685,8 @@ const handleMobileSidebarClose = () => {
             {/* Home View */}
             {currentView.type === 'dashboard' && (
   <HomeView 
-    totalSubmissions={0}  // TODO: Get real count from API
+    totalSubmissions={submissionStats?.total_submissions ?? 0}
+    submissionStats={submissionStats}
     onGoToFile={handleFileClick}
     onNavigateToDocuments={() => navigateTo('documents', undefined, ['Dashboard', 'Documents'])}
     onNavigateToClients={() => navigateTo('clients', undefined, ['Dashboard', 'Clients'])}
@@ -680,7 +699,7 @@ const handleMobileSidebarClose = () => {
                 folders={folders}
                 currentFolder={currentFolder}
                 onFolderChange={setCurrentFolder}
-                onCreateFolder={handleCreateFolder}
+                onCreateFolder={handleCreateFolderNoReturn}
                 onNavigate={navigateTo}
                 onFileClick ={handleFileClick}
                 shouldRefresh={documentsNeedRefresh}
@@ -694,6 +713,7 @@ const handleMobileSidebarClose = () => {
                 currentFolder={currentFolder}
                 folders={folders}
                 onFolderChange={setCurrentFolder}
+                onCreateFolder={handleCreateFolder}
               />
             )}
 

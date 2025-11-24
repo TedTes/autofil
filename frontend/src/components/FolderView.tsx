@@ -43,9 +43,11 @@ export function FolderView({
         </div>
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {folders.map((folder) => (
+          {folders.map((folder) => {
+            const folderKey = folder.folder_id || folder.id || folder.name
+            return (
             <button
-              key={folder.id}
+              key={folderKey}
               onClick={() => onSelectFolder(folder)}
               className="group rounded-xl bg-white border border-gray-200 hover:border-blue-200 hover:shadow-sm p-4 text-left transition-all"
             >
@@ -63,7 +65,7 @@ export function FolderView({
                   : '—'}
               </p>
             </button>
-          ))}
+          )})}
         </div>
       )}
     </div>

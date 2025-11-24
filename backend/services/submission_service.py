@@ -8,6 +8,7 @@ import json
 from typing import Optional,Dict,Any,List
 from datetime import datetime
 from werkzeug.utils import secure_filename
+from storage import LocalStorageProvider, StorageProvider
 from extraction.extractors import extractor_registry
 from extraction.classifiers import classifier_registry
 from extraction.core.readers.pdf_reader import PdfReader
@@ -32,22 +33,17 @@ class SubmissionService:
     - File retrieval
     """
     
-    def __init__(self):
+    def __init__(self, storage_provider: Optional[StorageProvider] = None):
         """Initialize service with paths."""
-        self.storage_dir = 'storage'
-        self.uploads_dir = os.path.join(self.storage_dir, 'uploads')
-        self.outputs_dir = os.path.join(self.storage_dir, 'outputs')
-        self.data_dir = os.path.join(self.storage_dir, 'data')
-        self.folders_dir = os.path.join(self.storage_dir, 'folders')
+        self.storage: StorageProvider = storage_provider or LocalStorageProvider('storage')
+        self.storage_dir = getattr(self.storage, 'base_path', 'storage')
+        self.uploads_dir = self.storage.ensure_dir('uploads')
+        self.outputs_dir = self.storage.ensure_dir('outputs')
+        self.data_dir = self.storage.ensure_dir('data')
+        self.folders_dir = self.storage.ensure_dir('folders')
 
         self.client_service = ClientService()
         self.filler = Acord126Filler()  # filler knows how to find its own template(s)
-
-        # Create directories if they don't exist
-        os.makedirs(self.uploads_dir, exist_ok=True)
-        os.makedirs(self.outputs_dir, exist_ok=True)
-        os.makedirs(self.data_dir, exist_ok=True)
-        os.makedirs(self.folders_dir, exist_ok=True)
 
         self.version_service = VersionService(self.storage_dir)
         self.comparison_service = ComparisonService(self.storage_dir)

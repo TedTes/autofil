@@ -197,6 +197,32 @@ class FolderService:
             json.dump(metadata, f, indent=2)
         
         return True
+
+    def remove_submission(self, folder_id: str, submission_id: str) -> bool:
+        """
+        Remove a submission entry from folder metadata.
+        """
+        metadata_path = os.path.join(self.storage_dir, folder_id, 'metadata.json')
+        if not os.path.exists(metadata_path):
+            return False
+
+        with open(metadata_path, 'r') as f:
+            metadata = json.load(f)
+
+        original_count = len(metadata.get('submissions', []))
+        metadata['submissions'] = [
+            s for s in metadata.get('submissions', [])
+            if s.get('submission_id') != submission_id
+        ]
+        if len(metadata['submissions']) == original_count:
+            return True
+
+        metadata['file_count'] = len(metadata['submissions'])
+
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f, indent=2)
+
+        return True
     
     def get_folder_path(self, folder_id: str) -> str:
         """

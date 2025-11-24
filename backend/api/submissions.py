@@ -161,41 +161,9 @@ def update_submission(submission_id):
 def delete_submission(submission_id):
     """Delete a submission and all its files."""
     try:
-        metadata_path = os.path.join("storage/data", f"{submission_id}_meta.json")
-        data_path = os.path.join("storage/data", f"{submission_id}.json")
-
-        # Load metadata to find file paths
-        with open(metadata_path, "r") as f:
-            metadata = json.load(f)
-
-        if metadata.get("upload_path") and os.path.exists(metadata["upload_path"]):
-            os.remove(metadata["upload_path"])
-
-        if metadata.get("output_path") and os.path.exists(metadata["output_path"]):
-            os.remove(metadata["output_path"])
-
-        # Delete metadata and data
-        for path in [metadata_path, data_path]:
-            if os.path.exists(path):
-                os.remove(path)
-
-        # Update folder metadata
-        folder_id = metadata.get("folder_id")
-        if folder_id:
-            from services.folder_service import FolderService
-            folder_service = FolderService()
-            folder = folder_service.get_folder(folder_id)
-            if folder:
-                folder["submissions"] = [
-                    s for s in folder.get("submissions", [])
-                    if s["submission_id"] != submission_id
-                ]
-                folder["file_count"] = len(folder["submissions"])
-
-                folder_path = folder_service.get_folder_path(folder_id)
-                metadata_file = os.path.join(folder_path, "metadata.json")
-                with open(metadata_file, "w") as f:
-                    json.dump(folder, f, indent=2)
+        deleted = submission_service.delete_submission(submission_id)
+        if not deleted:
+            return jsonify({"error": "Submission not found"}), 404
 
         return jsonify({
             "success": True,

@@ -323,12 +323,23 @@ class SubmissionService:
         if client_id and metadata.get('client_id') and metadata.get('client_id') != client_id:
             return None
         
+        resolved_client_id = metadata.get('client_id')
+        client_name = None
+        if resolved_client_id:
+            try:
+                client = self.client_service.get_client(resolved_client_id)
+                if client:
+                    client_name = client.get('name')
+            except Exception:
+                client_name = None
+        
         with open(data_path, 'r') as f:
             data = json.load(f)
         
         return {
             'submission_id': submission_id,
-            'client_id': metadata.get('client_id'),
+            'client_id': resolved_client_id,
+            'client_name': client_name,
             'folder_id': metadata.get('folder_id'),
             'filename': metadata['filename'],
             'status': metadata['status'],
@@ -391,7 +402,49 @@ class SubmissionService:
         updated = self.get_submission(submission_id)
         return updated
 
-    
+    def delete_submission(self, submission_id: str) -> bool:
+        """
+        Delete a submission's files and metadata, updating folder/client references.
+        """
+        metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
+        data_path = os.path.join(self.data_dir, f"{submission_id}.json")
+
+        if not os.path.exists(metadata_path):
+            return False
+
+        with open(metadata_path, 'r') as f:
+            metadata = json.load(f)
+
+        upload_path = metadata.get("upload_path")
+        if upload_path and os.path.exists(upload_path):
+            os.remove(upload_path)
+
+        output_path = metadata.get("output_path")
+        if output_path and os.path.exists(output_path):
+            os.remove(output_path)
+
+        for path in [metadata_path, data_path]:
+            if path and os.path.exists(path):
+                os.remove(path)
+
+        folder_id = metadata.get("folder_id")
+        if folder_id:
+            try:
+                from services.folder_service import FolderService
+                FolderService().remove_submission(folder_id, submission_id)
+            except Exception as exc:
+                print(f"Warning: failed to update folder {folder_id}: {exc}")
+
+        client_id = metadata.get("client_id")
+        if client_id:
+            try:
+                self.client_service.remove_submission(client_id, submission_id)
+            except Exception as exc:
+                print(f"Warning: failed to update client {client_id}: {exc}")
+
+        return True
+
+
     def fill_pdf(self, submission_id: str):
         """
         Fill PDF with data using the canonical extraction output.

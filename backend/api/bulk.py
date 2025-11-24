@@ -334,24 +334,11 @@ def bulk_delete():
         results = []
         for sid in ids:
             try:
-                # Reuse single-delete route's logic by calling service methods directly
-                meta_path = os.path.join("storage", "data", f"{sid}_meta.json")
-                data_path = os.path.join("storage", "data", f"{sid}.json")
-
-                if os.path.exists(meta_path):
-                    with open(meta_path, "r") as f:
-                        meta = __import__("json").load(f)
-                    if (p := meta.get("upload_path")) and os.path.exists(p):
-                        os.remove(p)
-                    if (p := meta.get("output_path")) and os.path.exists(p):
-                        os.remove(p)
-                    os.remove(meta_path)
-                if os.path.exists(data_path):
-                    os.remove(data_path)
-
-                # Optional: update folder metadata if present (omitted here for brevity)
-
-                results.append({"id": sid, "success": True})
+                deleted = submission_service.delete_submission(sid)
+                if not deleted:
+                    results.append({"id": sid, "success": False, "error": "Submission not found"})
+                else:
+                    results.append({"id": sid, "success": True})
             except Exception as e:
                 results.append({"id": sid, "success": False, "error": str(e)})
 

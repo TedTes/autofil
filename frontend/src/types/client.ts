@@ -51,7 +51,7 @@ export interface Client {
     path?: string
     url?: string | null
     file_size?: number
-    extraction_status?: 'extracted' | 'extracting' | 'error'
+    extraction_status?: 'extracted' | 'extracting' | 'error' | 'ready'
     uploaded_at: string
   }
 

@@ -7,6 +7,7 @@ export type UploadedRow = {
   filename: string
   uploadedAt: string
   fileType: 'pdf' | 'excel' | 'csv' | 'other'
+  status?: 'totalFiles' | 'totalFiles' | 'statusFile' | 'extractedFile' | 'outputFile' | 'uploaded' | 'extracting' | 'error' | 'uploading' | 'extracted'
   fileSize: number
   uploadPercent: number
   extractionStatus: 'pending' | 'extracted' | 'error'
@@ -38,7 +39,14 @@ export function useClientSubmissions(clientId: string) {
   const [statusText, setStatusText] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [workflowError, setWorkflowError] = useState<string | null>(null)
+  
+  // Input file selection (existing)
   const [selectedInputsByPackage, setSelectedInputsByPackage] = useState<
+    Record<string, string[]>
+  >({})
+  
+  // NEW: Output file selection
+  const [selectedOutputsByPackage, setSelectedOutputsByPackage] = useState<
     Record<string, string[]>
   >({})
 
@@ -61,6 +69,7 @@ export function useClientSubmissions(clientId: string) {
     setUploadedRows(prev => prev.filter(row => row.submissionId !== submissionId))
   }
 
+  // ---- INPUT selection management ----
   const toggleInputSelection = (submissionId: string, inputId?: string) => {
     if (!submissionId || !inputId) return
     setSelectedInputsByPackage(prev => {
@@ -87,6 +96,39 @@ export function useClientSubmissions(clientId: string) {
   const clearInputSelection = (submissionId: string) => {
     if (!submissionId) return
     setSelectedInputsByPackage(prev => {
+      if (!(submissionId in prev)) return prev
+      const next = { ...prev }
+      delete next[submissionId]
+      return next
+    })
+  }
+
+  // NEW: OUTPUT selection management ----
+  const toggleOutputSelection = (submissionId: string, filename: string) => {
+    if (!submissionId || !filename) return
+    setSelectedOutputsByPackage(prev => {
+      const current = prev[submissionId] || []
+      const exists = current.includes(filename)
+      const nextSelections = exists
+        ? current.filter(f => f !== filename)
+        : [...current, filename]
+      return { ...prev, [submissionId]: nextSelections }
+    })
+  }
+
+  const selectAllOutputs = (submissionId: string, filenames: string[]) => {
+    if (!submissionId) return
+    if (!filenames.length) return
+    setSelectedOutputsByPackage(prev => {
+      const current = prev[submissionId] || []
+      const allSelected = filenames.every(f => current.includes(f))
+      return { ...prev, [submissionId]: allSelected ? [] : filenames }
+    })
+  }
+
+  const clearOutputSelection = (submissionId: string) => {
+    if (!submissionId) return
+    setSelectedOutputsByPackage(prev => {
       if (!(submissionId in prev)) return prev
       const next = { ...prev }
       delete next[submissionId]
@@ -134,8 +176,21 @@ export function useClientSubmissions(clientId: string) {
     )
   }, [packages])
 
+  // Clean up invalid selections when packages change
   useEffect(() => {
     setSelectedInputsByPackage(prev => {
+      const validIds = new Set(packages.map(pkg => pkg.submission_id))
+      const next: Record<string, string[]> = {}
+      for (const [pkgId, selections] of Object.entries(prev)) {
+        if (validIds.has(pkgId)) {
+          next[pkgId] = selections
+        }
+      }
+      return next
+    })
+    
+    // NEW: Also clean up output selections
+    setSelectedOutputsByPackage(prev => {
       const validIds = new Set(packages.map(pkg => pkg.submission_id))
       const next: Record<string, string[]> = {}
       for (const [pkgId, selections] of Object.entries(prev)) {
@@ -242,13 +297,16 @@ export function useClientSubmissions(clientId: string) {
     setStatusText(null)
     await loadClientData({ silent: true })
   }
+  
   const refreshClient = useCallback(async () => {
     await loadClientData({ silent: true })
   }, [loadClientData])
 
-  // ---- stats ----
+  // NEW: Enhanced stats calculation
   const stats = {
+    // Package counts
     total: packages.length,
+    totalPackages: packages.length,
     active: packages.filter(s =>
       s.status === 'extracting' || s.status === 'uploaded' || s.status === 'ready'
     ).length,
@@ -256,7 +314,18 @@ export function useClientSubmissions(clientId: string) {
       s.status === 'filled' || s.status === 'extracted'
     ).length,
     errors: packages.filter(s => s.status === 'error').length,
+    
+    // File counts across all packages
+    totalFiles: packages.reduce((sum, pkg) => sum + (pkg.file_count || 0), 0),
+    extractedFiles: packages.reduce((sum, pkg) => {
+      const extractedCount = pkg.inputs?.filter(
+        input => input.extraction_status === 'extracted' || input.extraction_status === 'ready'
+      ).length || 0
+      return sum + extractedCount
+    }, 0),
+    outputFiles: packages.reduce((sum, pkg) => sum + (pkg.outputs?.length || 0), 0),
   }
+  
   return {
     client,
     loading,
@@ -266,10 +335,18 @@ export function useClientSubmissions(clientId: string) {
     activePackageId,
     setActivePackageId,
     activePackage,
+    
+    // Input selection
     selectedInputsByPackage,
     toggleInputSelection,
     selectAllInputs,
     clearInputSelection,
+    
+    // NEW: Output selection
+    selectedOutputsByPackage,
+    toggleOutputSelection,
+    selectAllOutputs,
+    clearOutputSelection,
 
     uploadedRows,
     isUploading,

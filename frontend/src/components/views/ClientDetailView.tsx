@@ -26,6 +26,7 @@ import {
   FolderOpen,
   Folder,
   Plus,
+  Combine,
 } from 'lucide-react'
 
 function getFileIcon(filename: string) {
@@ -90,204 +91,334 @@ type StatusBadgeConfig = {
   icon: typeof Upload
 }
 
-// Compact folder list component
+// Compact folder list component - COMPLETE PACKAGE MANAGEMENT
 function CompactFolderList({
   submissions,
   activeId,
+  selectedInputsByPackage,
+  selectedOutputsByPackage,
   onToggle,
   onViewFile,
   onDownloadFile,
+  onToggleInput,
+  onSelectAllInputs,
+  onToggleOutput,
+  onSelectAllOutputs,
+  onFillPackage,
+  onMergePackage,
+  fillingPackageId,
+  mergingPackageId,
+  fillMessage,
+  mergeMessage,
 }: {
   submissions: ClientSubmissionPackage[]
   activeId?: string | null
+  selectedInputsByPackage: Record<string, string[]>
+  selectedOutputsByPackage: Record<string, string[]>
   onToggle?: (pkg: ClientSubmissionPackage) => void
-  onViewFile?: (submissionId: string, filename: string) => void
+  onViewFile?: (submissionId: string, filename?: string) => void
   onDownloadFile?: (submissionId: string, filename: string) => void
+  onToggleInput?: (submissionId: string, inputId: string) => void
+  onSelectAllInputs?: (submissionId: string, inputIds: string[]) => void
+  onToggleOutput?: (submissionId: string, filename: string) => void
+  onSelectAllOutputs?: (submissionId: string, filenames: string[]) => void
+  onFillPackage?: (submissionId: string) => void
+  onMergePackage?: (submissionId: string) => void
+  fillingPackageId?: string | null
+  mergingPackageId?: string | null
+  fillMessage?: string | null
+  mergeMessage?: string | null
 }) {
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
 
-  const toggleFolder = (submissionId: string, e: React.MouseEvent) => {
-    e.stopPropagation()
-    setExpandedFolders((prev) => {
+  const toggleExpanded = (id: string) => {
+    setExpandedIds(prev => {
       const next = new Set(prev)
-      if (next.has(submissionId)) {
-        next.delete(submissionId)
+      if (next.has(id)) {
+        next.delete(id)
       } else {
-        next.add(submissionId)
+        next.add(id)
       }
       return next
     })
   }
 
-  return (
-    <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
-      <div className="px-4 py-3 border-b border-gray-100">
-        <h2 className="text-sm font-semibold text-gray-900">
-          Folders ({submissions.length})
-        </h2>
-      </div>
+  const handleRowKeyDown = (
+    event: React.KeyboardEvent<HTMLDivElement>,
+    pkg: ClientSubmissionPackage
+  ) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      onToggle?.(pkg)
+    }
+  }
 
-      {submissions.length === 0 ? (
-        <div className="p-8 text-center text-sm text-gray-500">
-          <FolderOpen className="w-10 h-10 mx-auto text-gray-300 mb-2" />
-          <p className="font-medium">No folders yet</p>
-        </div>
-      ) : (
-        <div className="divide-y divide-gray-100 max-h-[calc(100vh-300px)] overflow-y-auto">
-          {submissions.map((submission) => {
-            const badge = statusBadgeFor(submission.status)
-            const StatusIcon = badge.icon
-            const isExpanded = expandedFolders.has(submission.submission_id)
-            const isActive = activeId === submission.submission_id
-            const totalFiles =
-              (submission.inputs?.length || 0) + (submission.outputs?.length || 0)
+  const renderPackageCard = (pkg: ClientSubmissionPackage) => {
+        const isActive = activeId === pkg.submission_id
+        const isExpanded = expandedIds.has(pkg.submission_id)
+        const badge = statusBadgeFor(pkg.status)
+        const StatusIcon = badge.icon
+        
+        // Input selection logic - FIXED: Use fileId (input_id OR filename)
+        const selectedInputIds = selectedInputsByPackage[pkg.submission_id] || []
+        const inputFiles = pkg.inputs || []
+        const selectableInputIds = inputFiles.map(f => f.input_id || f.filename)
+        const allInputsSelected = selectableInputIds.length > 0 && selectableInputIds.every(
+          id => selectedInputIds.includes(id)
+        )
+        const isFilling = fillingPackageId === pkg.submission_id
+        
+        // Output selection logic
+        const selectedOutputFilenames = selectedOutputsByPackage[pkg.submission_id] || []
+        const outputFiles = pkg.outputs || []
+        const totalOutputs = outputFiles.length
+        const allOutputsSelected = totalOutputs > 0 && outputFiles.every(
+          file => selectedOutputFilenames.includes(file.filename)
+        )
+        const isMerging = mergingPackageId === pkg.submission_id
 
-            return (
-              <div
-                key={submission.submission_id}
-                className={`transition-colors ${isActive ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+        return (
+          <div key={pkg.submission_id} className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+            {/* Folder Header */}
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => onToggle?.(pkg)}
+              onKeyDown={(event) => handleRowKeyDown(event, pkg)}
+              className={`w-full flex items-center gap-2 px-3 py-2.5 transition-all ${
+                isActive
+                  ? 'bg-blue-50'
+                  : 'hover:bg-gray-50'
+              }`}
+            >
+              <button
+                onClick={e => {
+                  e.stopPropagation()
+                  toggleExpanded(pkg.submission_id)
+                }}
+                className="p-0.5 hover:bg-gray-200 rounded"
               >
-                {/* Folder Header - Compact */}
-                <div className="flex items-center gap-2 px-3 py-2.5">
-                  <button
-                    onClick={(e) => toggleFolder(submission.submission_id, e)}
-                    className="p-0.5 hover:bg-gray-200 rounded transition-colors flex-shrink-0"
-                  >
-                    {isExpanded ? (
-                      <ChevronDown className="w-3.5 h-3.5 text-gray-600" />
-                    ) : (
-                      <ChevronRight className="w-3.5 h-3.5 text-gray-600" />
-                    )}
-                  </button>
+                {isExpanded ? (
+                  <ChevronDown className="w-4 h-4 text-gray-500" />
+                ) : (
+                  <ChevronRight className="w-4 h-4 text-gray-500" />
+                )}
+              </button>
+              <Folder className={`w-4 h-4 ${isActive ? 'text-blue-600' : 'text-gray-400'}`} />
+              <div className="flex-1 text-left min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">{pkg.name}</p>
+                <p className="text-xs text-gray-500">
+                  {pkg.inputs?.length || 0} input{(pkg.inputs?.length || 0) === 1 ? '' : 's'} • {pkg.outputs?.length || 0} output{(pkg.outputs?.length || 0) === 1 ? '' : 's'}
+                </p>
+              </div>
+              <span
+                className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${badge.color}`}
+              >
+                <StatusIcon className="w-3 h-3" />
+              </span>
+            </div>
 
-                  <button
-                    onClick={() => onToggle?.(submission)}
-                    className="flex-1 flex items-center gap-2 text-left min-w-0"
-                  >
-                    {isExpanded ? (
-                      <FolderOpen className="w-4 h-4 text-blue-500 flex-shrink-0" />
-                    ) : (
-                      <Folder className="w-4 h-4 text-blue-500 flex-shrink-0" />
-                    )}
-
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">
-                        {submission.name}
-                      </p>
+            {/* Expanded: Complete Package View */}
+            {isExpanded && (
+              <div className="bg-gray-50 border-t border-gray-200">
+                {/* INPUT FILES SECTION - NO LABEL, CLEANER, ALL CHECKBOXES ENABLED */}
+                {pkg.inputs && pkg.inputs.length > 0 && (
+                  <div className="p-3 space-y-2 border-b border-gray-200">
+                    <div className="flex items-center justify-between mb-1">
                       <p className="text-xs text-gray-500">
-                        {totalFiles} {totalFiles === 1 ? 'file' : 'files'}
+                        {pkg.inputs.length} file{pkg.inputs.length === 1 ? '' : 's'}
                       </p>
+                      <button
+                        onClick={() => onSelectAllInputs?.(
+                          pkg.submission_id,
+                          selectableInputIds
+                        )}
+                        className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                      >
+                        {allInputsSelected ? 'Clear' : 'Select all'}
+                      </button>
                     </div>
-                  </button>
-
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    {isActive && (
-                      <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
-                    )}
-                    <StatusIcon
-                      className={`w-3.5 h-3.5 ${badge.color.split(' ')[0]} ${
-                        submission.status === 'extracting' ? 'animate-spin' : ''
-                      }`}
-                    />
-                  </div>
-                </div>
-
-                {/* Expanded Files - Compact */}
-                {isExpanded && (
-                  <div className="px-3 pb-2 bg-gray-50/50">
-                    <div className="ml-6 space-y-2 text-xs">
-                      {/* Input Files */}
-                      {submission.inputs && submission.inputs.length > 0 && (
-                          <div className="space-y-0.5">
-                            {submission.inputs.map((file, idx) => {
-                             return  <div
-                                key={`${submission.submission_id}-in-${idx}`}
-                                className="flex items-center gap-1.5 px-2 py-1 hover:bg-white rounded transition-colors group"
-                              >
-                                {getFileIcon(file.filename)}
-                                <span className="flex-1 truncate text-gray-700">
-                                  {file.filename}
-                                </span>
-                                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  {onViewFile && (
-                                    <button
-                                      onClick={() =>
-                                        onViewFile(submission.submission_id, file.filename)
-                                      }
-                                      className="p-1 hover:bg-gray-200 rounded"
-                                      title="View"
-                                    >
-                                      <Eye className="w-3 h-3 text-gray-600" />
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-          })}
+                    
+                    <div className="space-y-1">
+                      {pkg.inputs.map((file, idx) => {
+                        const fileId = file.input_id || file.filename
+                        const isSelected = selectedInputIds.includes(fileId)
+                        return (
+                          <div
+                            key={`${pkg.submission_id}-input-${idx}`}
+                            className="flex items-center gap-2 px-2 py-1.5 bg-white rounded border border-gray-200 hover:border-blue-300 transition-colors group"
+                          >
+                            <input
+                              type="checkbox"
+                              className="w-3.5 h-3.5 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer flex-shrink-0"
+                              checked={isSelected}
+                              onChange={() => onToggleInput?.(pkg.submission_id, fileId)}
+                            />
+                            {getFileIcon(file.filename)}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-gray-900 truncate">
+                                {file.filename}
+                              </p>
+                              {file.extraction_status && (
+                                <p className="text-xs text-gray-500">
+                                  {file.extraction_status}
+                                </p>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => onViewFile?.(pkg.submission_id, file.filename)}
+                              className="p-1 rounded hover:bg-gray-100 text-gray-400 group-hover:text-gray-600 flex-shrink-0 transition-colors"
+                              title="View"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
                           </div>
-                      
+                        )
+                      })}
+                    </div>
+
+                    {/* Fill Button - Under Files */}
+                    <div className="mt-2 space-y-1">
+                      {fillMessage && fillingPackageId === pkg.submission_id && (
+                        <p className="text-xs text-green-600 text-center">{fillMessage}</p>
                       )}
-
-                      {/* Output Files */}
-                      {submission.outputs && submission.outputs.length > 0 && (
-                        <div>
-                          <div className="flex items-center gap-1.5 mb-1 text-gray-600">
-                            <FileStack className="w-3 h-3" />
-                            <span className="font-medium">
-                              Outputs ({submission.outputs.length})
-                            </span>
-                          </div>
-                          <div className="space-y-0.5">
-                            {submission.outputs.map((file, idx) => (
-                              <div
-                                key={`${submission.submission_id}-out-${idx}`}
-                                className="flex items-center gap-1.5 px-2 py-1 hover:bg-white rounded transition-colors group"
-                              >
-                                <CheckCircle2 className="w-3 h-3 text-green-600 flex-shrink-0" />
-                                <span className="flex-1 truncate text-gray-700">
-                                  {file.filename}
-                                </span>
-                                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  {onViewFile && (
-                                    <button
-                                      onClick={() =>
-                                        onViewFile(submission.submission_id, file.filename)
-                                      }
-                                      className="p-1 hover:bg-gray-200 rounded"
-                                      title="View"
-                                    >
-                                      <Eye className="w-3 h-3 text-gray-600" />
-                                    </button>
-                                  )}
-                                  {onDownloadFile && (
-                                    <button
-                                      onClick={() =>
-                                        onDownloadFile(submission.submission_id, file.filename)
-                                      }
-                                      className="p-1 hover:bg-gray-200 rounded"
-                                      title="Download"
-                                    >
-                                      <Download className="w-3 h-3 text-gray-600" />
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                      <button
+                        onClick={() => onFillPackage?.(pkg.submission_id)}
+                        disabled={isFilling}
+                        className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed text-xs font-medium shadow-sm"
+                      >
+                        {isFilling ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            Filling...
+                          </>
+                        ) : (
+                          <>
+                            <FileStack className="w-3.5 h-3.5" />
+                            {selectedInputIds.length > 0
+                              ? `Fill ${selectedInputIds.length} selected`
+                              : 'Fill all'}
+                          </>
+                        )}
+                      </button>
                     </div>
                   </div>
                 )}
+
+                {/* OUTPUT FILES SECTION - NO LABEL, CLEANER */}
+                {pkg.outputs && pkg.outputs.length > 0 && (
+                  <div className="p-3 space-y-2">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-xs text-gray-500">
+                        {pkg.outputs.length} output{pkg.outputs.length === 1 ? '' : 's'}
+                      </p>
+                      <button
+                        onClick={() => onSelectAllOutputs?.(
+                          pkg.submission_id,
+                          pkg.outputs?.map(f => f.filename) || []
+                        )}
+                        className="text-xs text-green-600 hover:text-green-700 font-medium"
+                      >
+                        {allOutputsSelected ? 'Clear' : 'Select all'}
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-1">
+                      {pkg.outputs.map((file, idx) => {
+                        const isSelected = selectedOutputFilenames.includes(file.filename)
+                        return (
+                          <div
+                            key={`${pkg.submission_id}-output-${idx}`}
+                            className="flex items-center gap-2 px-2 py-1.5 bg-white rounded border border-gray-200 hover:border-green-300 transition-colors group"
+                          >
+                            <input
+                              type="checkbox"
+                              className="w-3.5 h-3.5 text-green-600 rounded border-gray-300 focus:ring-green-500 cursor-pointer flex-shrink-0"
+                              checked={isSelected}
+                              onChange={() => onToggleOutput?.(pkg.submission_id, file.filename)}
+                            />
+                            <CheckCircle2 className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-gray-900 truncate">
+                                {file.filename}
+                              </p>
+                              {file.generated_at && (
+                                <p className="text-xs text-gray-500">
+                                  {formatDate(file.generated_at)}
+                                </p>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => onDownloadFile?.(pkg.submission_id, file.filename)}
+                              className="p-1 rounded hover:bg-gray-100 text-gray-400 group-hover:text-gray-600 flex-shrink-0 transition-colors"
+                              title="Download"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {/* Merge Button - Under Outputs */}
+                    <div className="mt-2 space-y-1">
+                      {mergeMessage && mergingPackageId === pkg.submission_id && (
+                        <p className="text-xs text-green-600 text-center">{mergeMessage}</p>
+                      )}
+                      <button
+                        onClick={() => onMergePackage?.(pkg.submission_id)}
+                        disabled={isMerging || totalOutputs === 0}
+                        className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed text-xs font-medium shadow-sm"
+                      >
+                        {isMerging ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            Merging...
+                          </>
+                        ) : (
+                          <>
+                            <Combine className="w-3.5 h-3.5" />
+                            {selectedOutputFilenames.length > 0
+                              ? `Merge ${selectedOutputFilenames.length} selected`
+                              : 'Merge all'}
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Empty State */}
+                {(!pkg.inputs || pkg.inputs.length === 0) && (!pkg.outputs || pkg.outputs.length === 0) && (
+                  <div className="p-6 text-center">
+                    <FileText className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                    <p className="text-xs text-gray-500">No files in this package yet</p>
+                  </div>
+                )}
               </div>
-            )
-          })}
-        </div>
-      )}
+            )}
+          </div>
+        )
+      }
+
+  if (!submissions.length) {
+    return (
+      <div className="p-6 text-center text-sm text-gray-500">
+        <FolderOpen className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+        <p className="font-medium">No packages yet</p>
+        <p className="text-xs text-gray-500 mt-1">Create a package to organize your submissions</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-2 pr-1">
+      {submissions.map(renderPackageCard)}
     </div>
   )
 }
 
-// File upload drop zone component
+// File upload drop zone component - IMPROVED WITH AUTO-CLEAR
 function FileUploadDropZone({
   rows,
   isUploading,
@@ -306,395 +437,187 @@ function FileUploadDropZone({
   error: string | null
   onUploadMore: () => void
   onRemove: (submissionId: string) => void
-  onView?: (submissionId: string, filename?: string) => void
+  onView: (submissionId: string, filename?: string) => void
   activePackageName?: string
 }) {
-  const [isDragging, setIsDragging] = useState(false)
-  const dropZoneRef = useRef<HTMLDivElement>(null)
-
-  const handleDragEnter = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsDragging(true)
-  }
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (e.currentTarget === dropZoneRef.current) {
-      setIsDragging(false)
+  // Auto-remove extracted files after a delay
+  useEffect(() => {
+    const extractedRows = rows.filter(row => row.extractionStatus === 'extracted')
+    if (extractedRows.length > 0) {
+      const timer = setTimeout(() => {
+        extractedRows.forEach(row => {
+          onRemove(row.submissionId)
+        })
+      }, 3000) // Remove after 3 seconds
+      return () => clearTimeout(timer)
     }
-  }
+  }, [rows, onRemove])
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-  }
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsDragging(false)
-    // Handle file drop - you'll need to integrate this with your upload logic
-    const files = Array.from(e.dataTransfer.files)
-    if (files.length > 0) {
-      // Trigger your file upload handler
-      console.log('Files dropped:', files)
-    }
-  }
+  // Only show uploading/processing files, not extracted ones
+  const activeRows = rows.filter(row => 
+    row.extractionStatus !== 'extracted' || row.extractionProgress < 100
+  )
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col h-full">
-      <div className="px-4 py-3 border-b border-gray-100">
-        <h2 className="text-sm font-semibold text-gray-900">
-          {activePackageName ? `Upload to: ${activePackageName}` : 'Select a folder'}
-        </h2>
+    <div className="h-full flex flex-col bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900">Upload Files</h3>
+            {activePackageName && (
+              <p className="text-xs text-gray-500">to {activePackageName}</p>
+            )}
+          </div>
+          <button
+            onClick={onUploadMore}
+            disabled={isUploading || !activePackageName}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs font-medium disabled:bg-gray-300 disabled:cursor-not-allowed"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            Add Files
+          </button>
+        </div>
       </div>
 
-      <div className="flex-1 overflow-hidden flex flex-col">
-        {rows.length === 0 ? (
+      <div className="flex-1 p-4 flex flex-col">
+        {error && (
+          <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg flex-shrink-0">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          </div>
+        )}
+
+        {message && !error && (
+          <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg flex-shrink-0">
+            <div className="flex items-start gap-2">
+              <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-green-700">{message}</p>
+            </div>
+          </div>
+        )}
+
+        {isUploading && uploadStatus && (
+          <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg flex-shrink-0">
+            <div className="flex items-start gap-2">
+              <Loader2 className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5 animate-spin" />
+              <p className="text-sm text-blue-700">{uploadStatus}</p>
+            </div>
+          </div>
+        )}
+
+        {activeRows.length === 0 && !isUploading ? (
           <div
-            ref={dropZoneRef}
-            onDragEnter={handleDragEnter}
-            onDragLeave={handleDragLeave}
-            onDragOver={handleDragOver}
-            onDrop={handleDrop}
-            className={`flex-1 m-4 border-2 border-dashed rounded-lg flex items-center justify-center transition-colors ${
-              isDragging
-                ? 'border-blue-500 bg-blue-50'
-                : 'border-gray-300 hover:border-gray-400'
+            role="button"
+            tabIndex={activePackageName ? 0 : -1}
+            onClick={() => {
+              if (activePackageName) onUploadMore()
+            }}
+            onKeyDown={(event) => {
+              if (!activePackageName) return
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                onUploadMore()
+              }
+            }}
+            className={`flex-1 flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-xl transition-all duration-200 ${
+              activePackageName
+                ? 'cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 group'
+                : 'cursor-not-allowed opacity-70'
             }`}
           >
-            <div className="text-center p-8">
-              <Upload
-                className={`w-12 h-12 mx-auto mb-4 transition-colors ${
-                  isDragging ? 'text-blue-500' : 'text-gray-400'
-                }`}
-              />
-              <p className="text-sm font-medium text-gray-900 mb-1">
-                {isDragging ? 'Drop files here' : 'Drag & drop files here'}
-              </p>
-              <p className="text-xs text-gray-500 mb-4">
-                or click the button below
-              </p>
-              <button
-                onClick={onUploadMore}
-                disabled={isUploading || !activePackageName}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium"
-              >
-                <Upload className="w-4 h-4" />
-                {isUploading ? 'Uploading…' : 'Choose Files'}
-              </button>
-              {!activePackageName && (
-                <p className="text-xs text-amber-600 mt-3">
-                  ⚠ Please select a folder first
-                </p>
-              )}
+            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4 group-hover:bg-blue-200 transition-colors">
+              <Upload className="w-8 h-8 text-blue-600" />
             </div>
+            <p className="text-base font-semibold text-gray-900 mb-2">
+              {activePackageName ? 'Drop files here' : 'Select a package first'}
+            </p>
+            <p className="text-sm text-gray-500">
+              {activePackageName ? 'or click to browse' : 'Then upload your files'}
+            </p>
+            {activePackageName && (
+              <p className="text-xs text-gray-400 mt-2">
+                PDF, Excel, CSV supported
+              </p>
+            )}
           </div>
         ) : (
-          <>
-            {/* Action bar */}
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
-              <div className="text-xs font-medium text-gray-700">
-                {rows.length} recent upload{rows.length === 1 ? '' : 's'}
-              </div>
-              <button
-                onClick={onUploadMore}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 border border-blue-200 rounded hover:bg-blue-50 transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Add more
-              </button>
-            </div>
-
-            {/* Status messages */}
-            {(uploadStatus || message || error) && (
-              <div className="px-4 py-2 border-b border-gray-100 flex-shrink-0">
-                {uploadStatus && (
-                  <p className="text-xs text-gray-600">{uploadStatus}</p>
-                )}
-                {message && <p className="text-xs text-green-600">{message}</p>}
-                {error && <p className="text-xs text-red-600">{error}</p>}
-              </div>
-            )}
-
-            <div className="flex-1 overflow-y-auto">
-              {rows.map((row) => (
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="space-y-2">
+              {activeRows.map(row => (
                 <div
                   key={row.submissionId}
-                  className="px-4 py-3 border-b border-gray-100 space-y-2"
+                  className="flex items-center gap-3 px-3 py-2.5 border border-gray-200 rounded-lg bg-white hover:shadow-sm transition-shadow"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 truncate">
-                        {row.filename}
-                      </p>
+                  {getFileIcon(row.filename)}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{row.filename}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
                       <p className="text-xs text-gray-500">
-                        {formatFileType(row.fileType)} • {formatFileSize(row.fileSize)} •{' '}
-                        {formatDate(row.uploadedAt)}
+                        {formatFileType(row.fileType)} • {formatFileSize(row.fileSize)}
                       </p>
-                    </div>
-                    <button
-                      onClick={() => onRemove(row.submissionId)}
-                      className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                      title="Remove"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
-                    {row.uploadPercent < 100 ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
-                        <span>Uploading {row.uploadPercent}%</span>
-                      </>
-                    ) : row.extractionStatus === 'extracted' ? (
-                      <>
-                        <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />
-                        <span className="text-green-600 font-medium">Extraction complete</span>
-                        {row.confidence !== undefined && (
-                          <span className="text-gray-500">
-                            • Confidence {(row.confidence * 100).toFixed(0)}%
-                          </span>
-                        )}
-                        {onView && (
-                          <button
-                            onClick={() => onView(row.submissionId, row.filename)}
-                            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 font-medium"
-                          >
-                            <Eye className="w-3 h-3" />
-                            Open in reviewer
-                          </button>
-                        )}
-                      </>
-                    ) : row.extractionStatus === 'error' ? (
-                      <>
-                        <AlertCircle className="w-3.5 h-3.5 text-red-600" />
-                        <span className="text-red-600 font-medium">
-                          {row.extractionError || 'Extraction failed'}
+                      {row.status === 'uploading' && row.uploadPercent < 100 && (
+                        <span className="text-xs text-blue-600">
+                          {row.uploadPercent}%
                         </span>
-                      </>
-                    ) : (
-                      <>
-                        <Clock className="w-3.5 h-3.5 text-gray-500" />
-                        <span>Pending extraction</span>
-                      </>
-                    )}
-                  </div>
-
-                  {row.extractionData && (
-                    <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-700 overflow-auto max-h-40">
-                      <pre className="whitespace-pre-wrap break-all">
-                        {JSON.stringify(row.extractionData, null, 2)}
-                      </pre>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function ActivePackagePanel({
-  submission,
-  selectedInputIds,
-  onToggleInput,
-  onSelectAllInputs,
-  onFill,
-  filling,
-  fillMessage,
-  fillError,
-  onViewInput,
-  onDownloadOutput,
-}: {
-  submission?: ClientSubmissionPackage
-  selectedInputIds: string[]
-  onToggleInput?: (submissionId: string, inputId?: string) => void
-  onSelectAllInputs?: (submissionId: string, inputIds: (string | undefined)[]) => void
-  onFill?: () => void
-  filling?: boolean
-  fillMessage?: string | null
-  fillError?: string | null
-  onViewInput?: (submissionId: string, filename: string) => void
-  onDownloadOutput?: (submissionId: string, filename: string) => void
-}) {
-  if (!submission) {
-    return (
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
-        <div className="p-6 text-center text-sm text-gray-500">
-          <FolderOpen className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-          Select a folder to review uploads and run fills.
-        </div>
-      </div>
-    )
-  }
-
-  const badge = statusBadgeFor(submission.status)
-  const StatusIcon = badge.icon
-  const selectableInputs = submission.inputs?.filter(file => file.input_id) || []
-  const totalSelectable = selectableInputs.length
-  const allSelectableChosen =
-    totalSelectable > 0 &&
-    selectableInputs.every(file => file.input_id && selectedInputIds.includes(file.input_id))
-  const fillLabel =
-    selectedInputIds.length > 0
-      ? `Fill ${selectedInputIds.length} selected file${selectedInputIds.length === 1 ? '' : 's'}`
-      : 'Fill with all inputs'
-
-  return (
-    <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-gray-900 truncate">{submission.name}</p>
-          <p className="text-xs text-gray-500">
-            {submission.file_count} file{submission.file_count === 1 ? '' : 's'} • Updated{' '}
-            {formatDate(submission.updated_at)}
-          </p>
-        </div>
-        <span
-          className={`inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full ${badge.color}`}
-        >
-          <StatusIcon className="w-3.5 h-3.5" />
-          {badge.label}
-        </span>
-      </div>
-
-      <div className="p-4 space-y-4">
-        <section>
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-semibold text-gray-900">Input files</p>
-            {totalSelectable > 0 && (
-              <button
-                onClick={() =>
-                  onSelectAllInputs?.(
-                    submission.submission_id,
-                    (submission.inputs || []).map(file => file.input_id)
-                  )
-                }
-                className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-              >
-                {allSelectableChosen ? 'Clear selection' : 'Select all'}
-              </button>
-            )}
-          </div>
-          {submission.inputs?.length ? (
-            <div className="space-y-2">
-              {submission.inputs.map((file, idx) => {
-                const isSelected = !!file.input_id && selectedInputIds.includes(file.input_id)
-                return (
-                  <div
-                    key={`${submission.submission_id}-active-input-${idx}`}
-                    className="flex items-center gap-3 px-3 py-2 border border-gray-200 rounded-lg"
-                  >
-                    <input
-                      type="checkbox"
-                      className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                      disabled={!file.input_id}
-                      checked={isSelected}
-                      onChange={() => onToggleInput?.(submission.submission_id, file.input_id)}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">
-                        {file.filename}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        Uploaded {formatDate(file.uploaded_at)}{' '}
-                        {file.extraction_status && `• ${file.extraction_status}`}
-                      </p>
-                      {!file.input_id && (
-                        <p className="text-xs text-amber-600 mt-1">
-                          Legacy upload – reprocess to enable multi-select
-                        </p>
                       )}
                     </div>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => onViewInput?.(submission.submission_id, file.filename)}
-                        className="p-1.5 rounded hover:bg-gray-100 text-gray-500"
-                        title="Open"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          ) : (
-            <p className="text-sm text-gray-500">No files uploaded yet.</p>
-          )}
-          <p className="text-xs text-gray-500 mt-2">
-            Leave the selection empty to merge every extracted file. Pick specific files to run a
-            targeted fill.
-          </p>
-        </section>
-
-        <section>
-          <div className="flex items-center gap-2 mb-2">
-            <FileStack className="w-4 h-4 text-gray-600" />
-            <p className="text-sm font-semibold text-gray-900">
-              Outputs ({submission.outputs?.length || 0})
-            </p>
-          </div>
-          {submission.outputs?.length ? (
-            <div className="space-y-2">
-              {submission.outputs.map((file, idx) => (
-                <div
-                  key={`${submission.submission_id}-output-${idx}`}
-                  className="flex items-center justify-between px-3 py-2 border border-gray-200 rounded-lg"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{file.filename}</p>
-                    {file.generated_at && (
-                      <p className="text-xs text-gray-500">Generated {formatDate(file.generated_at)}</p>
+                    {/* Progress bar */}
+                    {(row.status === 'uploading' || row.status === 'extracting') && (
+                      <div className="mt-1.5 w-full bg-gray-200 rounded-full h-1">
+                        <div
+                          className={`h-1 rounded-full transition-all duration-300 ${
+                            row.status === 'extracting' ? 'bg-purple-600' : 'bg-blue-600'
+                          }`}
+                          style={{
+                            width: `${
+                              row.status === 'extracting'
+                                ? row.extractionProgress
+                                : row.uploadPercent
+                            }%`,
+                          }}
+                        />
+                      </div>
                     )}
                   </div>
-                  <button
-                    onClick={() => onDownloadOutput?.(submission.submission_id, file.filename)}
-                    className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 font-medium"
-                  >
-                    <Download className="w-4 h-4" />
-                    Download
-                  </button>
+                  <div className="flex items-center gap-1">
+                    {row.status === 'uploading' && (
+                      <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
+                    )}
+                    {row.status === 'extracting' && (
+                      <Loader2 className="w-4 h-4 text-purple-600 animate-spin" />
+                    )}
+                    {row.status === 'extracted' && (
+                      <div className="flex items-center gap-1">
+                        <CheckCircle2 className="w-4 h-4 text-green-600" />
+                        <span className="text-xs text-green-600 font-medium">Done</span>
+                      </div>
+                    )}
+                    {row.status === 'error' && <AlertCircle className="w-4 h-4 text-red-600" />}
+                    <button
+                      onClick={() => onRemove(row.submissionId)}
+                      className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                      title="Remove"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
-          ) : (
-            <p className="text-sm text-gray-500">No filled packets yet.</p>
-          )}
-        </section>
-
-        <section className="space-y-2">
-          {(fillMessage || fillError) && (
-            <p className={`text-sm ${fillError ? 'text-red-600' : 'text-green-600'}`}>
-              {fillError || fillMessage}
-            </p>
-          )}
-          <button
-            onClick={onFill}
-            disabled={filling}
-            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium"
-          >
-            {filling ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Filling…
-              </>
-            ) : (
-              <>
-                <FileStack className="w-4 h-4" />
-                {fillLabel}
-              </>
-            )}
-          </button>
-        </section>
+          </div>
+        )}
       </div>
+
+      {/* Helper text at bottom - FIXED */}
+      {activePackageName && (
+        <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 flex-shrink-0">
+          <p className="text-xs text-gray-500 text-center">
+            Files are automatically extracted and moved to the package
+          </p>
+        </div>
+      )}
     </div>
   )
 }
@@ -725,6 +648,9 @@ export function ClientDetailView({
     selectedInputsByPackage,
     toggleInputSelection,
     selectAllInputs,
+    selectedOutputsByPackage,
+    toggleOutputSelection,
+    selectAllOutputs,
     uploadedRows,
     isUploading,
     statusText,
@@ -741,22 +667,29 @@ export function ClientDetailView({
     loading: boolean
     message: string | null
     error: string | null
+    packageId: string | null
   }>({
     loading: false,
     message: null,
     error: null,
+    packageId: null,
   })
 
-  const selectedInputIds =
-    activePackage && activePackage.submission_id
-      ? selectedInputsByPackage[activePackage.submission_id] || []
-      : []
+  const [mergeState, setMergeState] = useState<{
+    loading: boolean
+    message: string | null
+    error: string | null
+    packageId: string | null
+  }>({
+    loading: false,
+    message: null,
+    error: null,
+    packageId: null,
+  })
 
   const triggerFileUpload = () => fileInputRef.current?.click()
 
-  const handleFileInputChange: React.ChangeEventHandler<HTMLInputElement> = (
-    event
-  ) => {
+  const handleFileInputChange: React.ChangeEventHandler<HTMLInputElement> = event => {
     const files = Array.from(event.target.files ?? [])
     void uploadFilesToActiveFolder(files)
     event.target.value = ''
@@ -769,20 +702,25 @@ export function ClientDetailView({
     await createFolder(name)
   }
 
-  const handleViewFile = (submissionId: string, filename: string) => {
-    onFileClick?.(submissionId, filename)
+  const handleViewFile = (submissionId: string, filename?: string) => {
+    if (filename) {
+      onFileClick?.(submissionId, filename)
+    }
   }
 
   useEffect(() => {
     setFillState(prev => ({ ...prev, message: null, error: null }))
+    setMergeState(prev => ({ ...prev, message: null, error: null }))
   }, [activePackageId])
 
-  const handleFillActivePackage = async () => {
-    if (!activePackage) return
-    setFillState({ loading: true, message: null, error: null })
+  const handleFillPackage = async (packageId: string) => {
+    const pkg = packages.find(p => p.submission_id === packageId)
+    if (!pkg) return
+    
+    setFillState({ loading: true, message: null, error: null, packageId })
     try {
-      const selected = selectedInputIds
-      const report = await fillPdf(activePackage.submission_id, {
+      const selected = selectedInputsByPackage[packageId] || []
+      const report = await fillPdf(packageId, {
         inputIds: selected,
       })
       await refreshClient()
@@ -794,12 +732,54 @@ export function ClientDetailView({
         loading: false,
         message: `Filled ${filledCount} field${filledCount === 1 ? '' : 's'}${selectionHint}.`,
         error: null,
+        packageId: null,
       })
     } catch (err) {
       setFillState({
         loading: false,
         message: null,
         error: err instanceof Error ? err.message : 'Fill failed',
+        packageId: null,
+      })
+    }
+  }
+
+  const handleMergeOutputsForPackage = async (packageId: string) => {
+    const pkg = packages.find(p => p.submission_id === packageId)
+    if (!pkg) return
+    
+    setMergeState({ loading: true, message: null, error: null, packageId })
+    
+    try {
+      const selected = selectedOutputsByPackage[packageId] || []
+      
+      // TODO: Implement actual merge API call
+      // const result = await mergeOutputPDFs(packageId, {
+      //   filenames: selected.length > 0 ? selected : undefined
+      // })
+      
+      // Simulated merge operation for now
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      
+      const mergedCount = selected.length > 0 ? selected.length : (pkg.outputs?.length || 0)
+      const selectionHint = selected.length > 0
+        ? ` (${selected.length} selected)`
+        : ' (all files)'
+      
+      setMergeState({
+        loading: false,
+        message: `Merged ${mergedCount} file${mergedCount === 1 ? '' : 's'}${selectionHint}.`,
+        error: null,
+        packageId: null,
+      })
+      
+      await refreshClient()
+    } catch (err) {
+      setMergeState({
+        loading: false,
+        message: null,
+        error: err instanceof Error ? err.message : 'Merge failed',
+        packageId: null,
       })
     }
   }
@@ -808,6 +788,7 @@ export function ClientDetailView({
     try {
       await downloadPDF(submissionId, filename)
       setFillState(prev => ({ ...prev, error: null }))
+      setMergeState(prev => ({ ...prev, error: null }))
     } catch (err) {
       setFillState(prev => ({
         ...prev,
@@ -833,9 +814,7 @@ export function ClientDetailView({
       <div className="h-full flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
-          <p className="text-sm text-gray-900 font-medium mb-1">
-            Failed to load client
-          </p>
+          <p className="text-sm text-gray-900 font-medium mb-1">Failed to load client</p>
           <p className="text-sm text-gray-600">{error || 'Unknown error'}</p>
         </div>
       </div>
@@ -854,7 +833,7 @@ export function ClientDetailView({
         accept=".pdf,.csv,.xlsx,.xls,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
       />
 
-      {/* Header - Responsive */}
+      {/* Header */}
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <div className="flex items-center gap-3">
@@ -870,73 +849,85 @@ export function ClientDetailView({
             </div>
             <div className="min-w-0">
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
-                {clientName || (client && client.name)}
+                {clientName || client.name}
               </h1>
-              <p className="text-xs sm:text-sm text-gray-600">ID: {clientId}</p>
+              <p className="text-sm text-gray-600">
+                {stats.totalFiles} file{stats.totalFiles === 1 ? '' : 's'} •{' '}
+                {stats.totalPackages} package{stats.totalPackages === 1 ? '' : 's'}
+              </p>
             </div>
           </div>
           <button
             onClick={handleCreatePackageClick}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm text-sm font-medium w-full sm:w-auto"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium shadow-sm"
           >
             <Plus className="w-4 h-4" />
-            New Folder
+            <span className="hidden sm:inline">New Package</span>
+            <span className="sm:hidden">New</span>
           </button>
         </div>
 
-        {/* Client Info - Responsive */}
-        <div className="flex flex-wrap items-center gap-3 sm:gap-6 text-xs sm:text-sm text-gray-600">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span>Created {(client && formatDate(client.created_at)) || 'Recently'}</span>
+        {/* Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="bg-gray-50 rounded-lg px-3 py-2">
+            <p className="text-xs text-gray-600 mb-0.5">Total Files</p>
+            <p className="text-lg font-semibold text-gray-900">{stats.totalFiles}</p>
           </div>
-          <div className="flex items-center gap-2">
-            <Folder className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span>
-              {stats.total} {stats.total === 1 ? 'folder' : 'folders'}
-            </span>
+          <div className="bg-gray-50 rounded-lg px-3 py-2">
+            <p className="text-xs text-gray-600 mb-0.5">Extracted</p>
+            <p className="text-lg font-semibold text-gray-900">{stats.extractedFiles}</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg px-3 py-2">
+            <p className="text-xs text-gray-600 mb-0.5">Outputs</p>
+            <p className="text-lg font-semibold text-gray-900">{stats.outputFiles}</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg px-3 py-2">
+            <p className="text-xs text-gray-600 mb-0.5">Packages</p>
+            <p className="text-lg font-semibold text-gray-900">{stats.totalPackages}</p>
           </div>
         </div>
       </div>
 
-      {/* Main Content - Responsive Grid */}
-      <div className="flex-1 overflow-hidden p-4 sm:p-6">
-        <div className="h-full grid grid-cols-1 lg:grid-cols-[320px_1fr] xl:grid-cols-[380px_1fr] gap-4 sm:gap-6">
-          {/* Left: Compact Folders */}
-          <div className="h-full overflow-hidden">
-            <CompactFolderList
-              submissions={packages}
-              activeId={activePackageId}
-              onToggle={(pkg: ClientSubmissionPackage) =>
-                setActivePackageId((prev) =>
-                  prev === pkg.submission_id ? null : pkg.submission_id
-                )
-              }
-              onViewFile={handleViewFile}
-              onDownloadFile={(submissionId, filename) => {
-                // Implement download logic
-                console.log('Download:', submissionId, filename)
-              }}
-            />
+      {/* Main Content - Split View */}
+      <div className="flex-1 overflow-hidden">
+        <div className="h-full min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-4 p-4">
+          {/* Left: Packages - SCROLLABLE */}
+          <div className="lg:col-span-1 flex flex-col h-full min-h-0">
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col h-full overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0">
+                <h3 className="text-sm font-semibold text-gray-900">Packages</h3>
+              </div>
+              <div className="flex-1 min-h-0 p-2 overflow-y-auto">
+                <CompactFolderList
+                  submissions={packages}
+                  activeId={activePackageId}
+                  selectedInputsByPackage={selectedInputsByPackage}
+                  selectedOutputsByPackage={selectedOutputsByPackage}
+                  onToggle={pkg =>
+                    setActivePackageId(prev =>
+                      prev === pkg.submission_id ? null : pkg.submission_id
+                    )
+                  }
+                  onViewFile={handleViewFile}
+                  onDownloadFile={handleDownloadOutput}
+                  onToggleInput={toggleInputSelection}
+                  onSelectAllInputs={selectAllInputs}
+                  onToggleOutput={toggleOutputSelection}
+                  onSelectAllOutputs={selectAllOutputs}
+                  onFillPackage={handleFillPackage}
+                  onMergePackage={handleMergeOutputsForPackage}
+                  fillingPackageId={fillState.packageId}
+                  mergingPackageId={mergeState.packageId}
+                  fillMessage={fillState.message}
+                  mergeMessage={mergeState.message}
+                />
+              </div>
+            </div>
           </div>
 
-          {/* Right: Package detail + upload */}
-          <div className="h-full flex flex-col gap-4 overflow-hidden">
-            <div className="flex-shrink-0">
-              <ActivePackagePanel
-                submission={activePackage}
-                selectedInputIds={selectedInputIds}
-                onToggleInput={toggleInputSelection}
-                onSelectAllInputs={selectAllInputs}
-                onFill={handleFillActivePackage}
-                filling={fillState.loading}
-                fillMessage={fillState.message}
-                fillError={fillState.error}
-                onViewInput={handleViewFile}
-                onDownloadOutput={handleDownloadOutput}
-              />
-            </div>
-            <div className="flex-1 min-h-0">
+          {/* Right: Upload - FIXED HEIGHT */}
+          <div className="lg:col-span-2 flex flex-col h-full min-h-0">
+            <div className="flex-1 min-h-0 overflow-hidden">
               <FileUploadDropZone
                 rows={uploadedRows}
                 isUploading={isUploading}
@@ -945,11 +936,7 @@ export function ClientDetailView({
                 error={workflowError}
                 onUploadMore={triggerFileUpload}
                 onRemove={removeRow}
-                onView={(submissionId, filename) => {
-                  if (filename) {
-                    handleViewFile(submissionId, filename)
-                  }
-                }}
+                onView={handleViewFile}
                 activePackageName={activePackage?.name}
               />
             </div>

@@ -791,7 +791,7 @@ export function ClientDetailView({
   }
 
   return (
-    <div className="h-full flex flex-col bg-gray-50">
+    <div className="h-screen flex flex-col bg-gray-50">
       <input
         ref={fileInputRef}
         type="file"
@@ -858,9 +858,8 @@ export function ClientDetailView({
       {/* Main Content - TWO COLUMN LAYOUT WITH PROPER SCROLLING */}
       <div className="flex-1 min-h-0 overflow-hidden">
         <div className="h-full grid grid-cols-1 lg:grid-cols-3 gap-4 p-4">
-          {/* LEFT PANEL: Packages - SCROLLABLE */}
        {/* LEFT PANEL: Packages - SCROLLABLE */}
-<div className="lg:col-span-1 h-full min-h-0">
+<div className="lg:col-span-1 h-full flex flex-col">
   <div className="bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col h-full max-h-[calc(100vh-220px)] overflow-hidden">
     <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0">
       <h3 className="text-sm font-semibold text-gray-900">Packages</h3>
@@ -895,7 +894,7 @@ export function ClientDetailView({
 
 
           {/* RIGHT PANEL*/}
-          <div className="lg:col-span-2 h-full min-h-0">
+          <div className="lg:col-span-2 h-full flex flex-col">
   <div className="h-full max-h-[calc(100vh-220px)]">
     <FileUploadDropZone
       rows={uploadedRows}

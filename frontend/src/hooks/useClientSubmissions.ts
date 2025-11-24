@@ -38,6 +38,9 @@ export function useClientSubmissions(clientId: string) {
   const [statusText, setStatusText] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [workflowError, setWorkflowError] = useState<string | null>(null)
+  const [selectedInputsByPackage, setSelectedInputsByPackage] = useState<
+    Record<string, string[]>
+  >({})
 
   const tempIdRef = useRef(0)
 
@@ -58,10 +61,45 @@ export function useClientSubmissions(clientId: string) {
     setUploadedRows(prev => prev.filter(row => row.submissionId !== submissionId))
   }
 
+  const toggleInputSelection = (submissionId: string, inputId?: string) => {
+    if (!submissionId || !inputId) return
+    setSelectedInputsByPackage(prev => {
+      const current = prev[submissionId] || []
+      const exists = current.includes(inputId)
+      const nextSelections = exists
+        ? current.filter(id => id !== inputId)
+        : [...current, inputId]
+      return { ...prev, [submissionId]: nextSelections }
+    })
+  }
+
+  const selectAllInputs = (submissionId: string, inputIds: (string | undefined)[]) => {
+    if (!submissionId) return
+    const available = inputIds.filter((id): id is string => Boolean(id))
+    if (!available.length) return
+    setSelectedInputsByPackage(prev => {
+      const current = prev[submissionId] || []
+      const allSelected = available.every(id => current.includes(id))
+      return { ...prev, [submissionId]: allSelected ? [] : available }
+    })
+  }
+
+  const clearInputSelection = (submissionId: string) => {
+    if (!submissionId) return
+    setSelectedInputsByPackage(prev => {
+      if (!(submissionId in prev)) return prev
+      const next = { ...prev }
+      delete next[submissionId]
+      return next
+    })
+  }
+
   // ---- load client & packages ----
-  const loadClientData = useCallback(async () => {
+  const loadClientData = useCallback(async (options?: { silent?: boolean }) => {
     try {
-      setLoading(true)
+      if (!options?.silent) {
+        setLoading(true)
+      }
       const detail = await getClientById(clientId)
       if (!detail) {
         setError('Client not found')
@@ -73,7 +111,9 @@ export function useClientSubmissions(clientId: string) {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load client data')
     } finally {
-      setLoading(false)
+      if (!options?.silent) {
+        setLoading(false)
+      }
     }
   }, [clientId])
 
@@ -94,6 +134,19 @@ export function useClientSubmissions(clientId: string) {
     )
   }, [packages])
 
+  useEffect(() => {
+    setSelectedInputsByPackage(prev => {
+      const validIds = new Set(packages.map(pkg => pkg.submission_id))
+      const next: Record<string, string[]> = {}
+      for (const [pkgId, selections] of Object.entries(prev)) {
+        if (validIds.has(pkgId)) {
+          next[pkgId] = selections
+        }
+      }
+      return next
+    })
+  }, [packages])
+
   const activePackage = activePackageId
     ? packages.find(pkg => pkg.submission_id === activePackageId)
     : undefined
@@ -103,7 +156,7 @@ export function useClientSubmissions(clientId: string) {
     if (!name.trim()) return
     try {
       const created = await createClientSubmission(clientId, name.trim())
-      await loadClientData()
+      await loadClientData({ silent: true })
       if (created?.submission_id) {
         setActivePackageId(created.submission_id)
       }
@@ -187,8 +240,11 @@ export function useClientSubmissions(clientId: string) {
 
     setIsUploading(false)
     setStatusText(null)
-    await loadClientData()
+    await loadClientData({ silent: true })
   }
+  const refreshClient = useCallback(async () => {
+    await loadClientData({ silent: true })
+  }, [loadClientData])
 
   // ---- stats ----
   const stats = {
@@ -210,6 +266,10 @@ export function useClientSubmissions(clientId: string) {
     activePackageId,
     setActivePackageId,
     activePackage,
+    selectedInputsByPackage,
+    toggleInputSelection,
+    selectAllInputs,
+    clearInputSelection,
 
     uploadedRows,
     isUploading,
@@ -220,6 +280,7 @@ export function useClientSubmissions(clientId: string) {
 
     createFolder,
     uploadFilesToActiveFolder,
+    refreshClient,
 
     stats,
   }

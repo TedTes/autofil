@@ -201,9 +201,17 @@ export async function getSubmission(
 /**
  * Fill PDF with data.
  */
-export async function fillPdf(id: string): Promise<FillReport> {
+export async function fillPdf(
+  id: string,
+  options?: { inputIds?: string[] }
+): Promise<FillReport> {
+  const payload =
+    options?.inputIds && options.inputIds.length > 0
+      ? { input_ids: options.inputIds }
+      : {}
   const response = await api.post<ApiResponse<FillResponse>>(
-    `/submissions/${id}/fill`
+    `/submissions/${id}/fill`,
+    payload
   )
   if (!response.data.success) {
     throw new Error(response.data.error || 'Fill failed')

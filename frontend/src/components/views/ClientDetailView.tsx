@@ -3,6 +3,7 @@
 import React, { useRef, useState, useEffect } from 'react'
 import { formatDate } from '@/lib/utils'
 import { useClientSubmissions, type UploadedRow } from '@/hooks/useClientSubmissions'
+import { fillPdf, downloadPDF } from '@/lib/api-client'
 import type { ClientSubmissionPackage } from '@/types'
 import {
   ArrowLeft,
@@ -197,14 +198,9 @@ function CompactFolderList({
                     <div className="ml-6 space-y-2 text-xs">
                       {/* Input Files */}
                       {submission.inputs && submission.inputs.length > 0 && (
-                        <div>
-                          {/* <div className="flex items-center gap-1.5 mb-1 text-gray-600">
-                            <Upload className="w-3 h-3" />
-                            <span className="font-medium">Inputs ({submission.inputs.length})</span>
-                          </div> */}
                           <div className="space-y-0.5">
-                            {submission.inputs.map((file, idx) => (
-                              <div
+                            {submission.inputs.map((file, idx) => {
+                             return  <div
                                 key={`${submission.submission_id}-in-${idx}`}
                                 className="flex items-center gap-1.5 px-2 py-1 hover:bg-white rounded transition-colors group"
                               >
@@ -226,9 +222,9 @@ function CompactFolderList({
                                   )}
                                 </div>
                               </div>
-                            ))}
+          })}
                           </div>
-                        </div>
+                      
                       )}
 
                       {/* Output Files */}
@@ -505,6 +501,204 @@ function FileUploadDropZone({
   )
 }
 
+function ActivePackagePanel({
+  submission,
+  selectedInputIds,
+  onToggleInput,
+  onSelectAllInputs,
+  onFill,
+  filling,
+  fillMessage,
+  fillError,
+  onViewInput,
+  onDownloadOutput,
+}: {
+  submission?: ClientSubmissionPackage
+  selectedInputIds: string[]
+  onToggleInput?: (submissionId: string, inputId?: string) => void
+  onSelectAllInputs?: (submissionId: string, inputIds: (string | undefined)[]) => void
+  onFill?: () => void
+  filling?: boolean
+  fillMessage?: string | null
+  fillError?: string | null
+  onViewInput?: (submissionId: string, filename: string) => void
+  onDownloadOutput?: (submissionId: string, filename: string) => void
+}) {
+  if (!submission) {
+    return (
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+        <div className="p-6 text-center text-sm text-gray-500">
+          <FolderOpen className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+          Select a folder to review uploads and run fills.
+        </div>
+      </div>
+    )
+  }
+
+  const badge = statusBadgeFor(submission.status)
+  const StatusIcon = badge.icon
+  const selectableInputs = submission.inputs?.filter(file => file.input_id) || []
+  const totalSelectable = selectableInputs.length
+  const allSelectableChosen =
+    totalSelectable > 0 &&
+    selectableInputs.every(file => file.input_id && selectedInputIds.includes(file.input_id))
+  const fillLabel =
+    selectedInputIds.length > 0
+      ? `Fill ${selectedInputIds.length} selected file${selectedInputIds.length === 1 ? '' : 's'}`
+      : 'Fill with all inputs'
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-gray-900 truncate">{submission.name}</p>
+          <p className="text-xs text-gray-500">
+            {submission.file_count} file{submission.file_count === 1 ? '' : 's'} • Updated{' '}
+            {formatDate(submission.updated_at)}
+          </p>
+        </div>
+        <span
+          className={`inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full ${badge.color}`}
+        >
+          <StatusIcon className="w-3.5 h-3.5" />
+          {badge.label}
+        </span>
+      </div>
+
+      <div className="p-4 space-y-4">
+        <section>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-semibold text-gray-900">Input files</p>
+            {totalSelectable > 0 && (
+              <button
+                onClick={() =>
+                  onSelectAllInputs?.(
+                    submission.submission_id,
+                    (submission.inputs || []).map(file => file.input_id)
+                  )
+                }
+                className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+              >
+                {allSelectableChosen ? 'Clear selection' : 'Select all'}
+              </button>
+            )}
+          </div>
+          {submission.inputs?.length ? (
+            <div className="space-y-2">
+              {submission.inputs.map((file, idx) => {
+                const isSelected = !!file.input_id && selectedInputIds.includes(file.input_id)
+                return (
+                  <div
+                    key={`${submission.submission_id}-active-input-${idx}`}
+                    className="flex items-center gap-3 px-3 py-2 border border-gray-200 rounded-lg"
+                  >
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                      disabled={!file.input_id}
+                      checked={isSelected}
+                      onChange={() => onToggleInput?.(submission.submission_id, file.input_id)}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {file.filename}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        Uploaded {formatDate(file.uploaded_at)}{' '}
+                        {file.extraction_status && `• ${file.extraction_status}`}
+                      </p>
+                      {!file.input_id && (
+                        <p className="text-xs text-amber-600 mt-1">
+                          Legacy upload – reprocess to enable multi-select
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => onViewInput?.(submission.submission_id, file.filename)}
+                        className="p-1.5 rounded hover:bg-gray-100 text-gray-500"
+                        title="Open"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">No files uploaded yet.</p>
+          )}
+          <p className="text-xs text-gray-500 mt-2">
+            Leave the selection empty to merge every extracted file. Pick specific files to run a
+            targeted fill.
+          </p>
+        </section>
+
+        <section>
+          <div className="flex items-center gap-2 mb-2">
+            <FileStack className="w-4 h-4 text-gray-600" />
+            <p className="text-sm font-semibold text-gray-900">
+              Outputs ({submission.outputs?.length || 0})
+            </p>
+          </div>
+          {submission.outputs?.length ? (
+            <div className="space-y-2">
+              {submission.outputs.map((file, idx) => (
+                <div
+                  key={`${submission.submission_id}-output-${idx}`}
+                  className="flex items-center justify-between px-3 py-2 border border-gray-200 rounded-lg"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{file.filename}</p>
+                    {file.generated_at && (
+                      <p className="text-xs text-gray-500">Generated {formatDate(file.generated_at)}</p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => onDownloadOutput?.(submission.submission_id, file.filename)}
+                    className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">No filled packets yet.</p>
+          )}
+        </section>
+
+        <section className="space-y-2">
+          {(fillMessage || fillError) && (
+            <p className={`text-sm ${fillError ? 'text-red-600' : 'text-green-600'}`}>
+              {fillError || fillMessage}
+            </p>
+          )}
+          <button
+            onClick={onFill}
+            disabled={filling}
+            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium"
+          >
+            {filling ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Filling…
+              </>
+            ) : (
+              <>
+                <FileStack className="w-4 h-4" />
+                {fillLabel}
+              </>
+            )}
+          </button>
+        </section>
+      </div>
+    </div>
+  )
+}
+
 interface ClientDetailViewProps {
   clientId: string
   clientName?: string
@@ -528,6 +722,9 @@ export function ClientDetailView({
     activePackageId,
     setActivePackageId,
     activePackage,
+    selectedInputsByPackage,
+    toggleInputSelection,
+    selectAllInputs,
     uploadedRows,
     isUploading,
     statusText,
@@ -536,8 +733,24 @@ export function ClientDetailView({
     removeRow,
     createFolder,
     uploadFilesToActiveFolder,
+    refreshClient,
     stats,
   } = useClientSubmissions(clientId)
+
+  const [fillState, setFillState] = useState<{
+    loading: boolean
+    message: string | null
+    error: string | null
+  }>({
+    loading: false,
+    message: null,
+    error: null,
+  })
+
+  const selectedInputIds =
+    activePackage && activePackage.submission_id
+      ? selectedInputsByPackage[activePackage.submission_id] || []
+      : []
 
   const triggerFileUpload = () => fileInputRef.current?.click()
 
@@ -558,6 +771,50 @@ export function ClientDetailView({
 
   const handleViewFile = (submissionId: string, filename: string) => {
     onFileClick?.(submissionId, filename)
+  }
+
+  useEffect(() => {
+    setFillState(prev => ({ ...prev, message: null, error: null }))
+  }, [activePackageId])
+
+  const handleFillActivePackage = async () => {
+    if (!activePackage) return
+    setFillState({ loading: true, message: null, error: null })
+    try {
+      const selected = selectedInputIds
+      const report = await fillPdf(activePackage.submission_id, {
+        inputIds: selected,
+      })
+      await refreshClient()
+      const filledCount = report.written ?? 0
+      const selectionHint = selected.length
+        ? ` using ${selected.length} input${selected.length === 1 ? '' : 's'}`
+        : ''
+      setFillState({
+        loading: false,
+        message: `Filled ${filledCount} field${filledCount === 1 ? '' : 's'}${selectionHint}.`,
+        error: null,
+      })
+    } catch (err) {
+      setFillState({
+        loading: false,
+        message: null,
+        error: err instanceof Error ? err.message : 'Fill failed',
+      })
+    }
+  }
+
+  const handleDownloadOutput = async (submissionId: string, filename: string) => {
+    try {
+      await downloadPDF(submissionId, filename)
+      setFillState(prev => ({ ...prev, error: null }))
+    } catch (err) {
+      setFillState(prev => ({
+        ...prev,
+        message: null,
+        error: err instanceof Error ? err.message : 'Download failed',
+      }))
+    }
   }
 
   if (loading) {
@@ -663,23 +920,39 @@ export function ClientDetailView({
             />
           </div>
 
-          {/* Right: File Upload Drop Zone */}
-          <div className="h-full overflow-hidden">
-            <FileUploadDropZone
-              rows={uploadedRows}
-              isUploading={isUploading}
-              uploadStatus={statusText}
-              message={message}
-              error={workflowError}
-              onUploadMore={triggerFileUpload}
-              onRemove={removeRow}
-              onView={(submissionId, filename) => {
-                if (filename) {
-                  handleViewFile(submissionId, filename)
-                }
-              }}
-              activePackageName={activePackage?.name}
-            />
+          {/* Right: Package detail + upload */}
+          <div className="h-full flex flex-col gap-4 overflow-hidden">
+            <div className="flex-shrink-0">
+              <ActivePackagePanel
+                submission={activePackage}
+                selectedInputIds={selectedInputIds}
+                onToggleInput={toggleInputSelection}
+                onSelectAllInputs={selectAllInputs}
+                onFill={handleFillActivePackage}
+                filling={fillState.loading}
+                fillMessage={fillState.message}
+                fillError={fillState.error}
+                onViewInput={handleViewFile}
+                onDownloadOutput={handleDownloadOutput}
+              />
+            </div>
+            <div className="flex-1 min-h-0">
+              <FileUploadDropZone
+                rows={uploadedRows}
+                isUploading={isUploading}
+                uploadStatus={statusText}
+                message={message}
+                error={workflowError}
+                onUploadMore={triggerFileUpload}
+                onRemove={removeRow}
+                onView={(submissionId, filename) => {
+                  if (filename) {
+                    handleViewFile(submissionId, filename)
+                  }
+                }}
+                activePackageName={activePackage?.name}
+              />
+            </div>
           </div>
         </div>
       </div>

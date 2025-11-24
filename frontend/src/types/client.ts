@@ -41,15 +41,23 @@ export interface Client {
     uploaded_at: string
     updated_at: string
     file_count: number
-    inputs: SubmissionPackageFile[]
-    outputs: SubmissionPackageFile[]
+    inputs: SubmissionInputFile[]
+    outputs: SubmissionOutputFile[]
   }
 
-  export interface SubmissionPackageFile {
+  export interface SubmissionInputFile {
+    input_id?: string
     filename: string
     path?: string
     url?: string | null
-    file_size?:number;
-    extraction_status: 'extracted' | 'extracting';
+    file_size?: number
+    extraction_status?: 'extracted' | 'extracting' | 'error'
     uploaded_at: string
+  }
+
+  export interface SubmissionOutputFile {
+    filename: string
+    path?: string
+    url?: string | null
+    generated_at?: string
   }

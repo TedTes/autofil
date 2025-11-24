@@ -177,7 +177,10 @@ def delete_submission(submission_id):
 def fill_pdf(submission_id):
     """Fill a single submission's PDF with extracted data."""
     try:
-        report = submission_service.fill_pdf(submission_id)
+        payload = request.get_json(silent=True) or {}
+        input_ids = payload.get("input_ids")
+
+        report = submission_service.fill_pdf(submission_id, input_ids=input_ids)
         
         return jsonify({
             "success": True,

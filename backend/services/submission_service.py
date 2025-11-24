@@ -5,6 +5,7 @@ Submission service - orchestrates extraction and filling workflow.
 import os
 import uuid
 import json
+import copy
 from typing import Optional,Dict,Any,List
 from datetime import datetime
 from werkzeug.utils import secure_filename
@@ -199,17 +200,10 @@ class SubmissionService:
             if is_existing_submission:
                 version_notes = f"Re-extraction from {filename}"
 
-            version_id = self.version_service.create_version(
-                submission_id=submission_id,
-                data=json_data,
-                user="system",
-                action="extract",
-                notes=version_notes,
-            )
-          
-            # Save extracted JSON
-            data_path = os.path.join(self.data_dir, f"{submission_id}.json")
-            with open(data_path, "w") as f:
+            # Save per-input data
+            input_id = str(uuid.uuid4())
+            per_input_data_path = os.path.join(self.data_dir, f"{submission_id}_{input_id}.json")
+            with open(per_input_data_path, "w") as f:
                 json.dump(json_data, f, indent=2)
 
             # ── 90% – write metadata ─────────────────────────────────────────────
@@ -218,32 +212,46 @@ class SubmissionService:
             
             timestamp = datetime.utcnow().isoformat()
 
-            def rel_storage(path: str) -> str:
-                try:
-                    return os.path.relpath(path, start=self.storage_dir)
-                except Exception:
-                    return path
-
             metadata.setdefault("submission_id", submission_id)
             metadata["folder_id"] = folder_id
             metadata["client_id"] = client_id
             metadata["filename"] = filename
             metadata.setdefault("name", filename)
             metadata["upload_path"] = upload_path
-            metadata["data_path"] = data_path
             metadata["client_submission_path"] = client_submission_path
             metadata["outputs_dir"] = client_outputs_path
             metadata.setdefault("uploaded_at", timestamp)
             metadata["updated_at"] = timestamp
             metadata["status"] = "extracted"
-            metadata["current_version_id"] = version_id
+
             inputs_meta = metadata.setdefault("inputs", [])
             inputs_meta.append({
+                "input_id": input_id,
                 "filename": filename,
-                "path": rel_storage(upload_path),
+                "path": self._rel_storage_path(upload_path),
+                "data_path": self._rel_storage_path(per_input_data_path),
                 "uploaded_at": timestamp,
+                "extraction_status": "extracted",
+                "confidence": extraction_result.confidence,
             })
             metadata["file_count"] = len(inputs_meta)
+
+            # Merge data from all inputs
+            merged_data = self._merge_input_data(inputs_meta) or json_data
+
+            version_id = self.version_service.create_version(
+                submission_id=submission_id,
+                data=merged_data,
+                user="system",
+                action="extract",
+                notes=version_notes,
+            )
+            metadata["current_version_id"] = version_id
+
+            data_path = os.path.join(self.data_dir, f"{submission_id}.json")
+            with open(data_path, "w") as f:
+                json.dump(merged_data, f, indent=2)
+            metadata["data_path"] = data_path
            
             metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
             with open(metadata_path, 'w') as f:
@@ -267,9 +275,11 @@ class SubmissionService:
 
                 package_inputs = client_metadata.setdefault("inputs", [])
                 package_inputs.append({
+                    "input_id": input_id,
                     "filename": filename,
-                    "path": rel_storage(upload_path),
+                    "path": self._rel_storage_path(upload_path),
                     "uploaded_at": timestamp,
+                    "extraction_status": "extracted",
                 })
                 client_metadata["file_count"] = len(package_inputs)
                 client_metadata["status"] = metadata["status"]
@@ -419,6 +429,12 @@ class SubmissionService:
         if output_path and os.path.exists(output_path):
             os.remove(output_path)
 
+        for input_meta in metadata.get("inputs", []):
+            data_rel = input_meta.get("data_path")
+            abs_data = self._abs_storage_path(data_rel)
+            if abs_data and os.path.exists(abs_data):
+                os.remove(abs_data)
+
         for path in [metadata_path, data_path]:
             if path and os.path.exists(path):
                 os.remove(path)
@@ -441,7 +457,7 @@ class SubmissionService:
         return True
 
 
-    def fill_pdf(self, submission_id: str):
+    def fill_pdf(self, submission_id: str, input_ids: Optional[List[str]] = None):
         """
         Fill PDF with data using the canonical extraction output.
 
@@ -460,13 +476,21 @@ class SubmissionService:
             with open(metadata_path, 'r') as f:
                 metadata = json.load(f)
 
-            # 2) Load canonical extracted data (what extractor.to_dict() wrote)
-            data_path = os.path.join(self.data_dir, f"{submission_id}.json")
-            if not os.path.exists(data_path):
-                raise ValueError("Extracted data not found")
+            inputs_meta = metadata.get("inputs", [])
+            if input_ids:
+                inputs_meta = [inp for inp in inputs_meta if inp.get("input_id") in input_ids]
+                if not inputs_meta:
+                    raise ValueError("No matching input files selected")
 
-            with open(data_path, 'r') as f:
-                canonical_data = json.load(f)
+            canonical_data = self._merge_input_data(inputs_meta)
+
+            if not canonical_data:
+                data_path = os.path.join(self.data_dir, f"{submission_id}.json")
+                if not os.path.exists(data_path):
+                    raise ValueError("Extracted data not found")
+
+                with open(data_path, 'r') as f:
+                    canonical_data = json.load(f)
 
             # 3) Decide which template_id to use (decoupled from file path)
             # Prefer a template_type stored in metadata; fallback to a default.
@@ -577,7 +601,53 @@ class SubmissionService:
         output_path = os.path.join(self.outputs_dir, f"{submission_id}_filled.pdf")
 
         return output_path
-    
+
+    def _rel_storage_path(self, path: Optional[str]) -> Optional[str]:
+        if not path:
+            return None
+        try:
+            return os.path.relpath(path, start=self.storage_dir)
+        except Exception:
+            return path
+
+    def _abs_storage_path(self, path: Optional[str]) -> Optional[str]:
+        if not path:
+            return None
+        if os.path.isabs(path):
+            return path
+        return os.path.join(self.storage_dir, path)
+
+    def _load_input_data(self, entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        data_path = entry.get("data_path")
+        abs_path = self._abs_storage_path(data_path)
+        if not abs_path or not os.path.exists(abs_path):
+            return None
+        try:
+            with open(abs_path, 'r') as f:
+                return json.load(f)
+        except Exception:
+            return None
+
+    def _merge_input_data(self, inputs: List[Dict[str, Any]]) -> Dict[str, Any]:
+        merged: Dict[str, Any] = {}
+        for entry in inputs:
+            data = self._load_input_data(entry)
+            if data:
+                merged = self._deep_merge_dict(merged, data)
+        return merged
+
+    def _deep_merge_dict(self, base: Dict[str, Any], incoming: Dict[str, Any]) -> Dict[str, Any]:
+        if not base:
+            return copy.deepcopy(incoming)
+        for key, value in incoming.items():
+            if key in base and isinstance(base[key], dict) and isinstance(value, dict):
+                self._deep_merge_dict(base[key], value)
+            elif key in base and isinstance(base[key], list) and isinstance(value, list):
+                base[key].extend(value)
+            else:
+                base[key] = copy.deepcopy(value)
+        return base
+
     def create_submission(
         self, 
         client_id: str, 

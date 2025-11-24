@@ -243,9 +243,10 @@ class ClientService:
             for filename in sorted(os.listdir(path)):
                 full_path = os.path.join(path, filename)
                 if os.path.isfile(full_path):
+                    rel_path = os.path.relpath(full_path, start=submission_path)
                     files.append({
                         'filename': filename,
-                        'path': os.path.relpath(full_path, start=self.storage_dir),
+                        'path': rel_path,
                         'url': None,
                     })
             return files

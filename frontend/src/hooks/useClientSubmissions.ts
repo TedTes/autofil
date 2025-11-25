@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Client, ClientSubmissionPackage } from '@/types'
 import { getClientById, createClientSubmission, uploadPdf } from '@/lib/api-client'
-
+import useToast from '@/hooks/useToast' 
 export type UploadedRow = {
   submissionId: string
   filename: string
@@ -39,7 +39,7 @@ export function useClientSubmissions(clientId: string) {
   const [statusText, setStatusText] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [workflowError, setWorkflowError] = useState<string | null>(null)
-  
+  const toast = useToast()
   // Input file selection (existing)
   const [selectedInputsByPackage, setSelectedInputsByPackage] = useState<
     Record<string, string[]>
@@ -234,19 +234,24 @@ export function useClientSubmissions(clientId: string) {
     setWorkflowError(null)
     setStatusText(null)
 
+const currentPackage = packages.find(pkg => pkg.submission_id === activePackageId)
+  const packageName = currentPackage?.name ?? 'selected package'
+    let successCount = 0
+  let failureCount = 0
     for (const file of files) {
       const tempId = `tmp-${clientId}-${Date.now()}-${tempIdRef.current++}`
       const uploadedAt = new Date().toISOString()
 
       addRow({
         submissionId: tempId,
-        filename: file.name,
-        uploadedAt,
-        fileType: getFileType(file.name),
-        fileSize: file.size,
-        uploadPercent: 0,
-        extractionStatus: 'pending',
-        extractionProgress: 0,
+      filename: file.name,
+      uploadedAt,
+      fileType: getFileType(file.name),
+      fileSize: file.size,
+      status: 'uploading',
+      uploadPercent: 0,
+      extractionStatus: 'pending',
+      extractionProgress: 0,
       })
 
       try {
@@ -254,48 +259,68 @@ export function useClientSubmissions(clientId: string) {
           file,
           (progress) => {
             setStatusText(`Uploading ${file.name} (${progress}%)`)
-            updateRow(tempId, { uploadPercent: progress })
+            updateRow(tempId, { uploadPercent: progress,status: 'uploading' })
           },
           { clientId, submissionId: activePackageId }
         )
 
-        const extractionResult = result.extraction
-        const extractionPayload = extractionResult?.data as Record<string, unknown> | undefined
-        const payloadConfidence =
-          typeof extractionPayload?.['confidence'] === 'number'
-            ? (extractionPayload['confidence'] as number)
-            : undefined
-        setUploadedRows(prev =>
-          prev.map(row =>
-            row.submissionId === tempId
-              ? {
-                  ...row,
-                  submissionId: result.submission_id,
-                  uploadPercent: 100,
-                  extractionStatus: extractionResult ? 'extracted' : 'pending',
-                  extractionProgress: extractionResult ? 100 : 0,
-                  confidence: extractionResult?.confidence ?? payloadConfidence,
-                  extractionData: extractionPayload,
-                }
-              : row
-          )
+      const extractionResult = result.extraction
+      const extractionPayload = extractionResult?.data as Record<string, unknown> | undefined
+      const payloadConfidence =
+        typeof extractionPayload?.['confidence'] === 'number'
+          ? (extractionPayload['confidence'] as number)
+          : undefined
+
+      setUploadedRows(prev =>
+        prev.map(row =>
+          row.submissionId === tempId
+            ? {
+                ...row,
+                submissionId: result.submission_id,
+                uploadPercent: 100,
+                status: extractionResult ? 'extracted' : 'uploaded',
+                extractionStatus: extractionResult ? 'extracted' : 'pending',
+                extractionProgress: extractionResult ? 100 : 0,
+                confidence: extractionResult?.confidence ?? payloadConfidence,
+                extractionData: extractionPayload,
+              }
+            : row
         )
+      )
 
-        if (!extractionResult) {
-          setMessage(`Uploaded ${file.name} (awaiting extraction)`)
-        } else {
-          setMessage(`Extracted ${file.name}`)
-        }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Upload failed'
-        updateRow(tempId, { extractionStatus: 'error', extractionError: msg })
-        setWorkflowError(msg)
+      successCount += 1
+
+      if (!extractionResult) {
+        setMessage(`Uploaded ${file.name} (awaiting extraction)`)
+      } else {
+        setMessage(`Extracted ${file.name}`)
       }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Upload failed'
+      failureCount += 1
+      updateRow(tempId, {
+        status: 'error',
+        extractionStatus: 'error',
+        extractionError: msg,
+      })
+      setWorkflowError(msg)
     }
+  }
 
-    setIsUploading(false)
-    setStatusText(null)
-    await loadClientData({ silent: true })
+  setIsUploading(false)
+  setStatusText(null)
+  await loadClientData({ silent: true })
+  setUploadedRows([])
+
+    if (successCount > 0) {
+      const filesWord = successCount === 1 ? 'file' : 'files'
+      const text = `Moved ${successCount} ${filesWord} to "${packageName}"`
+      toast.success(text)
+      setMessage(text)
+    } else if (failureCount > 0) {
+      const filesWord = failureCount === 1 ? 'file' : 'files'
+      toast.error(`Failed to upload ${failureCount} ${filesWord}`)
+    }
   }
   
   const refreshClient = useCallback(async () => {

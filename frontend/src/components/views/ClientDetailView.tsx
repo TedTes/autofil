@@ -115,26 +115,13 @@ function FileUploadDropZone({
   onView: (submissionId: string, filename?: string) => void
   activePackageName?: string
 }) {
-  // Auto-remove extracted files after a delay
-  useEffect(() => {
-    const extractedRows = rows.filter(row => row.extractionStatus === 'extracted')
-    if (extractedRows.length > 0) {
-      const timer = setTimeout(() => {
-        extractedRows.forEach(row => {
-          onRemove(row.submissionId)
-        })
-      }, 3000)
-      return () => clearTimeout(timer)
-    }
-  }, [rows, onRemove])
 
-  const activeRows = rows.filter(row => 
-    row.extractionStatus !== 'extracted' || row.extractionProgress < 100
-  )
+
+  const activeRows = rows
 
   return (
     <div className="h-full min-h-[360px] flex flex-col bg-white rounded-lg border border-gray-200 shadow-sm">
-      {/* Header - FIXED */}
+      {/* Header */}
       <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div>
@@ -156,7 +143,7 @@ function FileUploadDropZone({
 
       {/* Content Area - FLEXIBLE WITH PROPER CONSTRAINTS */}
       <div className="flex-1 min-h-0 flex flex-col p-4">
-        {/* Messages - FIXED */}
+        {/* Messages */}
         {error && (
           <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg flex-shrink-0">
             <div className="flex items-start gap-2">

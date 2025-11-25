@@ -310,10 +310,6 @@ class SubmissionService:
                 client_meta_path = os.path.join(client_submission_path, "metadata.json")
                 with open(client_meta_path, 'w') as f:
                     json.dump(client_metadata, f, indent=2)
-                try:
-                    self.client_service._persist_client_metadata(client_metadata)  # type: ignore[attr-defined]
-                except AttributeError:
-                    pass
            
             # ── link to folder (if any) ─────────────────────────────────────────
             if folder_id:
@@ -616,10 +612,6 @@ class SubmissionService:
                 client_metadata["updated_at"] = metadata["filled_at"]
                 with open(client_meta_path, 'w') as f:
                     json.dump(client_metadata, f, indent=2)
-                try:
-                    self.client_service._persist_client_metadata(client_metadata)  # type: ignore[attr-defined]
-                except AttributeError:
-                    pass
 
             return fill_report
 

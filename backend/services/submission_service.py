@@ -722,7 +722,6 @@ class SubmissionService:
                 segments.extend(["clients", client_id])
             else:
                 segments.append("submissions")
-            print("kkkkkkkk")
             segments.extend([submission_id, category, filename])
             upload_info = self.remote_storage.upload_file(
                 local_path=local_path,

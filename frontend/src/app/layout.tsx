@@ -22,7 +22,6 @@ export default function RootLayout({
       <body className={inter.className}>
         <ToastProvider>
           <div className="min-h-screen">
-            <BackendStatusBanner />
             {children}
           </div>
           <ToastContainer />

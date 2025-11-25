@@ -592,11 +592,8 @@ def list_all_submissions():
     try:
   
         limit = int(request.args.get("limit", 100))
-        print("1")
         offset = int(request.args.get("offset", 0))
-        print("11")
         status_filter = request.args.get("status")
-        print("111")
 
         all_subs = submission_service.get_all_submissions()
  

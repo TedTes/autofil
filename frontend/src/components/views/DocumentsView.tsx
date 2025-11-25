@@ -13,26 +13,20 @@ import { getAllSubmissions ,
   exportSingleSubmission,
   deleteSubmission,
   downloadBlob,formatDate,bulkExportAsZip} from '@/lib'
-import type {Folder,ViewType,SubmissionListItem} from "../../types"
+import type {ViewType,SubmissionListItem} from "../../types"
 import { ConfidenceBadgeCompact } from '@/components/ConfidenceBadge'
 import {BulkExportProgressModal} from "../BulkExportProgressModal"
 
 interface DocumentsViewProps {
-  folders: Folder[]
-  currentFolder: Folder | null
-  onFolderChange: (folder: Folder | null) => void
-  onCreateFolder: (name: string) => Promise<void>
   onNavigate: (type: ViewType, data?: unknown, breadcrumbs?: string[]) => void
   onFileClick?: (submissionId: string, filename?: string) => void
 }
 
 type SelectedStatus = 'all' | 'ready' | 'extracted' | 'filled'
-export function DocumentsView({folders,
-  currentFolder,
-  onFolderChange, 
-  onCreateFolder,
+export function DocumentsView({
   onNavigate,
-  onFileClick }: DocumentsViewProps) {
+  onFileClick,
+}: DocumentsViewProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [files, setFiles] = useState<SubmissionListItem[]>([])
   const [error, setError] = useState<string | null>(null)

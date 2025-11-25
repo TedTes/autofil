@@ -27,12 +27,10 @@ import { FileDetailView, DocumentsView,  ClientsView,
   HelpView ,ClientDetailView  } from './views'
 
 import {
-  getFolders,
-  createFolder,
   getSubmissionStats,
 } from '@/lib/api-client'
 
-import type { Folder, ViewType,  FileDetailActions,ViewDataMap, SubmissionStats } from '@/types'
+import type { ViewType,  FileDetailActions,ViewDataMap, SubmissionStats } from '@/types'
 import { usePathname, useRouter, useSearchParams, type ReadonlyURLSearchParams } from 'next/navigation'
 
 type ViewState = {
@@ -184,10 +182,6 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const [isMobileOpening, setIsMobileOpening] = useState(false)
   const [submissionStats, setSubmissionStats] = useState<SubmissionStats | null>(null)
 
-  // Folders data
-  const [folders, setFolders] = useState<Folder[]>([])
-  const [currentFolder, setCurrentFolder] = useState<Folder | null>(null)
-
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -196,21 +190,6 @@ export default function MainLayout({ children }: MainLayoutProps) {
     [pathname, searchParams]
   )
   const autoCollapsedRef = useRef(false)
-
-  // Load folders once
-  useEffect(() => {
-    void (async () => {
-      try {
-        const data = await getFolders()
-        setFolders(data)
-        if (data.length > 0) {
-          setCurrentFolder(data[0])
-        }
-      } catch (err) {
-        console.warn('Failed to load folders', err)
-      }
-    })()
-  }, [])
 
   useEffect(() => {
     void (async () => {
@@ -305,18 +284,6 @@ const handleMobileSidebarClose = () => {
       })),
     [navigateTo]
   )
-  // Create folder from Documents view
-  const handleCreateFolder = useCallback(async (name: string) => {
-    const newFolder = await createFolder(name)
-    setFolders((prev) => [newFolder, ...prev])
-    setCurrentFolder(newFolder)
-    return newFolder
-  }, [])
-
-  const handleCreateFolderNoReturn = useCallback(async (name: string) => {
-    await handleCreateFolder(name)
-  }, [handleCreateFolder])
-
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
@@ -724,10 +691,6 @@ const handleMobileSidebarClose = () => {
             {/* Documents View */}
             {currentView.type === 'documents' && (
               <DocumentsView 
-                folders={folders}
-                currentFolder={currentFolder}
-                onFolderChange={setCurrentFolder}
-                onCreateFolder={handleCreateFolderNoReturn}
                 onNavigate={navigateTo}
                 onFileClick ={handleFileClick}
               />
@@ -735,12 +698,7 @@ const handleMobileSidebarClose = () => {
 
             {/* Upload View */}
             {currentView.type === 'upload' && (
-              <UploadView 
-                currentFolder={currentFolder}
-                folders={folders}
-                onFolderChange={setCurrentFolder}
-                onCreateFolder={handleCreateFolder}
-              />
+              <UploadView />
             )}
 
             {/* File Detail View */}

@@ -2,22 +2,10 @@
 'use client'
 
 import { Upload } from 'lucide-react'
-import type { Folder } from '@/types'
-import { uploadPdf, uploadPdfToFolder } from '@/lib/api-client'
-import { FolderSelect } from '@/components/FolderSelect'
+import { uploadPdf } from '@/lib/api-client'
 import { useState } from 'react'
 
-export function UploadView({
-  currentFolder,
-  folders,
-  onFolderChange,
-  onCreateFolder,
-}: {
-  currentFolder: Folder | null
-  folders: Folder[]
-  onFolderChange: (folder: Folder | null) => void
-  onCreateFolder?: (name: string) => Promise<Folder | void>
-}) {
+export function UploadView() {
   const [uploading, setUploading] = useState(false)
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -25,12 +13,7 @@ export function UploadView({
     if (!file) return
     setUploading(true)
     try {
-      const folderId = currentFolder?.folder_id || currentFolder?.id
-      if (folderId) {
-        await uploadPdfToFolder(folderId, file)
-      } else {
-        await uploadPdf(file)
-      }
+      await uploadPdf(file)
       // TODO: toast success
     } finally {
       setUploading(false)
@@ -43,24 +26,9 @@ export function UploadView({
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Upload documents</h2>
           <p className="text-sm text-gray-500">
-            Choose where to store the upload. You can change the folder later.
+            Upload files to your workspace. They’ll be processed automatically after upload.
           </p>
         </div>
-        <FolderSelect
-          folders={folders}
-          value={currentFolder}
-          onChange={onFolderChange}
-          onCreate={
-            onCreateFolder
-              ? async (name: string) => {
-                  const newFolder = await onCreateFolder(name)
-                  if (newFolder) {
-                    onFolderChange(newFolder)
-                  }
-                }
-              : undefined
-          }
-        />
       </div>
 
       <label
@@ -73,7 +41,7 @@ export function UploadView({
           {uploading ? 'Uploading...' : 'Drop your PDF here'}
         </h3>
         <p className="text-sm text-gray-600 mb-4">
-          {currentFolder ? `Will be saved to: ${currentFolder.name}` : 'Will be saved to: Unassigned'}
+          Files will be processed immediately after upload.
         </p>
         <input type="file" className="hidden" onChange={handleFileChange} accept="application/pdf" />
       </label>

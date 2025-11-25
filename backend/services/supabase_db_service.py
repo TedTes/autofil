@@ -160,3 +160,64 @@ class SupabaseDatabaseService:
             self._client.table("clients_metadata").delete().eq("client_id", client_id).execute()
         except Exception as exc:
             print(f"[supabase-db] Failed to delete client {client_id}: {exc}")
+
+    # -------------------------------------------------------------------- folders
+    def save_folder_metadata(self, metadata: Dict[str, Any]) -> None:
+        if not self.enabled or not self._client:
+            return
+        folder_id = metadata.get("folder_id")
+        if not folder_id:
+            return
+        payload = {
+            "folder_id": folder_id,
+            "name": metadata.get("name"),
+            "metadata": metadata,
+            "updated_at": metadata.get("updated_at") or datetime.utcnow().isoformat(),
+        }
+        try:
+            self._client.table("folders_metadata").upsert(
+                payload,
+                on_conflict="folder_id",
+            ).execute()
+        except Exception as exc:
+            print(f"[supabase-db] Failed to save folder {folder_id}: {exc}")
+
+    def get_folder_metadata(self, folder_id: str) -> Optional[Dict[str, Any]]:
+        if not self.enabled or not self._client:
+            return None
+        try:
+            data = self._execute(
+                self._client.table("folders_metadata")
+                .select("metadata")
+                .eq("folder_id", folder_id)
+                .single()
+            )
+            if data:
+                return data.get("metadata")
+        except Exception as exc:
+            print(f"[supabase-db] Failed to fetch folder {folder_id}: {exc}")
+        return None
+
+    def list_folders_metadata(self) -> List[Dict[str, Any]]:
+        if not self.enabled or not self._client:
+            return []
+        try:
+            rows = self._execute(
+                self._client.table("folders_metadata")
+                .select("metadata")
+                .order("updated_at", desc=True)
+            )
+            if not rows:
+                return []
+            return [row.get("metadata") for row in rows if row.get("metadata")]
+        except Exception as exc:
+            print(f"[supabase-db] Failed to list folders: {exc}")
+            return []
+
+    def delete_folder_metadata(self, folder_id: str) -> None:
+        if not self.enabled or not self._client:
+            return
+        try:
+            self._client.table("folders_metadata").delete().eq("folder_id", folder_id).execute()
+        except Exception as exc:
+            print(f"[supabase-db] Failed to delete folder {folder_id}: {exc}")

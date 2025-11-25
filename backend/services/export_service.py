@@ -2,13 +2,19 @@
 Export service - handles data export in various formats.
 """
 
-import os
-import json
+from __future__ import annotations
+
 import csv
-import zipfile
 import io
-from typing import Dict, Any, List, Optional
+import json
+import os
+import tempfile
+import zipfile
 from datetime import datetime
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:  # pragma: no cover - avoid circular import at runtime
+    from services.submission_service import SubmissionService
 
 
 class ExportService:
@@ -23,11 +29,9 @@ class ExportService:
     - API webhook notifications
     """
     
-    def __init__(self, storage_dir: str = 'storage'):
+    def __init__(self, submission_service: Optional["SubmissionService"] = None):
         """Initialize export service."""
-        self.storage_dir = storage_dir
-        self.exports_dir = os.path.join(storage_dir, 'exports')
-        os.makedirs(self.exports_dir, exist_ok=True)
+        self._submission_service = submission_service
     
     def export_to_csv(
         self,
@@ -48,9 +52,8 @@ class ExportService:
             raise ValueError("No submissions to export")
         
         # Generate filename
-        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-        csv_filename = f"export_{timestamp}.csv"
-        csv_path = os.path.join(self.exports_dir, csv_filename)
+        fd, csv_path = tempfile.mkstemp(prefix="export_", suffix=".csv")
+        os.close(fd)
         
         # Determine fields to export
         if not fields:
@@ -89,9 +92,8 @@ class ExportService:
         Returns:
             Path to JSON file
         """
-        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-        json_filename = f"export_{timestamp}.json"
-        json_path = os.path.join(self.exports_dir, json_filename)
+        fd, json_path = tempfile.mkstemp(prefix="export_", suffix=".json")
+        os.close(fd)
         
         with open(json_path, 'w', encoding='utf-8') as jsonfile:
             if pretty:
@@ -120,9 +122,8 @@ class ExportService:
         Returns:
             Path to ZIP file
         """
-        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-        zip_filename = f"export_package_{timestamp}.zip"
-        zip_path = os.path.join(self.exports_dir, zip_filename)
+        fd, zip_path = tempfile.mkstemp(prefix="export_package_", suffix=".zip")
+        os.close(fd)
         
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
             # Add PDFs
@@ -130,10 +131,10 @@ class ExportService:
                 for submission in submissions:
                     submission_id = submission.get('submission_id')
                     if submission_id:
-                        pdf_path = self._get_pdf_path(submission_id)
-                        if pdf_path and os.path.exists(pdf_path):
+                        pdf_bytes = self.submission_service.get_filled_pdf_bytes(submission_id)
+                        if pdf_bytes:
                             arcname = f"pdfs/{submission.get('filename', submission_id)}"
-                            zipf.write(pdf_path, arcname)
+                            zipf.writestr(arcname, pdf_bytes)
             
             # Add individual JSON files
             if include_json:
@@ -276,19 +277,9 @@ class ExportService:
                 items.append((new_key, v))
         return dict(items)
     
-    def _get_pdf_path(self, submission_id: str) -> Optional[str]:
-        """Get path to filled PDF for submission."""
-        # Check outputs directory
-        output_path = os.path.join(self.storage_dir, 'outputs', f"{submission_id}.pdf")
-        if os.path.exists(output_path):
-            return output_path
-        
-        # Check uploads directory as fallback
-        upload_path = os.path.join(self.storage_dir, 'uploads', f"{submission_id}.pdf")
-        if os.path.exists(upload_path):
-            return upload_path
-        
-        return None
+    def _get_pdf_bytes(self, submission_id: str) -> Optional[bytes]:
+        """Download filled PDF bytes for submission."""
+        return self.submission_service.get_filled_pdf_bytes(submission_id)
     
     def _generate_csv_content(self, submissions: List[Dict[str, Any]]) -> str:
         """Generate CSV content as string."""
@@ -325,7 +316,7 @@ class ExportService:
                 for s in submissions
             ],
             'contents': {
-                'pdfs': len([s for s in submissions if self._get_pdf_path(s.get('submission_id'))]),
+                'pdfs': len([s for s in submissions if self._get_pdf_bytes(s.get('submission_id'))]),
                 'json_files': len(submissions),
                 'csv_summary': True
             }
@@ -335,3 +326,11 @@ class ExportService:
         """Generate unique export ID."""
         import uuid
         return str(uuid.uuid4())
+
+    # ------------------------------------------------------------------ helpers
+    @property
+    def submission_service(self) -> "SubmissionService":
+        if self._submission_service is None:
+            from services.submission_service import SubmissionService
+            self._submission_service = SubmissionService()
+        return self._submission_service

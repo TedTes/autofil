@@ -2,28 +2,31 @@
 Submission service - orchestrates extraction and filling workflow.
 """
 
-import os
-import uuid
-import json
 import copy
-from typing import Optional,Dict,Any,List
+import json
+import os
+import shutil
+import tempfile
+import uuid
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
 from werkzeug.utils import secure_filename
-from storage import LocalStorageProvider, StorageProvider
-from extraction.extractors import extractor_registry
+
 from extraction.classifiers import classifier_registry
-from extraction.core.readers.pdf_reader import PdfReader
-from extraction.core.document import Document,DocumentType
-from filling.fillers import Acord126Filler
-from services.client_service import ClientService
-from lib.submission_templates import get_template, TEMPLATES
-from services.version_service import VersionService
-from services.comparison_service import ComparisonService
-from services.form_generator import FormGenerator
-from services.export_service import ExportService
 from extraction.core import UniversalFileLoader
-from services.supabase_storage_service import SupabaseStorageService
+from extraction.core.document import Document, DocumentType
+from extraction.core.readers.pdf_reader import PdfReader
+from extraction.extractors import extractor_registry
+from filling.fillers import Acord126Filler
+from lib.submission_templates import TEMPLATES, get_template
+from services.client_service import ClientService
+from services.comparison_service import ComparisonService
+from services.export_service import ExportService
+from services.form_generator import FormGenerator
 from services.supabase_db_service import SupabaseDatabaseService
+from services.supabase_storage_service import SupabaseStorageService
+from services.version_service import VersionService
 
 class SubmissionService:
     """
@@ -36,121 +39,77 @@ class SubmissionService:
     - File retrieval
     """
     
-    def __init__(self, storage_provider: Optional[StorageProvider] = None):
-        """Initialize service with paths."""
-        self.storage: StorageProvider = storage_provider or LocalStorageProvider('storage')
-        self.storage_dir = getattr(self.storage, 'base_path', 'storage')
-        self.uploads_dir = self.storage.ensure_dir('uploads')
-        self.outputs_dir = self.storage.ensure_dir('outputs')
-        self.data_dir = self.storage.ensure_dir('data')
-        self.folders_dir = self.storage.ensure_dir('folders')
-
+    def __init__(self):
+        """Initialize service dependencies."""
         self.client_service = ClientService()
         self.filler = Acord126Filler()  # filler knows how to find its own template(s)
 
-        self.version_service = VersionService(self.storage_dir)
-        self.comparison_service = ComparisonService(self.storage_dir)
+        self.version_service = VersionService()
+        self.comparison_service = ComparisonService()
         self.form_generator = FormGenerator()
-        self.export_service = ExportService(self.storage_dir)
+        self.export_service = ExportService(self)
 
         self.classifier = classifier_registry.create_composite(
             classifier_names=['mime', 'keyword', 'table'],
             strategy='highest_confidence'
     )
         self.remote_storage = SupabaseStorageService()
+        if not getattr(self.remote_storage, "enabled", False):
+            raise RuntimeError("Supabase storage must be configured for file storage.")
         self.db = SupabaseDatabaseService()
         if not self.db.enabled:
             raise RuntimeError("Supabase database must be configured for submission metadata storage.")
     def upload_and_extract(
         self,
         file,
-        folder_id: str = None,
-        client_id: str = None,
-        submission_id: str = None,
+        folder_id: Optional[str] = None,
+        client_id: Optional[str] = None,
+        submission_id: Optional[str] = None,
         progress_callback=None,
     ):
         """
-        Upload PDF and extract data with progress tracking.
-        
-        Args:
-            file: FileStorage object from Flask request
-            folder_id: Optional folder ID to store in
-            progress_callback: Optional callback for progress updates
-        
-        Returns:
-            Dictionary with submission_id, extracted data, and metadata
+        Upload a PDF to Supabase Storage, extract data, and persist metadata remotely.
         """
+        if not file or not getattr(file, "filename", None):
+            raise ValueError("No file provided")
+
+        temp_upload_dir = None
         try:
             if folder_id and client_id and submission_id is None:
                 raise ValueError("Cannot specify both folder_id and client_id")
 
             is_existing_submission = submission_id is not None
             metadata: Dict[str, Any] = {}
-            client_submission_path = None
-            client_outputs_path = None
 
             if not submission_id:
                 submission_id = str(uuid.uuid4())
 
-            metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
-
             if progress_callback:
-                progress_callback(submission_id, 0, 'starting', 'Initializing upload...')
+                progress_callback(submission_id, 0, "starting", "Initializing upload...")
 
             if is_existing_submission:
                 metadata = self.get_submission_metadata(submission_id)
                 if not metadata:
                     raise ValueError("Submission not found")
-
                 existing_client_id = metadata.get("client_id")
                 if existing_client_id and client_id and existing_client_id != client_id:
                     raise ValueError("Submission does not belong to the specified client")
                 client_id = existing_client_id or client_id
                 folder_id = metadata.get("folder_id") or folder_id
-                client_submission_path = metadata.get("client_submission_path")
-                client_outputs_path = metadata.get("outputs_dir")
+            elif client_id:
+                client = self.client_service.get_client(client_id)
+                if not client:
+                    raise ValueError("Client not found")
+                self.client_service.add_submission(client_id, submission_id)
 
-                if client_submission_path:
-                    upload_dir = os.path.join(client_submission_path, "inputs")
-                    os.makedirs(upload_dir, exist_ok=True)
-                elif folder_id:
-                    from services.folder_service import FolderService
-                    folder_service = FolderService()
-                    upload_dir = folder_service.get_inputs_path(folder_id)
-                else:
-                    upload_dir = self.uploads_dir
-            else:
-                upload_dir = self.uploads_dir
-
-                if client_id:
-                    client = self.client_service.get_client(client_id)
-                    if not client:
-                        raise ValueError("Client not found")
-                    submissions_root = self.client_service.get_submissions_path(client_id)
-                    os.makedirs(submissions_root, exist_ok=True)
-                    client_submission_path = os.path.join(submissions_root, submission_id)
-                    os.makedirs(client_submission_path, exist_ok=True)
-                    upload_dir = os.path.join(client_submission_path, "inputs")
-                    os.makedirs(upload_dir, exist_ok=True)
-                    client_outputs_path = os.path.join(client_submission_path, "outputs")
-                    os.makedirs(client_outputs_path, exist_ok=True)
-                    self.client_service.add_submission(client_id, submission_id)
-                elif folder_id:
-                    from services.folder_service import FolderService
-                    folder_service = FolderService()
-                    upload_dir = folder_service.get_inputs_path(folder_id)
-                else:
-                    upload_dir = self.uploads_dir
-
-            # Progress: 10% - Saving file
-            if progress_callback:
-                progress_callback(submission_id, 10, 'uploading', 'Saving file...')
-            
-            # Save uploaded file
-            filename = secure_filename(file.filename)
-            upload_filename = f"{submission_id}_{filename}" if not client_id else filename
-            upload_path = os.path.join(upload_dir, upload_filename)
+            temp_upload_dir = tempfile.mkdtemp(prefix=f"upload_{submission_id}_")
+            filename = secure_filename(file.filename or f"{submission_id}.pdf")
+            upload_path = os.path.join(temp_upload_dir, filename)
             file.save(upload_path)
+
+            if progress_callback:
+                progress_callback(submission_id, 30, "uploaded", "File saved successfully")
+
             remote_input = self._upload_to_remote(
                 local_path=upload_path,
                 content_type=getattr(file, "content_type", None),
@@ -159,176 +118,101 @@ class SubmissionService:
                 category="inputs",
                 filename=filename,
             )
-            # Progress: 30% - File saved
-            if progress_callback:
-                progress_callback(submission_id, 30, 'uploaded', 'File saved successfully')
-            
-            # Progress: 40% - Starting extraction
-            if progress_callback:
-                progress_callback(submission_id, 40, 'extracting', 'Analyzing document...')
-            # Use UniversalFileLoader to handle all file types
-            loader = UniversalFileLoader()
 
+            if progress_callback:
+                progress_callback(submission_id, 40, "extracting", "Analyzing document...")
+
+            loader = UniversalFileLoader()
             try:
-               doc =  loader.load(upload_path)
-               print(f"Document loaded - MIME: {doc.mime_type}, Type: {doc.document_type}")
-               print(f"🔍 Running composite classifier (mime + keyword + table)...")
-               try:
+                doc = loader.load(upload_path)
+                print(f"Document loaded - MIME: {doc.mime_type}, Type: {doc.document_type}")
+                print("🔍 Running composite classifier (mime + keyword + table)...")
+                try:
                     doc_type, confidence = self.classifier.classify(doc)
                     doc.set_document_type(doc_type, confidence)
                     print(f"Classified as: {doc_type} (confidence: {confidence:.2f})")
-               except Exception as e:
-                    print(f"⚠️ Classification failed: {str(e)}")
-                    # Fallback to generic if classification fails
+                except Exception as exc:
+                    print(f"⚠️ Classification failed: {exc}")
                     doc.set_document_type(DocumentType.GENERIC, 0.3)
-            except Exception as e:
-                raise ValueError(f"Failed to load file: {str(e)}")
-      
+            except Exception as exc:
+                raise ValueError(f"Failed to load file: {exc}")
+
             extractor = extractor_registry.get_extractor_for_document(doc)
             if not extractor:
-              raise ValueError(f"No extractor for {doc.document_type}")
-            # Extract data
+                raise ValueError(f"No extractor for {doc.document_type}")
+
             extraction_result = extractor.extract(doc)
             extraction_confidence = getattr(extraction_result, "confidence", None)
 
-            # Progress: 70% - Extraction complete
             if progress_callback:
-                progress_callback(submission_id, 70, 'extracting', 'Processing fields...')
-        
-            # # ── sanity check (optional – some extractors may not implement it) ───
+                progress_callback(submission_id, 70, "extracting", "Processing fields...")
+
             if hasattr(extraction_result, "is_successful") and not extraction_result.is_successful():
                 err = getattr(extraction_result, "error", "Unknown extraction error")
                 if progress_callback:
                     progress_callback(submission_id, 100, "error", f"Extraction failed: {err}")
                 raise ValueError(f"Extraction failed: {err}")
-            
-        
-            # ── 80% – persist extracted JSON & version ───────────────────────────
+
             if progress_callback:
                 progress_callback(submission_id, 80, "extracting", "Saving extracted data...")
 
-            # JSON-compatible dict (handles datetime, UUID, etc.)
             json_data = extraction_result.to_dict()
+            version_notes = "Re-extraction" if is_existing_submission else "Initial extraction"
 
-            version_notes = f"Extraction from {filename}"
-            if is_existing_submission:
-                version_notes = f"Re-extraction from {filename}"
-
-            # Save per-input data
-            input_id = str(uuid.uuid4())
-            per_input_data_path = os.path.join(self.data_dir, f"{submission_id}_{input_id}.json")
-            with open(per_input_data_path, "w") as f:
-                json.dump(json_data, f, indent=2)
-
-            # ── 90% – write metadata ─────────────────────────────────────────────
-            if progress_callback:
-                progress_callback(submission_id, 90, "ready", "Finalizing...")
-            
             timestamp = datetime.utcnow().isoformat()
-
             metadata.setdefault("submission_id", submission_id)
-            metadata["folder_id"] = folder_id
-            metadata["client_id"] = client_id
-            metadata["filename"] = filename
-            metadata.setdefault("name", filename)
-            metadata["upload_path"] = upload_path
-            if remote_input:
-                metadata["upload_storage"] = remote_input
-            metadata["client_submission_path"] = client_submission_path
-            metadata["outputs_dir"] = client_outputs_path
             metadata.setdefault("uploaded_at", timestamp)
             metadata["updated_at"] = timestamp
+            metadata["folder_id"] = folder_id
+            metadata["client_id"] = client_id
+            metadata["filename"] = metadata.get("filename") or filename
+            metadata.setdefault("name", metadata["filename"])
             metadata["status"] = "extracted"
             if extraction_confidence is not None:
                 metadata["confidence"] = extraction_confidence
 
-            inputs_meta = metadata.setdefault("inputs", [])
-            inputs_meta.append({
-                "input_id": input_id,
+            input_entry = {
+                "input_id": str(uuid.uuid4()),
                 "filename": filename,
-                "path": self._rel_storage_path(upload_path),
-                "data_path": self._rel_storage_path(per_input_data_path),
                 "uploaded_at": timestamp,
                 "extraction_status": "extracted",
                 "confidence": extraction_confidence,
                 "url": remote_input.get("public_url") if remote_input else None,
                 "storage": remote_input,
-            })
+                "data": json_data,
+            }
+            inputs_meta = metadata.setdefault("inputs", [])
+            inputs_meta.append(input_entry)
             metadata["file_count"] = len(inputs_meta)
 
-            # Merge data from all inputs
             merged_data = self._merge_input_data(inputs_meta) or json_data
+            metadata["data"] = merged_data
 
             version_id = self.version_service.create_version(
                 submission_id=submission_id,
                 data=merged_data,
                 user="system",
                 action="extract",
-                notes=version_notes,
+                notes=f"{version_notes} from {filename}",
             )
             metadata["current_version_id"] = version_id
 
-            data_path = os.path.join(self.data_dir, f"{submission_id}.json")
-            with open(data_path, "w") as f:
-                json.dump(merged_data, f, indent=2)
-            metadata["data_path"] = data_path
-           
-            metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
-            with open(metadata_path, 'w') as f:
-                json.dump(metadata, f, indent=2)
             self._persist_submission_metadata(metadata)
-           
-            if client_submission_path:
-                client_meta_path = os.path.join(client_submission_path, "metadata.json")
-                if os.path.exists(client_meta_path):
-                    with open(client_meta_path, 'r') as f:
-                        client_metadata = json.load(f)
-                else:
-                    client_metadata = {
-                        "submission_id": submission_id,
-                        "client_id": client_id,
-                        "name": metadata.get("name", filename),
-                        "created_at": timestamp,
-                        "status": metadata["status"],
-                        "inputs": [],
-                        "outputs": [],
-                    }
 
-                package_inputs = client_metadata.setdefault("inputs", [])
-                package_inputs.append({
-                    "input_id": input_id,
-                    "filename": filename,
-                    "path": self._rel_storage_path(upload_path),
-                    "uploaded_at": timestamp,
-                    "extraction_status": "extracted",
-                    "url": remote_input.get("public_url") if remote_input else None,
-                    "storage": remote_input,
-                })
-                client_metadata["file_count"] = len(package_inputs)
-                client_metadata["status"] = metadata["status"]
-                client_metadata["updated_at"] = timestamp
-                client_meta_path = os.path.join(client_submission_path, "metadata.json")
-                with open(client_meta_path, 'w') as f:
-                    json.dump(client_metadata, f, indent=2)
-           
-            # ── link to folder (if any) ─────────────────────────────────────────
             if folder_id:
                 from services.folder_service import FolderService
                 FolderService().add_submission(folder_id, submission_id, filename)
-           
-            # ── 100% – done ───────────────────────────────────────────────────────
+
             if progress_callback:
                 progress_callback(submission_id, 100, "ready", "Extraction complete")
-            
+
             return {
                 "submission_id": submission_id,
-                # "confidence": extraction_result.confidence,
-                # "warnings": extraction_result.warnings,
                 "data": json_data,
             }
-        except Exception as e:
-            print("upload and extract error:", str(e))
-            raise
+        finally:
+            if temp_upload_dir:
+                shutil.rmtree(temp_upload_dir, ignore_errors=True)
     
     def get_submission_metadata(self, submission_id: str) -> Optional[Dict[str, Any]]:
         return self.db.get_submission_metadata(submission_id)
@@ -343,7 +227,6 @@ class SubmissionService:
         Returns:
             Dictionary with submission details
         """
-        data_path = os.path.join(self.data_dir, f"{submission_id}.json")
         metadata = self.get_submission_metadata(submission_id)
         if not metadata:
             return None
@@ -361,9 +244,6 @@ class SubmissionService:
             except Exception:
                 client_name = None
         
-        with open(data_path, 'r') as f:
-            data = json.load(f)
-        
         return {
             'submission_id': submission_id,
             'client_id': resolved_client_id,
@@ -374,7 +254,7 @@ class SubmissionService:
             'uploaded_at': metadata['uploaded_at'],
             'confidence': metadata.get('confidence'),
             'warnings': metadata.get('warnings', []),
-            'data': data
+            'data': metadata.get('data', {})
         }
     
     def update_data(
@@ -392,32 +272,23 @@ class SubmissionService:
         - Records a version in VersionService.
         - Updates last_edited_at / last_edited_by.
         """
-        data_path = os.path.join(self.data_dir, f"{submission_id}.json")
         metadata = self.get_submission_metadata(submission_id)
-        if not metadata or not os.path.exists(data_path):
+        if not metadata:
             raise ValueError("Submission not found")
-        metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
-
-        with open(data_path, 'r') as f:
-            previous_data = json.load(f)
 
         version_id = self.version_service.create_version(
             submission_id=submission_id,
-            data=previous_data,
+            data=data,
             user=user,
             action='edit',
             notes=notes or 'Manual data update',
         )
 
-        with open(data_path, 'w') as f:
-            json.dump(data, f, indent=2)
-
+        metadata['data'] = data
         metadata['current_version_id'] = version_id
         metadata['last_edited_at'] = datetime.utcnow().isoformat()
         metadata['last_edited_by'] = user
 
-        with open(metadata_path, 'w') as f:
-            json.dump(metadata, f, indent=2)
         self._persist_submission_metadata(metadata)
 
         # Return fresh snapshot
@@ -431,30 +302,8 @@ class SubmissionService:
         metadata = self.get_submission_metadata(submission_id)
         if not metadata:
             return False
-        metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
-        data_path = os.path.join(self.data_dir, f"{submission_id}.json")
-
-        upload_path = metadata.get("upload_path")
-        if upload_path and os.path.exists(upload_path):
-            os.remove(upload_path)
-        upload_storage = metadata.get("upload_storage") or {}
-        storage_path = upload_storage.get("path")
-        if storage_path:
-            self.remote_storage.delete_file(storage_path)
-
-        output_path = metadata.get("output_path")
-        if output_path and os.path.exists(output_path):
-            os.remove(output_path)
-        output_storage = metadata.get("output_storage") or {}
-        storage_path = output_storage.get("path")
-        if storage_path:
-            self.remote_storage.delete_file(storage_path)
 
         for input_meta in metadata.get("inputs", []):
-            data_rel = input_meta.get("data_path")
-            abs_data = self._abs_storage_path(data_rel)
-            if abs_data and os.path.exists(abs_data):
-                os.remove(abs_data)
             storage_info = input_meta.get("storage") or {}
             storage_path = storage_info.get("path")
             if storage_path:
@@ -466,9 +315,6 @@ class SubmissionService:
             if storage_path:
                 self.remote_storage.delete_file(storage_path)
 
-        for path in [metadata_path, data_path]:
-            if path and os.path.exists(path):
-                os.remove(path)
         if getattr(self.db, "enabled", False):
             self.db.delete_submission_metadata(submission_id)
 
@@ -500,55 +346,30 @@ class SubmissionService:
         Returns:
             FillReport
         """
+        temp_output_dir: Optional[str] = None
         try:
-            # 1) Load metadata
             metadata = self.get_submission_metadata(submission_id)
             if not metadata:
                 raise ValueError("Submission not found")
-            metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
 
             inputs_meta = metadata.get("inputs", [])
             if input_ids:
-                inputs_meta = [inp for inp in inputs_meta if inp.get("input_id") in input_ids]
+                inputs_meta = [entry for entry in inputs_meta if entry.get("input_id") in input_ids]
                 if not inputs_meta:
                     raise ValueError("No matching input files selected")
 
-            canonical_data = self._merge_input_data(inputs_meta)
-
+            canonical_data = self._merge_input_data(inputs_meta) or metadata.get("data")
             if not canonical_data:
-                data_path = os.path.join(self.data_dir, f"{submission_id}.json")
-                if not os.path.exists(data_path):
-                    raise ValueError("Extracted data not found")
+                raise ValueError("Extracted data not found")
 
-                with open(data_path, 'r') as f:
-                    canonical_data = json.load(f)
-
-            # 3) Decide which template_id to use (decoupled from file path)
-            # Prefer a template_type stored in metadata; fallback to a default.
-            # Example: "acord_126", "acord_126_2016_09", etc. as understood by TemplateLoader.
             template_id = metadata.get("template_type") or "acord_126_2016.pdf"
-            # 4) Determine output directory
-            folder_id = metadata.get('folder_id')
-            if folder_id:
-                from services.folder_service import FolderService
-                folder_service = FolderService()
-                output_dir = folder_service.get_outputs_path(folder_id)
-            else:
-                output_dir = self.outputs_dir
+            temp_output_dir = tempfile.mkdtemp(prefix=f"filled_{submission_id}_")
+            output_path = os.path.join(temp_output_dir, f"{submission_id}_filled.pdf")
 
-            os.makedirs(output_dir, exist_ok=True)
-
-            # 5) Build output PDF path
-            output_path = os.path.join(output_dir, f"{submission_id}_filled.pdf")
-
-            # 6) Call filler – it will:
-            #   - load the right template via TemplateLoader
-            #   - map canonical_data -> flat pdf fields
-            #   - write the filled PDF to output_path
             fill_report = self.filler.fill(
                 canonical_data=canonical_data,
                 output_path=output_path,
-                template_id=template_id,   # logical name, not file path
+                template_id=template_id,
             )
             remote_output = self._upload_to_remote(
                 local_path=output_path,
@@ -559,20 +380,17 @@ class SubmissionService:
                 filename=os.path.basename(output_path),
             )
 
-            # 7) Update metadata (make FillReport JSON-serializable)
             metadata['status'] = 'filled'
-            metadata['output_path'] = output_path
-            if remote_output:
-                metadata['output_storage'] = remote_output
             metadata['filled_at'] = datetime.utcnow().isoformat()
             outputs_meta = metadata.setdefault('outputs', [])
             outputs_meta.append({
                 "filename": os.path.basename(output_path),
-                "path": os.path.relpath(output_path, start=self.storage_dir),
                 "generated_at": metadata['filled_at'],
                 "url": remote_output.get("public_url") if remote_output else None,
                 "storage": remote_output,
             })
+            if remote_output:
+                metadata['output_storage'] = remote_output
             metadata['fill_report'] = {
                 "success": fill_report.success,
                 "coverage": fill_report.coverage,
@@ -582,91 +400,19 @@ class SubmissionService:
                 "errors": fill_report.errors,
             }
 
-            with open(metadata_path, 'w') as f:
-                json.dump(metadata, f, indent=2)
             self._persist_submission_metadata(metadata)
-
-            client_submission_path = metadata.get("client_submission_path")
-            if client_submission_path:
-                client_meta_path = os.path.join(client_submission_path, "metadata.json")
-                if os.path.exists(client_meta_path):
-                    with open(client_meta_path, 'r') as f:
-                        client_metadata = json.load(f)
-                else:
-                    client_metadata = {
-                        "submission_id": submission_id,
-                        "client_id": metadata.get("client_id"),
-                        "name": metadata.get("name"),
-                        "inputs": [],
-                        "outputs": [],
-                    }
-                package_outputs = client_metadata.setdefault("outputs", [])
-                package_outputs.append({
-                    "filename": os.path.basename(output_path),
-                    "path": os.path.relpath(output_path, start=self.storage_dir),
-                    "generated_at": metadata['filled_at'],
-                    "url": remote_output.get("public_url") if remote_output else None,
-                    "storage": remote_output,
-                })
-                client_metadata["status"] = metadata["status"]
-                client_metadata["updated_at"] = metadata["filled_at"]
-                with open(client_meta_path, 'w') as f:
-                    json.dump(client_metadata, f, indent=2)
-
             return fill_report
 
         except Exception as e:
             print("error occured in fill_pdf", str(e))
             raise
+        finally:
+            if temp_output_dir:
+                shutil.rmtree(temp_output_dir, ignore_errors=True)
 
     
-    def get_output_path(self, submission_id: str):
-        """
-        Get output PDF path.
-        
-        Args:
-            submission_id: Submission identifier
-        
-        Returns:
-            Path to filled PDF
-        """
-        metadata = self.get_submission_metadata(submission_id)
-        if metadata and metadata.get('output_path'):
-            output_path = metadata['output_path']
-            if not os.path.isabs(output_path):
-                backend_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                output_path = os.path.join(backend_root, output_path)
-            return output_path
-        # Fallback to legacy path
-        output_path = os.path.join(self.outputs_dir, f"{submission_id}_filled.pdf")
-
-        return output_path
-
-    def _rel_storage_path(self, path: Optional[str]) -> Optional[str]:
-        if not path:
-            return None
-        try:
-            return os.path.relpath(path, start=self.storage_dir)
-        except Exception:
-            return path
-
-    def _abs_storage_path(self, path: Optional[str]) -> Optional[str]:
-        if not path:
-            return None
-        if os.path.isabs(path):
-            return path
-        return os.path.join(self.storage_dir, path)
-
     def _load_input_data(self, entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        data_path = entry.get("data_path")
-        abs_path = self._abs_storage_path(data_path)
-        if not abs_path or not os.path.exists(abs_path):
-            return None
-        try:
-            with open(abs_path, 'r') as f:
-                return json.load(f)
-        except Exception:
-            return None
+        return entry.get("data")
 
     def _merge_input_data(self, inputs: List[Dict[str, Any]]) -> Dict[str, Any]:
         merged: Dict[str, Any] = {}
@@ -723,105 +469,90 @@ class SubmissionService:
         if getattr(self.db, "enabled", False):
             self.db.save_submission_metadata(metadata)
 
+    def _download_storage_entry(self, storage_info: Optional[Dict[str, Any]]) -> Optional[bytes]:
+        if not storage_info:
+            return None
+        path = storage_info.get("path")
+        if not path:
+            return None
+        return self.remote_storage.download_file(path)
+
+    def _get_input_storage(self, metadata: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        storage = metadata.get("upload_storage")
+        if storage:
+            return storage
+        for entry in metadata.get("inputs", []):
+            storage = entry.get("storage")
+            if storage:
+                return storage
+        return None
+
+    def _get_output_storage(self, metadata: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        storage = metadata.get("output_storage")
+        if storage:
+            return storage
+        for entry in metadata.get("outputs", []):
+            storage = entry.get("storage")
+            if storage:
+                return storage
+        return None
+
+    def get_original_pdf_bytes(self, submission_id: str) -> Optional[bytes]:
+        metadata = self.get_submission_metadata(submission_id)
+        if not metadata:
+            return None
+        storage = self._get_input_storage(metadata)
+        return self._download_storage_entry(storage)
+
+    def get_filled_pdf_bytes(self, submission_id: str) -> Optional[bytes]:
+        metadata = self.get_submission_metadata(submission_id)
+        if not metadata:
+            return None
+        storage = self._get_output_storage(metadata)
+        return self._download_storage_entry(storage)
+
     def create_submission(
-        self, 
-        client_id: str, 
-        name: str, 
-        template_type: Optional[str] = None
+        self,
+        client_id: str,
+        name: str,
+        template_type: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Create a submission under a client.
-        
-        Args:
-            client_id: Client identifier
-            name: Submission name (e.g., "2025 Property Renewal")
-            template_type: Optional template type ('property_renewal', 'wc_quote', etc.)
-            
-        Returns:
-            Submission metadata with template information
         """
         submission_id = str(uuid.uuid4())
-        
-        # Get client submissions path
-        submissions_path = self.client_service.get_submissions_path(client_id)
-        submission_path = os.path.join(submissions_path, submission_id)
-        
-        # Create submission structure
-        os.makedirs(os.path.join(submission_path, 'inputs'), exist_ok=True)
-        os.makedirs(os.path.join(submission_path, 'outputs'), exist_ok=True)
-        
-        # Get template metadata if template_type provided
+        timestamp = datetime.utcnow().isoformat()
+
         template_metadata = None
         if template_type and template_type in TEMPLATES:
             template = get_template(template_type)
             template_metadata = {
-                'template_id': template.template_id,
-                'name': template.name,
-                'description': template.description,
-                'expected_documents': template.expected_documents,
-                'suggested_forms': template.suggested_forms,
-                'expected_fields': template.expected_fields
+                "template_id": template.template_id,
+                "name": template.name,
+                "description": template.description,
+                "expected_documents": template.expected_documents,
+                "suggested_forms": template.suggested_forms,
+                "expected_fields": template.expected_fields,
             }
-        
-        # Create metadata
+
         metadata = {
-            'submission_id': submission_id,
-            'client_id': client_id,
-            'name': name,
-            'template_type': template_type,
-            'template_metadata': template_metadata,  # Include full template info
-            'created_at': datetime.utcnow().isoformat(),
-            'updated_at': datetime.utcnow().isoformat(),
-            'status': 'created',
-            'file_count': 0,
-            'inputs': [],
-            'outputs': []
-        }
-        
-        # Save metadata
-        metadata_path = os.path.join(submission_path, 'metadata.json')
-        with open(metadata_path, 'w') as f:
-            json.dump(metadata, f, indent=2)
-
-        data_json_path = os.path.join(self.data_dir, f"{submission_id}.json")
-        with open(data_json_path, 'w') as f:
-            json.dump({}, f, indent=2)
-
-        data_metadata = {
             "submission_id": submission_id,
             "client_id": client_id,
-            "folder_id": None,
-            "filename": None,
             "name": name,
-            "upload_path": None,
-            "data_path": data_json_path,
-            "client_submission_path": submission_path,
-            "outputs_dir": os.path.join(submission_path, 'outputs'),
-            "uploaded_at": None,
-            "updated_at": metadata['updated_at'],
-            "status": 'created',
             "template_type": template_type,
             "template_metadata": template_metadata,
-            "inputs": [],
+            "created_at": timestamp,
+            "updated_at": timestamp,
+            "status": "created",
             "file_count": 0,
+            "inputs": [],
+            "outputs": [],
+            "data": {},
         }
 
-        global_meta_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
-        with open(global_meta_path, 'w') as f:
-            json.dump(data_metadata, f, indent=2)
-        self._persist_submission_metadata(data_metadata)
-        
-        # Add to client
+        self._persist_submission_metadata(metadata)
         self.client_service.add_submission(client_id, submission_id)
-        
         return metadata
-
-    def get_submission_path(self, client_id: str, submission_id: str) -> str:
-        """Get path to submission directory."""
-        return os.path.join(
-            self.client_service.get_submissions_path(client_id),
-            submission_id
-        )
 
 
     def get_version_history(self, submission_id: str):
@@ -979,17 +710,12 @@ class SubmissionService:
         metadata = self.get_submission_metadata(submission_id)
         if not metadata:
             raise ValueError("Submission not found")
-        metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
 
-        # Update status and audit fields
         metadata['status'] = status
         metadata['workflow_status'] = status  # optional alias expected by clients
         metadata['updated_at'] = datetime.utcnow().isoformat()
         metadata['updated_by'] = user
 
-        # Persist changes
-        with open(metadata_path, 'w') as f:
-            json.dump(metadata, f, indent=2)
         self._persist_submission_metadata(metadata)
 
         return {'submission_id': submission_id, 'status': status}

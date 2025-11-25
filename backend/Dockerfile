@@ -58,10 +58,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Create storage directories with proper permissions
-RUN mkdir -p storage/uploads storage/outputs storage/data storage/folders && \
-    chmod -R 755 storage
-
 # Expose port (Railway will set $PORT dynamically)
 EXPOSE 8000
 

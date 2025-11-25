@@ -4,8 +4,6 @@ Client service - manages client CRUD operations.
 A client contains multiple submissions (formerly folders).
 """
 
-import os
-import json
 import uuid
 from datetime import datetime
 from typing import List, Dict, Any, Optional
@@ -17,23 +15,11 @@ class ClientService:
     """
     Service for managing clients.
     
-    Each client is a top-level entity that contains submissions.
-    
-    Directory structure:
-    storage/clients/
-        {client_id}/
-            metadata.json  # Client info
-            submissions/
-                {submission_id}/  # Individual submission folders
-                    metadata.json
-                    inputs/
-                    outputs/
+    Each client is a top-level entity that contains submissions stored remotely.
     """
     
     def __init__(self):
-        """Initialize service with storage path."""
-        self.storage_dir = 'storage/clients'
-        os.makedirs(self.storage_dir, exist_ok=True)
+        """Initialize service with Supabase metadata store."""
         self.db = SupabaseDatabaseService()
         if not self.db.enabled:
             raise RuntimeError("Supabase database must be configured for client metadata storage.")
@@ -58,10 +44,6 @@ class ClientService:
             Client metadata dictionary
         """
         client_id = str(uuid.uuid4())
-        client_path = os.path.join(self.storage_dir, client_id)
-        
-        # Create client structure
-        os.makedirs(os.path.join(client_path, 'submissions'), exist_ok=True)
         
         # Create metadata
         metadata = {
@@ -146,11 +128,6 @@ class ClientService:
         if metadata is None:
             return False
 
-        client_path = os.path.join(self.storage_dir, client_id)
-        if os.path.exists(client_path):
-            import shutil
-            shutil.rmtree(client_path)
-
         for submission_id in metadata.get('submissions', []):
             try:
                 self.db.delete_submission_metadata(submission_id)
@@ -182,10 +159,8 @@ class ClientService:
         if not client_id:
             return submissions
 
-        submissions_dir = self.get_submissions_path(client_id)
-
         for submission_id in client_metadata.get('submissions', []):
-            package = self._load_submission_package(client_metadata, submissions_dir, submission_id)
+            package = self._load_submission_package(client_metadata, submission_id)
             if package:
                 submissions.append(package)
 
@@ -194,7 +169,6 @@ class ClientService:
     def _load_submission_package(
         self,
         client_metadata: Dict[str, Any],
-        submissions_dir: str,
         submission_id: str,
     ) -> Optional[Dict[str, Any]]:
         metadata = self.db.get_submission_metadata(submission_id)
@@ -236,26 +210,4 @@ class ClientService:
             self._persist_client_metadata(metadata)
         return True
     
-    def get_submissions_path(self, client_id: str) -> str:
-        """
-        Get path to client's submissions directory.
-        
-        Args:
-            client_id: Client identifier
-            
-        Returns:
-            Path to submissions directory
-        """
-        return os.path.join(self.storage_dir, client_id, 'submissions')
-    
-    def get_client_path(self, client_id: str) -> str:
-        """
-        Get client directory path.
-        
-        Args:
-            client_id: Client identifier
-            
-        Returns:
-            Absolute path to client directory
-        """
-        return os.path.join(self.storage_dir, client_id)
+    # Legacy path helpers removed; clients/submissions now live entirely in Supabase.

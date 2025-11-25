@@ -47,14 +47,8 @@ def create_app():
     })
     # Configuration
     app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
-    app.config['UPLOAD_FOLDER'] = 'storage/uploads'
-    app.config['OUTPUT_FOLDER'] = 'storage/outputs'
+
     
-    # Create storage directories
-    os.makedirs('storage/uploads', exist_ok=True)
-    os.makedirs('storage/outputs', exist_ok=True)
-    os.makedirs('storage/data', exist_ok=True)
-    os.makedirs('storage/folders', exist_ok=True)
     
  
     @app.route('/')

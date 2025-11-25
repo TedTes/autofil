@@ -111,16 +111,11 @@ def get_submission(submission_id):
         if not submission:
             return jsonify({"error": "Submission not found"}), 404
 
-        metadata_path = os.path.join("storage/data", f"{submission_id}_meta.json")
-        field_confidence = field_hints = extraction_issues = suggested_fixes = {}
-
-        if os.path.exists(metadata_path):
-            with open(metadata_path, "r") as f:
-                metadata = json.load(f)
-                field_confidence = metadata.get("field_confidence", {})
-                field_hints = metadata.get("field_hints", {})
-                extraction_issues = metadata.get("extraction_issues", {})
-                suggested_fixes = metadata.get("suggested_fixes", {})
+        metadata = submission_service.get_submission_metadata(submission_id) or {}
+        field_confidence = metadata.get("field_confidence", {})
+        field_hints = metadata.get("field_hints", {})
+        extraction_issues = metadata.get("extraction_issues", {})
+        suggested_fixes = metadata.get("suggested_fixes", {})
 
         return jsonify({
             "success": True,
@@ -206,42 +201,27 @@ def fill_pdf(submission_id):
 def download_pdf(submission_id):
     """Download the filled PDF for a submission."""
     try:
-        file_path = submission_service.get_output_path(submission_id)
-        if file_path and os.path.exists(file_path):
-            return send_file(
-                file_path,
-                mimetype="application/pdf",
-                as_attachment=True,
-                download_name=f"{submission_id}_filled.pdf",
-            )
-
         metadata = submission_service.get_submission_metadata(submission_id)
-        if metadata:
-            outputs = metadata.get("outputs") or []
-            remote_storage = metadata.get("output_storage")
-            if not remote_storage:
-                remote_storage = next(
-                    (entry.get("storage") for entry in outputs if entry.get("storage")),
-                    None,
-                )
-            if remote_storage and remote_storage.get("path"):
-                file_bytes = submission_service.remote_storage.download_file(remote_storage["path"])
-                if file_bytes:
-                    buffer = io.BytesIO(file_bytes)
-                    buffer.seek(0)
-                    filename = next(
-                        (entry.get("filename") for entry in outputs if entry.get("storage")),
-                        None,
-                    ) or f"{submission_id}_filled.pdf"
-                    return send_file(
-                        buffer,
-                        mimetype=remote_storage.get("content_type") or "application/pdf",
-                        as_attachment=True,
-                        download_name=filename,
-                    )
+        if not metadata:
+            return jsonify({"error": "Submission not found"}), 404
 
-        print(f"File not found for submission {submission_id}")
-        return jsonify({"error": "File not found"}), 404
+        file_bytes = submission_service.get_filled_pdf_bytes(submission_id)
+        if not file_bytes:
+            return jsonify({"error": "File not found"}), 404
+
+        outputs = metadata.get("outputs") or []
+        filename = next(
+            (entry.get("filename") for entry in outputs if entry.get("filename")),
+            None,
+        ) or f"{submission_id}_filled.pdf"
+        buffer = io.BytesIO(file_bytes)
+        buffer.seek(0)
+        return send_file(
+            buffer,
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=filename,
+        )
     except Exception as e:
         print(f"Download error: {str(e)}")
         return jsonify({"error": str(e)}), 500
@@ -255,35 +235,15 @@ def preview_input_pdf(submission_id):
         if not metadata:
             return jsonify({"error": "Submission metadata not found"}), 404
 
-        file_path = metadata.get("upload_path")
-        if file_path and not os.path.isabs(file_path):
-            file_path = os.path.abspath(file_path)
-
-        if file_path and os.path.exists(file_path):
-            with open(file_path, "rb") as f:
-                pdf_data = f.read()
-            response = Response(pdf_data, mimetype="application/pdf")
+        file_bytes = submission_service.get_original_pdf_bytes(submission_id)
+        if file_bytes:
+            response = Response(
+                file_bytes,
+                mimetype="application/pdf",
+            )
             response.headers["Content-Disposition"] = "inline"
             response.headers["Cache-Control"] = "no-store"
             return response
-
-        remote_storage = metadata.get("upload_storage")
-        if not remote_storage:
-            remote_storage = next(
-                (entry.get("storage") for entry in metadata.get("inputs", []) if entry.get("storage")),
-                None,
-            )
-
-        if remote_storage and remote_storage.get("path"):
-            file_bytes = submission_service.remote_storage.download_file(remote_storage["path"])
-            if file_bytes:
-                response = Response(
-                    file_bytes,
-                    mimetype=remote_storage.get("content_type") or "application/pdf",
-                )
-                response.headers["Content-Disposition"] = "inline"
-                response.headers["Cache-Control"] = "no-store"
-                return response
 
         return jsonify({"error": "File not found"}), 404
     except Exception as e:
@@ -297,36 +257,19 @@ def preview_input_pdf(submission_id):
 def preview_output_pdf(submission_id):
     """Preview the filled PDF inline (for iframes)."""
     try:
-        file_path = submission_service.get_output_path(submission_id)
-        if file_path and not os.path.isabs(file_path):
-            file_path = os.path.abspath(file_path)
+        metadata = submission_service.get_submission_metadata(submission_id)
+        if not metadata:
+            return jsonify({"error": "Submission metadata not found"}), 404
 
-        if file_path and os.path.exists(file_path):
-            with open(file_path, "rb") as f:
-                pdf_data = f.read()
-            response = Response(pdf_data, mimetype="application/pdf")
+        file_bytes = submission_service.get_filled_pdf_bytes(submission_id)
+        if file_bytes:
+            response = Response(
+                file_bytes,
+                mimetype="application/pdf",
+            )
             response.headers["Content-Disposition"] = "inline"
             response.headers["Cache-Control"] = "no-store"
             return response
-
-        metadata = submission_service.get_submission_metadata(submission_id)
-        if metadata:
-            remote_storage = metadata.get("output_storage")
-            if not remote_storage:
-                remote_storage = next(
-                    (entry.get("storage") for entry in metadata.get("outputs", []) if entry.get("storage")),
-                    None,
-                )
-            if remote_storage and remote_storage.get("path"):
-                file_bytes = submission_service.remote_storage.download_file(remote_storage["path"])
-                if file_bytes:
-                    response = Response(
-                        file_bytes,
-                        mimetype=remote_storage.get("content_type") or "application/pdf",
-                    )
-                    response.headers["Content-Disposition"] = "inline"
-                    response.headers["Cache-Control"] = "no-store"
-                    return response
 
         return jsonify({"error": "File not found"}), 404
     except Exception as e:
@@ -647,11 +590,16 @@ def update_submission_status(submission_id):
 def list_all_submissions():
     """List submissions with pagination and optional status filter."""
     try:
+  
         limit = int(request.args.get("limit", 100))
+        print("1")
         offset = int(request.args.get("offset", 0))
+        print("11")
         status_filter = request.args.get("status")
+        print("111")
 
         all_subs = submission_service.get_all_submissions()
+ 
         if status_filter:
             statuses = [s.strip() for s in status_filter.split(",")]
             all_subs = [s for s in all_subs if s.get("status") in statuses]
@@ -681,6 +629,7 @@ def list_all_submissions():
             "message": "Submissions retrieved successfully",
         }), 200
     except Exception as e:
+        print("error in list_all_submissions method", str(e))
         return jsonify({"error": str(e)}), 500
 
 

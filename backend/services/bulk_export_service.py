@@ -79,10 +79,8 @@ class BulkExportService:
                         if not submission:
                             raise FileNotFoundError("Submission not found")
 
-                        # Get filled PDF path
-                        output_path = self.submission_service.get_output_path(submission_id)
-
-                        if not output_path or not os.path.exists(output_path):
+                        pdf_bytes = self.submission_service.get_filled_pdf_bytes(submission_id)
+                        if not pdf_bytes:
                             raise FileNotFoundError("Filled PDF not found")
 
                         original_filename = submission.get("filename", submission_id)
@@ -91,8 +89,7 @@ class BulkExportService:
 
                         arcname = f"{original_filename}_filled.pdf"
 
-                        # Add PDF to ZIP
-                        zipf.write(output_path, arcname)
+                        zipf.writestr(arcname, pdf_bytes)
 
                         results.append({
                             "submission_id": submission_id,

@@ -89,11 +89,11 @@ def bulk_download_zip():
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
             for sid in ids:
                 try:
-                    file_path = submission_service.get_output_path(sid)
-                    if os.path.exists(file_path):
+                    pdf_bytes = submission_service.get_filled_pdf_bytes(sid)
+                    if pdf_bytes:
                         meta = submission_service.get_submission(sid)
                         name = f"{(meta.get('filename') or sid).replace('.pdf','')}_filled.pdf"
-                        zf.write(file_path, name)
+                        zf.writestr(name, pdf_bytes)
                         success += 1
                     else:
                         fail += 1

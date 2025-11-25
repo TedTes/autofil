@@ -10,6 +10,8 @@ import uuid
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
+from services.supabase_db_service import SupabaseDatabaseService
+
 
 class ClientService:
     """
@@ -32,6 +34,18 @@ class ClientService:
         """Initialize service with storage path."""
         self.storage_dir = 'storage/clients'
         os.makedirs(self.storage_dir, exist_ok=True)
+        self.db = SupabaseDatabaseService()
+        if not self.db.enabled:
+            raise RuntimeError("Supabase database must be configured for client metadata storage.")
+
+    def _persist_client_metadata(self, metadata: Dict[str, Any]) -> None:
+        self.db.save_client_metadata(metadata)
+
+    def _require_client_metadata(self, client_id: str) -> Dict[str, Any]:
+        metadata = self.db.get_client_metadata(client_id)
+        if not metadata:
+            raise ValueError("Client not found")
+        return metadata
     
     def create_client(self, name: str) -> Dict[str, Any]:
         """
@@ -59,11 +73,7 @@ class ClientService:
             'submissions': []  # List of submission IDs
         }
         
-        # Save metadata
-        metadata_path = os.path.join(client_path, 'metadata.json')
-        with open(metadata_path, 'w') as f:
-            json.dump(metadata, f, indent=2)
-        
+        self._persist_client_metadata(metadata)
         return metadata
     
     def get_client(self, client_id: str) -> Optional[Dict[str, Any]]:
@@ -76,15 +86,12 @@ class ClientService:
         Returns:
             Client metadata or None if not found
         """
-        metadata_path = os.path.join(self.storage_dir, client_id, 'metadata.json')
-        
-        if not os.path.exists(metadata_path):
+        metadata = self.db.get_client_metadata(client_id)
+        if metadata is None:
             return None
         
-        with open(metadata_path, 'r') as f:
-            metadata = json.load(f)
-        
         # Attach submission package details if available
+        metadata.setdefault('submissions', [])
         metadata['submissions_detailed'] = self._build_submission_packages(metadata)
         return metadata
     
@@ -95,31 +102,11 @@ class ClientService:
         Returns:
             List of client metadata dictionaries
         """
-        clients = []
-        
-        if not os.path.exists(self.storage_dir):
-            return clients
-        
-        for client_name in os.listdir(self.storage_dir):
-            client_path = os.path.join(self.storage_dir, client_name)
-            
-            if not os.path.isdir(client_path):
-                continue
-            
-            metadata_path = os.path.join(client_path, 'metadata.json')
-            
-            if not os.path.exists(metadata_path):
-                continue
-            
-            with open(metadata_path, 'r') as f:
-                metadata = json.load(f)
-            
+        clients = self.db.list_clients_metadata()
+        for metadata in clients:
+            metadata.setdefault('submissions', [])
             metadata['submissions_detailed'] = self._build_submission_packages(metadata)
-            clients.append(metadata)
-        
-        # Sort by name ascending
         clients.sort(key=lambda x: x.get('name', '').lower())
-        
         return clients
     
     def update_client(self, client_id: str, name: str) -> Optional[Dict[str, Any]]:
@@ -133,19 +120,15 @@ class ClientService:
         Returns:
             Updated client metadata or None if not found
         """
-        metadata_path = os.path.join(self.storage_dir, client_id, 'metadata.json')
-        
-        if not os.path.exists(metadata_path):
+        try:
+            metadata = self._require_client_metadata(client_id)
+        except ValueError:
             return None
-        
-        with open(metadata_path, 'r') as f:
-            metadata = json.load(f)
-        
+
         metadata['name'] = name
         metadata['updated_at'] = datetime.utcnow().isoformat()
         
-        with open(metadata_path, 'w') as f:
-            json.dump(metadata, f, indent=2)
+        self._persist_client_metadata(metadata)
         
         return metadata
     
@@ -159,45 +142,38 @@ class ClientService:
         Returns:
             True if deleted, False if not found
         """
-        client_path = os.path.join(self.storage_dir, client_id)
-        
-        if not os.path.exists(client_path):
+        metadata = self.db.get_client_metadata(client_id)
+        if metadata is None:
             return False
-        
-        # Delete client and all contents (including all submissions)
-        import shutil
-        shutil.rmtree(client_path)
-        
+
+        client_path = os.path.join(self.storage_dir, client_id)
+        if os.path.exists(client_path):
+            import shutil
+            shutil.rmtree(client_path)
+
+        for submission_id in metadata.get('submissions', []):
+            try:
+                self.db.delete_submission_metadata(submission_id)
+            except Exception:
+                pass
+        self.db.delete_client_metadata(client_id)
         return True
     
     def add_submission(self, client_id: str, submission_id: str) -> bool:
         """
         Add a submission ID to client's submissions list.
-        
-        Args:
-            client_id: Client identifier
-            submission_id: Submission identifier
-            
-        Returns:
-            True if added, False if client not found
         """
-        metadata_path = os.path.join(self.storage_dir, client_id, 'metadata.json')
-        
-        if not os.path.exists(metadata_path):
+        try:
+            metadata = self._require_client_metadata(client_id)
+        except ValueError:
             return False
-        
-        with open(metadata_path, 'r') as f:
-            metadata = json.load(f)
-        
-        # Add submission ID if not already present
-        if submission_id not in metadata['submissions']:
-            metadata['submissions'].append(submission_id)
-            metadata['submission_count'] = len(metadata['submissions'])
+
+        submissions = metadata.setdefault('submissions', [])
+        if submission_id not in submissions:
+            submissions.append(submission_id)
+            metadata['submission_count'] = len(submissions)
             metadata['updated_at'] = datetime.utcnow().isoformat()
-            
-            with open(metadata_path, 'w') as f:
-                json.dump(metadata, f, indent=2)
-        
+            self._persist_client_metadata(metadata)
         return True
 
     def _build_submission_packages(self, client_metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -207,8 +183,6 @@ class ClientService:
             return submissions
 
         submissions_dir = self.get_submissions_path(client_id)
-        if not os.path.exists(submissions_dir):
-            return submissions
 
         for submission_id in client_metadata.get('submissions', []):
             package = self._load_submission_package(client_metadata, submissions_dir, submission_id)
@@ -223,36 +197,12 @@ class ClientService:
         submissions_dir: str,
         submission_id: str,
     ) -> Optional[Dict[str, Any]]:
-        submission_path = os.path.join(submissions_dir, submission_id)
-        if not os.path.isdir(submission_path):
+        metadata = self.db.get_submission_metadata(submission_id)
+        if not metadata:
             return None
 
-        metadata_path = os.path.join(submission_path, 'metadata.json')
-        metadata: Dict[str, Any] = {}
-        if os.path.exists(metadata_path):
-            with open(metadata_path, 'r') as f:
-                metadata = json.load(f)
-
-        inputs_dir = os.path.join(submission_path, 'inputs')
-        outputs_dir = os.path.join(submission_path, 'outputs')
-
-        def list_files(path: str) -> List[Dict[str, Any]]:
-            files: List[Dict[str, Any]] = []
-            if not os.path.exists(path):
-                return files
-            for filename in sorted(os.listdir(path)):
-                full_path = os.path.join(path, filename)
-                if os.path.isfile(full_path):
-                    rel_path = os.path.relpath(full_path, start=submission_path)
-                    files.append({
-                        'filename': filename,
-                        'path': rel_path,
-                        'url': None,
-                    })
-            return files
-
-        inputs = metadata.get('inputs') or list_files(inputs_dir)
-        outputs = metadata.get('outputs') or list_files(outputs_dir)
+        inputs = metadata.get('inputs') or []
+        outputs = metadata.get('outputs') or []
 
         uploaded_at = metadata.get('uploaded_at') or metadata.get('created_at')
         updated_at = metadata.get('updated_at') or uploaded_at
@@ -272,31 +222,18 @@ class ClientService:
     def remove_submission(self, client_id: str, submission_id: str) -> bool:
         """
         Remove a submission ID from client's submissions list.
-        
-        Args:
-            client_id: Client identifier
-            submission_id: Submission identifier
-            
-        Returns:
-            True if removed, False if client not found
         """
-        metadata_path = os.path.join(self.storage_dir, client_id, 'metadata.json')
-        
-        if not os.path.exists(metadata_path):
+        try:
+            metadata = self._require_client_metadata(client_id)
+        except ValueError:
             return False
-        
-        with open(metadata_path, 'r') as f:
-            metadata = json.load(f)
-        
-        # Remove submission ID if present
-        if submission_id in metadata['submissions']:
-            metadata['submissions'].remove(submission_id)
-            metadata['submission_count'] = len(metadata['submissions'])
+
+        submissions = metadata.setdefault('submissions', [])
+        if submission_id in submissions:
+            submissions.remove(submission_id)
+            metadata['submission_count'] = len(submissions)
             metadata['updated_at'] = datetime.utcnow().isoformat()
-            
-            with open(metadata_path, 'w') as f:
-                json.dump(metadata, f, indent=2)
-        
+            self._persist_client_metadata(metadata)
         return True
     
     def get_submissions_path(self, client_id: str) -> str:

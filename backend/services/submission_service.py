@@ -23,6 +23,7 @@ from services.form_generator import FormGenerator
 from services.export_service import ExportService
 from extraction.core import UniversalFileLoader
 from services.supabase_storage_service import SupabaseStorageService
+from services.supabase_db_service import SupabaseDatabaseService
 
 class SubmissionService:
     """
@@ -57,6 +58,9 @@ class SubmissionService:
             strategy='highest_confidence'
     )
         self.remote_storage = SupabaseStorageService()
+        self.db = SupabaseDatabaseService()
+        if not self.db.enabled:
+            raise RuntimeError("Supabase database must be configured for submission metadata storage.")
     def upload_and_extract(
         self,
         file,
@@ -94,10 +98,9 @@ class SubmissionService:
                 progress_callback(submission_id, 0, 'starting', 'Initializing upload...')
 
             if is_existing_submission:
-                if not os.path.exists(metadata_path):
+                metadata = self.get_submission_metadata(submission_id)
+                if not metadata:
                     raise ValueError("Submission not found")
-                with open(metadata_path, 'r') as f:
-                    metadata = json.load(f)
 
                 existing_client_id = metadata.get("client_id")
                 if existing_client_id and client_id and existing_client_id != client_id:
@@ -273,6 +276,7 @@ class SubmissionService:
             metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
             with open(metadata_path, 'w') as f:
                 json.dump(metadata, f, indent=2)
+            self._persist_submission_metadata(metadata)
            
             if client_submission_path:
                 client_meta_path = os.path.join(client_submission_path, "metadata.json")
@@ -306,6 +310,10 @@ class SubmissionService:
                 client_meta_path = os.path.join(client_submission_path, "metadata.json")
                 with open(client_meta_path, 'w') as f:
                     json.dump(client_metadata, f, indent=2)
+                try:
+                    self.client_service._persist_client_metadata(client_metadata)  # type: ignore[attr-defined]
+                except AttributeError:
+                    pass
            
             # ── link to folder (if any) ─────────────────────────────────────────
             if folder_id:
@@ -327,11 +335,7 @@ class SubmissionService:
             raise
     
     def get_submission_metadata(self, submission_id: str) -> Optional[Dict[str, Any]]:
-        metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
-        if not os.path.exists(metadata_path):
-            return None
-        with open(metadata_path, 'r') as f:
-            return json.load(f)
+        return self.db.get_submission_metadata(submission_id)
 
     def get_submission(self, submission_id: str, client_id: Optional[str] = None):
         """
@@ -393,16 +397,14 @@ class SubmissionService:
         - Updates last_edited_at / last_edited_by.
         """
         data_path = os.path.join(self.data_dir, f"{submission_id}.json")
+        metadata = self.get_submission_metadata(submission_id)
+        if not metadata or not os.path.exists(data_path):
+            raise ValueError("Submission not found")
         metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
 
-        if not os.path.exists(data_path) or not os.path.exists(metadata_path):
-            raise ValueError("Submission not found")
-
-        # Load current data (for versioning / audit)
         with open(data_path, 'r') as f:
             previous_data = json.load(f)
 
-        # Create version BEFORE overwriting, so we keep the old snapshot
         version_id = self.version_service.create_version(
             submission_id=submission_id,
             data=previous_data,
@@ -411,13 +413,8 @@ class SubmissionService:
             notes=notes or 'Manual data update',
         )
 
-        # Write new data
         with open(data_path, 'w') as f:
             json.dump(data, f, indent=2)
-
-        # Update metadata (but DO NOT touch existing status)
-        with open(metadata_path, 'r') as f:
-            metadata = json.load(f)
 
         metadata['current_version_id'] = version_id
         metadata['last_edited_at'] = datetime.utcnow().isoformat()
@@ -425,6 +422,7 @@ class SubmissionService:
 
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
+        self._persist_submission_metadata(metadata)
 
         # Return fresh snapshot
         updated = self.get_submission(submission_id)
@@ -434,14 +432,11 @@ class SubmissionService:
         """
         Delete a submission's files and metadata, updating folder/client references.
         """
+        metadata = self.get_submission_metadata(submission_id)
+        if not metadata:
+            return False
         metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
         data_path = os.path.join(self.data_dir, f"{submission_id}.json")
-
-        if not os.path.exists(metadata_path):
-            return False
-
-        with open(metadata_path, 'r') as f:
-            metadata = json.load(f)
 
         upload_path = metadata.get("upload_path")
         if upload_path and os.path.exists(upload_path):
@@ -478,6 +473,8 @@ class SubmissionService:
         for path in [metadata_path, data_path]:
             if path and os.path.exists(path):
                 os.remove(path)
+        if getattr(self.db, "enabled", False):
+            self.db.delete_submission_metadata(submission_id)
 
         folder_id = metadata.get("folder_id")
         if folder_id:
@@ -509,12 +506,10 @@ class SubmissionService:
         """
         try:
             # 1) Load metadata
-            metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
-            if not os.path.exists(metadata_path):
+            metadata = self.get_submission_metadata(submission_id)
+            if not metadata:
                 raise ValueError("Submission not found")
-
-            with open(metadata_path, 'r') as f:
-                metadata = json.load(f)
+            metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
 
             inputs_meta = metadata.get("inputs", [])
             if input_ids:
@@ -593,6 +588,7 @@ class SubmissionService:
 
             with open(metadata_path, 'w') as f:
                 json.dump(metadata, f, indent=2)
+            self._persist_submission_metadata(metadata)
 
             client_submission_path = metadata.get("client_submission_path")
             if client_submission_path:
@@ -620,6 +616,10 @@ class SubmissionService:
                 client_metadata["updated_at"] = metadata["filled_at"]
                 with open(client_meta_path, 'w') as f:
                     json.dump(client_metadata, f, indent=2)
+                try:
+                    self.client_service._persist_client_metadata(client_metadata)  # type: ignore[attr-defined]
+                except AttributeError:
+                    pass
 
             return fill_report
 
@@ -638,19 +638,13 @@ class SubmissionService:
         Returns:
             Path to filled PDF
         """
-        # Check metadata for folder-based path
-        metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
-        
-        if os.path.exists(metadata_path):
-            with open(metadata_path, 'r') as f:
-                metadata = json.load(f)
-            
-            if 'output_path' in metadata:
-                output_path =  metadata['output_path']
-                if not os.path.isabs(output_path):
-                    backend_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                    output_path = os.path.join(backend_root, output_path)
-                return output_path
+        metadata = self.get_submission_metadata(submission_id)
+        if metadata and metadata.get('output_path'):
+            output_path = metadata['output_path']
+            if not os.path.isabs(output_path):
+                backend_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                output_path = os.path.join(backend_root, output_path)
+            return output_path
         # Fallback to legacy path
         output_path = os.path.join(self.outputs_dir, f"{submission_id}_filled.pdf")
 
@@ -731,6 +725,11 @@ class SubmissionService:
             return upload_info
         except Exception as e:
             print("error from uploading to remote ", str(e))
+        return None
+
+    def _persist_submission_metadata(self, metadata: Dict[str, Any]) -> None:
+        if getattr(self.db, "enabled", False):
+            self.db.save_submission_metadata(metadata)
 
     def create_submission(
         self, 
@@ -818,6 +817,7 @@ class SubmissionService:
         global_meta_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
         with open(global_meta_path, 'w') as f:
             json.dump(data_metadata, f, indent=2)
+        self._persist_submission_metadata(data_metadata)
         
         # Add to client
         self.client_service.add_submission(client_id, submission_id)
@@ -937,19 +937,13 @@ class SubmissionService:
             List of all submissions
         """
         submissions = []
-        
-        if not os.path.exists(self.data_dir):
-            return submissions
-        
-        for filename in os.listdir(self.data_dir):
-            if filename.endswith('_meta.json'):
-                submission_id = filename.replace('_meta.json', '')
-                try:
-                    submission = self.get_submission(submission_id)
-                    if submission:
-                        submissions.append(submission)
-                except:
-                    continue
+        for metadata in self.db.list_submissions_metadata():
+            submission_id = metadata.get("submission_id")
+            if not submission_id:
+                continue
+            submission = self.get_submission(submission_id)
+            if submission:
+                submissions.append(submission)
         return submissions
 
     def get_submissions_by_ids(self, submission_ids: List[str]) -> List[Dict[str, Any]]:
@@ -990,13 +984,10 @@ class SubmissionService:
         Raises:
             ValueError: If the submission does not exist.
         """
-        metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
-        if not os.path.exists(metadata_path):
+        metadata = self.get_submission_metadata(submission_id)
+        if not metadata:
             raise ValueError("Submission not found")
-
-        # Load metadata
-        with open(metadata_path, 'r') as f:
-            metadata = json.load(f)
+        metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
 
         # Update status and audit fields
         metadata['status'] = status
@@ -1007,6 +998,7 @@ class SubmissionService:
         # Persist changes
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
+        self._persist_submission_metadata(metadata)
 
         return {'submission_id': submission_id, 'status': status}
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import {
   Download,
   Settings,
@@ -9,7 +9,6 @@ import {
   X,
  Save,  Loader2 ,
   TrendingUp,
-  AlertTriangle,
   FileText,
   LayoutDashboard,
   Users,  
@@ -34,6 +33,7 @@ import {
 } from '@/lib/api-client'
 
 import type { Folder, ViewType,  FileDetailActions,ViewDataMap, SubmissionStats } from '@/types'
+import { usePathname, useRouter, useSearchParams, type ReadonlyURLSearchParams } from 'next/navigation'
 
 type ViewState = {
   type: ViewType
@@ -47,41 +47,155 @@ interface MainLayoutProps {
 
 type ViewStateData = ViewDataMap[ViewType]
 
+const breadcrumbViewMap: Record<string, ViewType> = {
+  Dashboard: 'dashboard',
+  Documents: 'documents',
+  Upload: 'upload',
+  Clients: 'clients',
+  Submissions: 'submissions',
+  Templates: 'templates',
+  Reports: 'reports',
+  Settings: 'settings',
+  Help: 'help',
+}
 
-interface MainLayoutProps {
-  children?: React.ReactNode
+const NAV_ITEMS: Array<{
+  id: ViewType
+  label: string
+  icon: React.ComponentType<{ className?: string }>
+  route: ViewType
+  badge?: string
+}> = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, route: 'dashboard' },
+  { id: 'documents', label: 'Documents', icon: FolderOpen, route: 'documents' },
+  { id: 'clients', label: 'Clients', icon: Users, route: 'clients' },
+  { id: 'submissions', label: 'Submissions', icon: FileStack, route: 'submissions' },
+  { id: 'templates', label: 'Templates & Forms', icon: FileText, route: 'templates' },
+  { id: 'reports', label: 'Reports', icon: BarChart3, route: 'reports' },
+]
+
+function buildPathFromView(type: ViewType, data?: ViewStateData): string {
+  switch (type) {
+    case 'dashboard':
+      return '/dashboard'
+    case 'documents':
+      return '/dashboard/documents'
+    case 'upload':
+      return '/dashboard/upload'
+    case 'file-detail': {
+      const detail = data as ViewDataMap['file-detail'] | undefined
+      const submissionId = detail?.submissionId
+      if (!submissionId) return '/dashboard/documents'
+      const params = new URLSearchParams()
+      if (detail?.filename) {
+        params.set('filename', detail.filename)
+      }
+      const query = params.toString()
+      return `/dashboard/documents/file/${submissionId}${query ? `?${query}` : ''}`
+    }
+    case 'clients':
+      return '/dashboard/clients'
+    case 'client-detail': {
+      const detail = data as ViewDataMap['client-detail'] | undefined
+      const clientId = detail?.clientId
+      if (!clientId) return '/dashboard/clients'
+      const params = new URLSearchParams()
+      if (detail?.clientName) params.set('name', detail.clientName)
+      const query = params.toString()
+      return `/dashboard/clients/${clientId}${query ? `?${query}` : ''}`
+    }
+    case 'submissions':
+      return '/dashboard/submissions'
+    case 'templates':
+      return '/dashboard/templates'
+    case 'reports':
+      return '/dashboard/reports'
+    case 'settings':
+      return '/dashboard/settings'
+    case 'help':
+      return '/dashboard/help'
+    default:
+      return '/dashboard'
+  }
+}
+
+function mapPathToView(pathname: string, searchParams: URLSearchParams | ReadonlyURLSearchParams): ViewState {
+  const segments = pathname.split('/').filter(Boolean)
+  if (segments[0] !== 'dashboard') {
+    return { type: 'dashboard', breadcrumbs: ['Dashboard'] }
+  }
+  const slug = segments.slice(1)
+  if (slug.length === 0) {
+    return { type: 'dashboard', breadcrumbs: ['Dashboard'] }
+  }
+
+  const [section, ...rest] = slug
+
+  switch (section) {
+    case 'documents': {
+      if (rest[0] === 'upload') {
+        return { type: 'upload', breadcrumbs: ['Dashboard', 'Upload'] }
+      }
+      if (rest[0] === 'file' && rest[1]) {
+        const filename = searchParams.get('filename') ?? undefined
+        return {
+          type: 'file-detail',
+          data: { submissionId: rest[1], filename },
+          breadcrumbs: ['Dashboard', 'Documents', filename || 'File'],
+        }
+      }
+      return { type: 'documents', breadcrumbs: ['Dashboard', 'Documents'] }
+    }
+    case 'upload':
+      return { type: 'upload', breadcrumbs: ['Dashboard', 'Upload'] }
+    case 'clients': {
+      if (rest[0]) {
+        const name = searchParams.get('name') || undefined
+        return {
+          type: 'client-detail',
+          data: { clientId: rest[0], clientName: name },
+          breadcrumbs: ['Dashboard', 'Clients', name || 'Client'],
+        }
+      }
+      return { type: 'clients', breadcrumbs: ['Dashboard', 'Clients'] }
+    }
+    case 'submissions':
+      return { type: 'submissions', breadcrumbs: ['Dashboard', 'Submissions'] }
+    case 'templates':
+      return { type: 'templates', breadcrumbs: ['Dashboard', 'Templates'] }
+    case 'reports':
+      return { type: 'reports', breadcrumbs: ['Dashboard', 'Reports'] }
+    case 'settings':
+      return { type: 'settings', breadcrumbs: ['Dashboard', 'Settings'] }
+    case 'help':
+      return { type: 'help', breadcrumbs: ['Dashboard', 'Help'] }
+    default:
+      return { type: 'dashboard', breadcrumbs: ['Dashboard'] }
+  }
 }
 
 export default function MainLayout({ children }: MainLayoutProps) {
-  const [sidebarOpen, setSidebarOpen] = useState(true)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(false)
   const [fileDetailActions, setFileDetailActions] = useState<FileDetailActions | null>(null)
-  const [currentView, setCurrentView] = useState<ViewState>({
-    type: 'dashboard',
-    breadcrumbs: ['Dashboard'],
-  })
 
   //state to track closing animation
-const [isMobileClosing, setIsMobileClosing] = useState(false)
-const [isMobileOpening, setIsMobileOpening] = useState(false) 
-  // Navigation history for back button
-  const [viewHistory, setViewHistory] = useState<ViewState[]>([])
-
-  // Unsaved changes tracking
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
-  const [showNavigationWarning, setShowNavigationWarning] = useState(false)
-  const [documentsNeedRefresh, setDocumentsNeedRefresh] = useState(false)
-  const [pendingNavigation, setPendingNavigation] = useState<{
-    type: ViewType
-    data?: unknown
-    breadcrumbs?: string[]
-  } | null>(null)
+  const [isMobileClosing, setIsMobileClosing] = useState(false)
+  const [isMobileOpening, setIsMobileOpening] = useState(false)
   const [submissionStats, setSubmissionStats] = useState<SubmissionStats | null>(null)
 
   // Folders data
   const [folders, setFolders] = useState<Folder[]>([])
   const [currentFolder, setCurrentFolder] = useState<Folder | null>(null)
+
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const currentView = useMemo(
+    () => mapPathToView(pathname, searchParams),
+    [pathname, searchParams]
+  )
+  const autoCollapsedRef = useRef(false)
 
   // Load folders once
   useEffect(() => {
@@ -121,36 +235,28 @@ const [isMobileOpening, setIsMobileOpening] = useState(false)
     }
   }, [mobileSidebarOpen])
 
+  useEffect(() => {
+    if (currentView.type === 'file-detail') {
+      if (!desktopSidebarCollapsed) {
+        setDesktopSidebarCollapsed(true)
+        autoCollapsedRef.current = true
+      }
+    } else if (autoCollapsedRef.current) {
+      setDesktopSidebarCollapsed(false)
+      autoCollapsedRef.current = false
+    }
+  }, [currentView.type, desktopSidebarCollapsed])
+
 
   // Enhanced navigation with unsaved changes guard
   const navigateTo = useCallback((
     type: ViewType,
     data?: unknown,
-    breadcrumbs?: string[]
+    _breadcrumbs?: string[]
   ) => {
-    // Check if navigating away from home with unsaved changes
-    if (currentView.type === 'dashboard' && type !== 'dashboard' && hasUnsavedChanges) {
-      setPendingNavigation({ type, data, breadcrumbs })
-      setShowNavigationWarning(true)
-      return
-    }
-
-    // Save current view to history before navigating
-    setViewHistory((prev) => [...prev, currentView])
-
-    setCurrentView({
-      type,
-      data: data as ViewStateData,
-      breadcrumbs: breadcrumbs || [type.charAt(0).toUpperCase() + type.slice(1)],
-    })
-
-    if (type === 'file-detail') {
-      setDesktopSidebarCollapsed(true)
-    } else if (desktopSidebarCollapsed) {
-      // Auto-expand when leaving file detail view
-      setDesktopSidebarCollapsed(false)
-    }
-  }, [currentView, hasUnsavedChanges, desktopSidebarCollapsed])
+    const target = buildPathFromView(type, data as ViewStateData)
+    router.push(target)
+  }, [router])
 
 //  Update close handler
 const handleMobileSidebarClose = () => {
@@ -181,96 +287,24 @@ const handleMobileSidebarClose = () => {
     }
   }, [currentView.breadcrumbs, navigateTo])
 
-  // Handle confirmed navigation (from warning dialog)
-  const handleConfirmNavigation = useCallback(() => {
-    if (pendingNavigation) {
-      // Save current view to history
-      setViewHistory((prev) => [...prev, currentView])
-
-      // Navigate to pending view
-      setCurrentView({
-        type: pendingNavigation.type,
-        data: pendingNavigation.data as ViewStateData,
-        breadcrumbs: pendingNavigation.breadcrumbs || [
-          pendingNavigation.type.charAt(0).toUpperCase() + pendingNavigation.type.slice(1)
-        ],
-      })
-
-      setPendingNavigation(null)
-      setHasUnsavedChanges(false)
-    }
-    setShowNavigationWarning(false)
-  }, [pendingNavigation, currentView])
-
-  // Handle cancel navigation
-  const handleCancelNavigation = useCallback(() => {
-    setShowNavigationWarning(false)
-    setPendingNavigation(null)
-  }, [])
-
   // Navigate back to previous view
   const navigateBack = useCallback(() => {
-    if (viewHistory.length > 0) {
-      const previous = viewHistory[viewHistory.length - 1]
-      setCurrentView(previous)
-      setViewHistory((prev) => prev.slice(0, -1))
-    } else {
-      // Default to home if no history
-      navigateTo('dashboard', undefined, ['Dashboard'])
-    }
-  }, [viewHistory, navigateTo])
+    router.back()
+  }, [router])
 
   // Handle file click - navigate to file detail view
   const handleFileClick = useCallback((submissionId: string, filename?: string) => {
     navigateTo('file-detail', { submissionId, filename }, ['Dashboard', 'Documents', filename || 'File'])
   }, [navigateTo])
 
-  const navigationItems = [
-    {
-      id: 'dashboard' as const,
-      label: 'Dashboard',
-      icon: LayoutDashboard,
-      onClick: () => navigateTo('dashboard', undefined, ['Dashboard']),
-      section: 'primary' as const,
-    },
-    {
-      id: 'clients' as const,
-      label: 'Clients',
-      icon: Users,
-      onClick: () => navigateTo('clients', undefined, ['Dashboard', 'Clients']),
-      section: 'primary' as const,
-    },
-    {
-      id: 'submissions' as const,
-      label: 'Submissions',
-      icon: FileStack,
-      onClick: () => navigateTo('submissions', undefined, ['Dashboard', 'Submissions']),
-      section: 'primary' as const,
-      // Optional: Add badge for pending count
-      badge: '12',
-    },
-    {
-      id: 'templates' as const,
-      label: 'Templates & Forms',
-      icon: FileText,
-      onClick: () => navigateTo('templates', undefined, ['Dashboard', 'Templates']),
-      section: 'primary' as const,
-    },
-    {
-      id: 'documents' as const,
-      label: 'Documents',
-      icon: FolderOpen,
-      onClick: () => navigateTo('documents', undefined, ['Dashboard', 'Documents']),
-      section: 'primary' as const,
-    },
-    {
-      id: 'reports' as const,
-      label: 'Reports',
-      icon: BarChart3,
-      onClick: () => navigateTo('reports', undefined, ['Dashboard', 'Reports']),
-      section: 'primary' as const,
-    },
-  ]
+  const navigationItems = useMemo(
+    () =>
+      NAV_ITEMS.map(item => ({
+        ...item,
+        onClick: () => navigateTo(item.route),
+      })),
+    [navigateTo]
+  )
   // Create folder from Documents view
   const handleCreateFolder = useCallback(async (name: string) => {
     const newFolder = await createFolder(name)
@@ -287,29 +321,38 @@ const handleMobileSidebarClose = () => {
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
 <aside className={`hidden lg:flex lg:flex-col bg-white border-r border-gray-200 transition-all duration-300 ease-in-out ${
-  desktopSidebarCollapsed ? 'lg:w-0 lg:overflow-hidden' : 'lg:w-64'
+  desktopSidebarCollapsed ? 'lg:w-16' : 'lg:w-64'
 } fixed left-0 top-0 bottom-0 z-40`}>
-  
+
   {/* Sidebar Header - Fixed */}
   <div className="h-16 border-b border-gray-200 flex items-center justify-between px-4 flex-shrink-0">
-    {/* Added flex-shrink-0 to prevent compression */}
-    <div className="flex items-center gap-2.5">
+    <div className={`flex items-center gap-2.5 ${desktopSidebarCollapsed ? 'justify-center' : ''}`}>
       <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
         <TrendingUp className="w-5 h-5 text-white" />
       </div>
-      <div>
-        <h1 className="text-sm font-bold text-gray-900 leading-tight">AutoFil</h1>
-        <p className="text-[10px] text-gray-500 leading-tight">Smart Form Automation</p>
-      </div>
+      {!desktopSidebarCollapsed && (
+        <div className="transition-opacity duration-200">
+          <h1 className="text-sm font-bold text-gray-900 leading-tight">AutoFil</h1>
+          <p className="text-[10px] text-gray-500 leading-tight">Smart Form Automation</p>
+        </div>
+      )}
     </div>
     
     {/* Collapse Button */}
     <button
-      onClick={() => setDesktopSidebarCollapsed(true)}
+      onClick={() => setDesktopSidebarCollapsed(prev => !prev)}
       className="hidden lg:block p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
-      title="Collapse sidebar"
+      title={desktopSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      type="button"
     >
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg
+        className={`w-4 h-4 transition-transform ${
+          desktopSidebarCollapsed ? 'rotate-180' : ''
+        }`}
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
       </svg>
     </button>
@@ -317,105 +360,85 @@ const handleMobileSidebarClose = () => {
 
   {/* Sidebar Content - Scrollable */}
   <div className="flex-1 overflow-y-auto flex flex-col">
-  {sidebarOpen ? (
-    <>
-      <div className="p-4">
-        {/* Breathing room at top */}
-        <div className="h-2"></div>
-        
-        {/* Navigation Section */}
-        <nav>
-        <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3 px-3 flex items-center gap-2">
-  <span className="w-4 h-px bg-gray-300"></span>
-  MAIN
-</h3>
-
-  <div className="space-y-0.5">
-    {navigationItems.map((item) => {
-      const Icon = item.icon
-      const isActive = currentView.type === item.id
-      return (
-        <button
-          key={item.id}
-          onClick={item.onClick}
-          className={`
-            w-full flex items-center gap-3 px-3 py-2.5 rounded-lg 
-            transition-all duration-200 group
-            ${isActive
-              ? 'bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-100'
-              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-            }
-          `}
-        >
-          <Icon className={`w-[18px] h-[18px] flex-shrink-0 ${
-            isActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
-          }`} />
-          <span className="text-[13px] font-medium">{item.label}</span>
-          
-          {/* Badge for counts (optional) */}
-          {item.badge && (
-             <span className="ml-auto text-xs font-bold px-2 py-0.5 bg-blue-600 text-white rounded-full shadow-sm">
-             {item.badge}
-           </span>
-          )}
-          
-          {/* Active indicator dot */}
-          {isActive && !item.badge && (
-            <div className="ml-auto w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
-          )}
-        </button>
-      )
-    })}
-  </div>
-</nav>
-      </div>
+    <div className={`${desktopSidebarCollapsed ? 'p-2' : 'p-4'}`}>
+      {/* Breathing room at top */}
+      <div className="h-2"></div>
       
-      {/* Spacer to push footer down */}
-      <div className="flex-1"></div>
-    </>
-  ) : (
-    <div className="p-2 space-y-2 mt-4">
-      {navigationItems.map((item) => {
-        const Icon = item.icon
-        const isActive = currentView.type === item.id
-        return (
-          <button
-            key={item.id}
-            onClick={() => {
-              item.onClick()
-              handleMobileSidebarClose()
-            }}
-            className={`
-              w-full p-2.5 rounded-lg transition-colors
-              ${isActive
-                ? 'bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-100'
-                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-              }
-            `}
-            title={item.label}
-          >
-            <Icon className="w-5 h-5 mx-auto" />
-          </button>
-        )
-      })}
+      {/* Navigation Section */}
+      <nav>
+        {!desktopSidebarCollapsed && (
+          <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3 px-3 flex items-center gap-2">
+            <span className="w-4 h-px bg-gray-300"></span>
+            MAIN
+          </h3>
+        )}
+
+        <div className="space-y-0.5">
+          {navigationItems.map((item) => {
+            const Icon = item.icon
+            const isActive = currentView.type === item.id
+            return (
+              <button
+                key={item.id}
+                onClick={item.onClick}
+                className={`
+                  w-full flex items-center gap-3 py-2.5 rounded-lg 
+                  transition-all duration-200 group
+                  ${desktopSidebarCollapsed ? 'justify-center px-0' : 'px-3'}
+                  ${isActive
+                    ? 'bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-100'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                  }
+                `}
+                title={desktopSidebarCollapsed ? item.label : undefined}
+              >
+                <Icon className={`w-[18px] h-[18px] flex-shrink-0 ${
+                  isActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
+                }`} />
+                <span className={`
+                  text-[13px] font-medium transition-opacity duration-150
+                  ${desktopSidebarCollapsed ? 'sr-only' : 'inline'}
+                `}>
+                  {item.label}
+                </span>
+
+                {!desktopSidebarCollapsed && item.badge && (
+                  <span className="ml-auto text-xs font-bold px-2 py-0.5 bg-blue-600 text-white rounded-full shadow-sm">
+                    {item.badge}
+                  </span>
+                )}
+                
+                {!desktopSidebarCollapsed && isActive && !item.badge && (
+                  <div className="ml-auto w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      </nav>
     </div>
-  )}
-</div>
+    
+    {/* Spacer to push footer down */}
+    <div className="flex-1"></div>
+  </div>
 
   {/* Footer - Fixed at bottom */}
   <div className="border-t border-gray-100 p-4 flex-shrink-0">
   <div className="space-y-1">
-  <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3 px-3 flex items-center gap-2">
-  <span className="w-4 h-px bg-gray-300"></span>
-  SUPPORT
-</h3>
+  {!desktopSidebarCollapsed && (
+    <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3 px-3 flex items-center gap-2">
+      <span className="w-4 h-px bg-gray-300"></span>
+      SUPPORT
+    </h3>
+  )}
     
     {/* Settings Button */}
     <button
       onClick={() => navigateTo('settings', undefined, ['Dashboard', 'Settings'])}
       className={`
-        w-full flex items-center gap-3 px-3 py-2.5 rounded-lg 
+        w-full flex items-center gap-3 py-2.5 rounded-lg 
         transition-all duration-200 group
+        ${desktopSidebarCollapsed ? 'justify-center px-0' : 'px-3'}
         ${currentView.type === 'settings'
           ? 'bg-blue-50 text-blue-700 shadow-sm'
           : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
@@ -425,9 +448,11 @@ const handleMobileSidebarClose = () => {
       <Settings className={`w-[18px] h-[18px] flex-shrink-0 ${
         currentView.type === 'settings' ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
       }`} />
-      <span className="text-[13px] font-medium">Settings</span>
+      <span className={`text-[13px] font-medium ${desktopSidebarCollapsed ? 'sr-only' : 'inline'}`}>
+        Settings
+      </span>
       
-      {currentView.type === 'settings' && (
+      {!desktopSidebarCollapsed && currentView.type === 'settings' && (
         <div className="ml-auto w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
       )}
     </button>
@@ -436,8 +461,9 @@ const handleMobileSidebarClose = () => {
     <button
       onClick={() => navigateTo('help', undefined, ['Dashboard', 'Help'])}
       className={`
-        w-full flex items-center gap-3 px-3 py-2.5 rounded-lg 
+        w-full flex items-center gap-3 py-2.5 rounded-lg 
         transition-all duration-200 group
+        ${desktopSidebarCollapsed ? 'justify-center px-0' : 'px-3'}
         ${currentView.type === 'help'
           ? 'bg-blue-50 text-blue-700 shadow-sm'
           : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
@@ -447,9 +473,11 @@ const handleMobileSidebarClose = () => {
       <HelpCircle className={`w-[18px] h-[18px] flex-shrink-0 ${
         currentView.type === 'help' ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
       }`} />
-      <span className="text-[13px] font-medium">Help & Support</span>
+      <span className={`text-[13px] font-medium ${desktopSidebarCollapsed ? 'sr-only' : 'inline'}`}>
+        Help & Support
+      </span>
       
-      {currentView.type === 'help' && (
+      {!desktopSidebarCollapsed && currentView.type === 'help' && (
         <div className="ml-auto w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
       )}
     </button>
@@ -610,7 +638,7 @@ const handleMobileSidebarClose = () => {
 
       {/* Main Content */}
       <div className={`flex-1 flex flex-col min-h-screen transition-all duration-300 ${
-  desktopSidebarCollapsed ? 'lg:ml-0' : 'lg:ml-64'
+  desktopSidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'
 }`}>
         {/* Header */}
         <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
@@ -695,15 +723,13 @@ const handleMobileSidebarClose = () => {
 
             {/* Documents View */}
             {currentView.type === 'documents' && (
-              <DocumentsView
+              <DocumentsView 
                 folders={folders}
                 currentFolder={currentFolder}
                 onFolderChange={setCurrentFolder}
                 onCreateFolder={handleCreateFolderNoReturn}
                 onNavigate={navigateTo}
                 onFileClick ={handleFileClick}
-                shouldRefresh={documentsNeedRefresh}
-                onRefreshComplete={() => setDocumentsNeedRefresh(false)}
               />
             )}
 
@@ -797,46 +823,6 @@ const handleMobileSidebarClose = () => {
         </main>
       </div>
 
-      {/* Navigation Warning Dialog */}
-      {showNavigationWarning && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div 
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={handleCancelNavigation}
-          />
-          
-          <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
-            <div className="flex items-start gap-4 p-6">
-              <div className="flex-shrink-0 w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
-                <AlertTriangle className="w-6 h-6 text-yellow-600" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  Leave without saving?
-                </h3>
-                <p className="text-sm text-gray-600">
-                  You have unsaved extracted data in your workflow. These changes will be lost if you navigate away.
-                </p>
-              </div>
-            </div>
-            
-            <div className="px-6 pb-6 flex gap-3">
-              <button
-                onClick={handleCancelNavigation}
-                className="flex-1 px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-              >
-                Stay
-              </button>
-              <button
-                onClick={handleConfirmNavigation}
-                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
-              >
-                Leave Anyway
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

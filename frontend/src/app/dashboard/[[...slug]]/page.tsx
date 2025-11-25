@@ -1,5 +1,5 @@
 import MainLayout from '@/components/MainLayout'
 
-export default function DashboardPage() {
+export default function DashboardRoutePage() {
   return <MainLayout />
 }

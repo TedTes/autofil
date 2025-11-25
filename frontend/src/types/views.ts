@@ -6,40 +6,34 @@
  * All available view types in the application
  */
 export type ViewType = 
-  | 'home'           // Dashboard - main overview with upload CTA + recent activity
+  | 'dashboard'      // Main overview page
+  | 'documents'      // Document library - searchable files (inputs + outputs)
+  | 'upload'         // Upload view
+  | 'file-detail'    // File detail view
   | 'clients'        // Clients list view
   | 'client-detail'  // Individual client detail with submissions
   | 'submissions'    // Global submissions view across all clients
   | 'templates'      // Templates & Forms - ACORD forms, blank templates
-  | 'documents'      // Document library - searchable files (inputs + outputs)
   | 'reports'        // Analytics - fill success, turnaround time, tasks
   | 'settings'       // Settings - user/org preferences, API keys, billing
   | 'help'           // Help & Support - guides and contact
-  | 'file-detail'    // File detail view
-  | 'upload'         // Upload view
-  | 'files'          // Files view
-  | 'folders'        // Folders view
-  | 'dashboard'
 
 /**
  * Type mapping for view-specific data
  * Defines what data each view type expects when navigating
  */
 export type ViewDataMap = {
-  'home': undefined
+  'dashboard': undefined
+  'documents': undefined
+  'upload': undefined
+  'file-detail': { submissionId: string; filename?: string }
   'clients': undefined
   'client-detail': { clientId: string; clientName?: string }
   'submissions': { status?: string; clientId?: string } | undefined
   'templates': undefined
-  'documents': undefined
   'reports': undefined
   'settings': undefined
   'help': undefined
-  'file-detail': { submissionId: string; filename?: string }
-  'upload': undefined
-  'files': undefined
-  'folders': undefined
-  'dashboard':undefined
 }
 
 /**

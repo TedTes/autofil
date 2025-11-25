@@ -24,8 +24,6 @@ interface DocumentsViewProps {
   onCreateFolder: (name: string) => Promise<void>
   onNavigate: (type: ViewType, data?: unknown, breadcrumbs?: string[]) => void
   onFileClick?: (submissionId: string, filename?: string) => void
-  shouldRefresh?: boolean
-  onRefreshComplete?: () => void
 }
 
 type SelectedStatus = 'all' | 'ready' | 'extracted' | 'filled'
@@ -34,9 +32,7 @@ export function DocumentsView({folders,
   onFolderChange, 
   onCreateFolder,
   onNavigate,
-  onFileClick,
-  shouldRefresh,
-  onRefreshComplete }: DocumentsViewProps) {
+  onFileClick }: DocumentsViewProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [files, setFiles] = useState<SubmissionListItem[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -71,12 +67,6 @@ export function DocumentsView({folders,
   const [showAllRecent, setShowAllRecent] = useState(false)
   const [showExportProgressModal, setShowExportProgressModal] = useState(false)
   // Fetch files on mount
-  useEffect(() => {
-    if (shouldRefresh) {
-      loadFiles()
-      onRefreshComplete?.()
-    }
-  }, [shouldRefresh, onRefreshComplete])
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchQuery(searchQuery)
@@ -150,14 +140,6 @@ useEffect(() => {
   loadFiles()
 }, [])
 
-useEffect(() => {
-  if (shouldRefresh) {
-    (async () => {
-      await loadFiles()
-      onRefreshComplete?.()
-    })()
-  }
-}, [shouldRefresh, onRefreshComplete])
 
 // Helper to check if file was saved recently (last 24 hours)
 const isRecentlySaved = (uploadedAt: string): boolean => {

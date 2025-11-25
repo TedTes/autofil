@@ -4,7 +4,12 @@ API initialization and configuration.
 
 from flask import Flask
 from flask_cors import CORS
+from dotenv import load_dotenv
 import os
+
+# Ensure backend/.env is loaded so services see Supabase credentials, etc.
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(BASE_DIR, '.env'), override=False)
 
 def create_app():
     """

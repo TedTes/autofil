@@ -22,6 +22,7 @@ from services.comparison_service import ComparisonService
 from services.form_generator import FormGenerator
 from services.export_service import ExportService
 from extraction.core import UniversalFileLoader
+from services.supabase_storage_service import SupabaseStorageService
 
 class SubmissionService:
     """
@@ -55,6 +56,7 @@ class SubmissionService:
             classifier_names=['mime', 'keyword', 'table'],
             strategy='highest_confidence'
     )
+        self.remote_storage = SupabaseStorageService()
     def upload_and_extract(
         self,
         file,
@@ -146,6 +148,14 @@ class SubmissionService:
             upload_filename = f"{submission_id}_{filename}" if not client_id else filename
             upload_path = os.path.join(upload_dir, upload_filename)
             file.save(upload_path)
+            remote_input = self._upload_to_remote(
+                local_path=upload_path,
+                content_type=getattr(file, "content_type", None),
+                client_id=client_id,
+                submission_id=submission_id,
+                category="inputs",
+                filename=filename,
+            )
             # Progress: 30% - File saved
             if progress_callback:
                 progress_callback(submission_id, 30, 'uploaded', 'File saved successfully')
@@ -176,6 +186,7 @@ class SubmissionService:
               raise ValueError(f"No extractor for {doc.document_type}")
             # Extract data
             extraction_result = extractor.extract(doc)
+            extraction_confidence = getattr(extraction_result, "confidence", None)
 
             # Progress: 70% - Extraction complete
             if progress_callback:
@@ -218,11 +229,15 @@ class SubmissionService:
             metadata["filename"] = filename
             metadata.setdefault("name", filename)
             metadata["upload_path"] = upload_path
+            if remote_input:
+                metadata["upload_storage"] = remote_input
             metadata["client_submission_path"] = client_submission_path
             metadata["outputs_dir"] = client_outputs_path
             metadata.setdefault("uploaded_at", timestamp)
             metadata["updated_at"] = timestamp
             metadata["status"] = "extracted"
+            if extraction_confidence is not None:
+                metadata["confidence"] = extraction_confidence
 
             inputs_meta = metadata.setdefault("inputs", [])
             inputs_meta.append({
@@ -232,7 +247,9 @@ class SubmissionService:
                 "data_path": self._rel_storage_path(per_input_data_path),
                 "uploaded_at": timestamp,
                 "extraction_status": "extracted",
-                "confidence": extraction_result.confidence,
+                "confidence": extraction_confidence,
+                "url": remote_input.get("public_url") if remote_input else None,
+                "storage": remote_input,
             })
             metadata["file_count"] = len(inputs_meta)
 
@@ -280,6 +297,8 @@ class SubmissionService:
                     "path": self._rel_storage_path(upload_path),
                     "uploaded_at": timestamp,
                     "extraction_status": "extracted",
+                    "url": remote_input.get("public_url") if remote_input else None,
+                    "storage": remote_input,
                 })
                 client_metadata["file_count"] = len(package_inputs)
                 client_metadata["status"] = metadata["status"]
@@ -307,6 +326,13 @@ class SubmissionService:
             print("upload and extract error:", str(e))
             raise
     
+    def get_submission_metadata(self, submission_id: str) -> Optional[Dict[str, Any]]:
+        metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
+        if not os.path.exists(metadata_path):
+            return None
+        with open(metadata_path, 'r') as f:
+            return json.load(f)
+
     def get_submission(self, submission_id: str, client_id: Optional[str] = None):
         """
         Get submission data.
@@ -317,15 +343,11 @@ class SubmissionService:
         Returns:
             Dictionary with submission details
         """
-        metadata_path = os.path.join(self.data_dir, f"{submission_id}_meta.json")
         data_path = os.path.join(self.data_dir, f"{submission_id}.json")
-        
-        if not os.path.exists(metadata_path):
+        metadata = self.get_submission_metadata(submission_id)
+        if not metadata:
             return None
         
-        with open(metadata_path, 'r') as f:
-            metadata = json.load(f)
-
         if client_id and metadata.get('client_id') and metadata.get('client_id') != client_id:
             return None
         
@@ -424,16 +446,34 @@ class SubmissionService:
         upload_path = metadata.get("upload_path")
         if upload_path and os.path.exists(upload_path):
             os.remove(upload_path)
+        upload_storage = metadata.get("upload_storage") or {}
+        storage_path = upload_storage.get("path")
+        if storage_path:
+            self.remote_storage.delete_file(storage_path)
 
         output_path = metadata.get("output_path")
         if output_path and os.path.exists(output_path):
             os.remove(output_path)
+        output_storage = metadata.get("output_storage") or {}
+        storage_path = output_storage.get("path")
+        if storage_path:
+            self.remote_storage.delete_file(storage_path)
 
         for input_meta in metadata.get("inputs", []):
             data_rel = input_meta.get("data_path")
             abs_data = self._abs_storage_path(data_rel)
             if abs_data and os.path.exists(abs_data):
                 os.remove(abs_data)
+            storage_info = input_meta.get("storage") or {}
+            storage_path = storage_info.get("path")
+            if storage_path:
+                self.remote_storage.delete_file(storage_path)
+
+        for output_meta in metadata.get("outputs", []):
+            storage_info = output_meta.get("storage") or {}
+            storage_path = storage_info.get("path")
+            if storage_path:
+                self.remote_storage.delete_file(storage_path)
 
         for path in [metadata_path, data_path]:
             if path and os.path.exists(path):
@@ -519,16 +559,28 @@ class SubmissionService:
                 output_path=output_path,
                 template_id=template_id,   # logical name, not file path
             )
+            remote_output = self._upload_to_remote(
+                local_path=output_path,
+                content_type="application/pdf",
+                client_id=metadata.get("client_id"),
+                submission_id=submission_id,
+                category="outputs",
+                filename=os.path.basename(output_path),
+            )
 
             # 7) Update metadata (make FillReport JSON-serializable)
             metadata['status'] = 'filled'
             metadata['output_path'] = output_path
+            if remote_output:
+                metadata['output_storage'] = remote_output
             metadata['filled_at'] = datetime.utcnow().isoformat()
             outputs_meta = metadata.setdefault('outputs', [])
             outputs_meta.append({
                 "filename": os.path.basename(output_path),
                 "path": os.path.relpath(output_path, start=self.storage_dir),
                 "generated_at": metadata['filled_at'],
+                "url": remote_output.get("public_url") if remote_output else None,
+                "storage": remote_output,
             })
             metadata['fill_report'] = {
                 "success": fill_report.success,
@@ -561,6 +613,8 @@ class SubmissionService:
                     "filename": os.path.basename(output_path),
                     "path": os.path.relpath(output_path, start=self.storage_dir),
                     "generated_at": metadata['filled_at'],
+                    "url": remote_output.get("public_url") if remote_output else None,
+                    "storage": remote_output,
                 })
                 client_metadata["status"] = metadata["status"]
                 client_metadata["updated_at"] = metadata["filled_at"]
@@ -647,6 +701,37 @@ class SubmissionService:
             else:
                 base[key] = copy.deepcopy(value)
         return base
+
+    def _upload_to_remote(
+        self,
+        *,
+        local_path: str,
+        content_type: Optional[str],
+        client_id: Optional[str],
+        submission_id: str,
+        category: str,
+        filename: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Upload a file to remote storage, returning metadata for persistence."""
+        try:
+            if not getattr(self.remote_storage, "enabled", False):
+                return None
+
+            segments: List[Optional[str]] = []
+            if client_id:
+                segments.extend(["clients", client_id])
+            else:
+                segments.append("submissions")
+            print("kkkkkkkk")
+            segments.extend([submission_id, category, filename])
+            upload_info = self.remote_storage.upload_file(
+                local_path=local_path,
+                storage_path=self.remote_storage.build_path(*segments),
+                content_type=content_type,
+            )
+            return upload_info
+        except Exception as e:
+            print("error from uploading to remote ", str(e))
 
     def create_submission(
         self, 

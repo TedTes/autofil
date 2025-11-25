@@ -5,6 +5,7 @@ Handles individual submission operations: upload, retrieval,
 update, PDF fill, versioning, comparisons, and stats.
 """
 
+import io
 import os
 import json
 from datetime import datetime
@@ -206,16 +207,41 @@ def download_pdf(submission_id):
     """Download the filled PDF for a submission."""
     try:
         file_path = submission_service.get_output_path(submission_id)
-        if not os.path.exists(file_path):
-            print(f"File not found: {file_path}")
-            return jsonify({"error": "File not found"}), 404
+        if file_path and os.path.exists(file_path):
+            return send_file(
+                file_path,
+                mimetype="application/pdf",
+                as_attachment=True,
+                download_name=f"{submission_id}_filled.pdf",
+            )
 
-        return send_file(
-            file_path,
-            mimetype="application/pdf",
-            as_attachment=True,
-            download_name=f"{submission_id}_filled.pdf",
-        )
+        metadata = submission_service.get_submission_metadata(submission_id)
+        if metadata:
+            outputs = metadata.get("outputs") or []
+            remote_storage = metadata.get("output_storage")
+            if not remote_storage:
+                remote_storage = next(
+                    (entry.get("storage") for entry in outputs if entry.get("storage")),
+                    None,
+                )
+            if remote_storage and remote_storage.get("path"):
+                file_bytes = submission_service.remote_storage.download_file(remote_storage["path"])
+                if file_bytes:
+                    buffer = io.BytesIO(file_bytes)
+                    buffer.seek(0)
+                    filename = next(
+                        (entry.get("filename") for entry in outputs if entry.get("storage")),
+                        None,
+                    ) or f"{submission_id}_filled.pdf"
+                    return send_file(
+                        buffer,
+                        mimetype=remote_storage.get("content_type") or "application/pdf",
+                        as_attachment=True,
+                        download_name=filename,
+                    )
+
+        print(f"File not found for submission {submission_id}")
+        return jsonify({"error": "File not found"}), 404
     except Exception as e:
         print(f"Download error: {str(e)}")
         return jsonify({"error": str(e)}), 500
@@ -225,41 +251,41 @@ def download_pdf(submission_id):
 def preview_input_pdf(submission_id):
     """Preview the original input file inline (for iframes)."""
     try:
-        # Use relative path from current working directory (where Flask runs)
-        metadata_path = os.path.join("storage", "data", f"{submission_id}_meta.json")
-        
-        print(f"🔍 Looking for metadata at: {os.path.abspath(metadata_path)}")
-        print(f"🔍 File exists: {os.path.exists(metadata_path)}")
-
-        if not os.path.exists(metadata_path):
+        metadata = submission_service.get_submission_metadata(submission_id)
+        if not metadata:
             return jsonify({"error": "Submission metadata not found"}), 404
 
-        with open(metadata_path, "r") as f:
-            metadata = json.load(f)
-
         file_path = metadata.get("upload_path")
-        print(f"🔍 Upload path from metadata: {file_path}")
-        
-        if not file_path:
-            return jsonify({"error": "File path not found in metadata"}), 404
-
-        # upload_path is already absolute or relative to working directory
-        if not os.path.isabs(file_path):
+        if file_path and not os.path.isabs(file_path):
             file_path = os.path.abspath(file_path)
-        
-        print(f"🔍 Final file path: {file_path}")
-        print(f"🔍 File exists: {os.path.exists(file_path)}")
-        
-        if not os.path.exists(file_path):
-            return jsonify({"error": f"File not found: {file_path}"}), 404
 
-        with open(file_path, "rb") as f:
-            pdf_data = f.read()
+        if file_path and os.path.exists(file_path):
+            with open(file_path, "rb") as f:
+                pdf_data = f.read()
+            response = Response(pdf_data, mimetype="application/pdf")
+            response.headers["Content-Disposition"] = "inline"
+            response.headers["Cache-Control"] = "no-store"
+            return response
 
-        response = Response(pdf_data, mimetype="application/pdf")
-        response.headers["Content-Disposition"] = "inline"
-        return response
+        remote_storage = metadata.get("upload_storage")
+        if not remote_storage:
+            remote_storage = next(
+                (entry.get("storage") for entry in metadata.get("inputs", []) if entry.get("storage")),
+                None,
+            )
 
+        if remote_storage and remote_storage.get("path"):
+            file_bytes = submission_service.remote_storage.download_file(remote_storage["path"])
+            if file_bytes:
+                response = Response(
+                    file_bytes,
+                    mimetype=remote_storage.get("content_type") or "application/pdf",
+                )
+                response.headers["Content-Disposition"] = "inline"
+                response.headers["Cache-Control"] = "no-store"
+                return response
+
+        return jsonify({"error": "File not found"}), 404
     except Exception as e:
         print(f"❌ Preview error: {str(e)}")
         import traceback
@@ -271,25 +297,38 @@ def preview_input_pdf(submission_id):
 def preview_output_pdf(submission_id):
     """Preview the filled PDF inline (for iframes)."""
     try:
-        
         file_path = submission_service.get_output_path(submission_id)
-        
-        if not os.path.isabs(file_path):
+        if file_path and not os.path.isabs(file_path):
             file_path = os.path.abspath(file_path)
 
-        print(f"🔍 Output file path: {file_path}")
-        print(f"🔍 File exists: {os.path.exists(file_path)}")
-        
-        if not os.path.exists(file_path):
-            return jsonify({"error": f"File not found: {file_path}"}), 404
+        if file_path and os.path.exists(file_path):
+            with open(file_path, "rb") as f:
+                pdf_data = f.read()
+            response = Response(pdf_data, mimetype="application/pdf")
+            response.headers["Content-Disposition"] = "inline"
+            response.headers["Cache-Control"] = "no-store"
+            return response
 
-        with open(file_path, "rb") as f:
-            pdf_data = f.read()
+        metadata = submission_service.get_submission_metadata(submission_id)
+        if metadata:
+            remote_storage = metadata.get("output_storage")
+            if not remote_storage:
+                remote_storage = next(
+                    (entry.get("storage") for entry in metadata.get("outputs", []) if entry.get("storage")),
+                    None,
+                )
+            if remote_storage and remote_storage.get("path"):
+                file_bytes = submission_service.remote_storage.download_file(remote_storage["path"])
+                if file_bytes:
+                    response = Response(
+                        file_bytes,
+                        mimetype=remote_storage.get("content_type") or "application/pdf",
+                    )
+                    response.headers["Content-Disposition"] = "inline"
+                    response.headers["Cache-Control"] = "no-store"
+                    return response
 
-        response = Response(pdf_data, mimetype="application/pdf")
-        response.headers["Content-Disposition"] = "inline"
-        return response
-
+        return jsonify({"error": "File not found"}), 404
     except Exception as e:
         print(f"❌ Preview error: {str(e)}")
         import traceback

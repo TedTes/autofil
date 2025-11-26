@@ -255,6 +255,18 @@ export async function getClientById(clientId: string): Promise<Client> {
   }
 }
 
+export async function getClientSubmissions(clientId: string): Promise<ClientSubmissionPackage[]> {
+  try {
+    const response = await api.get(`/clients/${clientId}/submissions`)
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to load client submissions')
+    }
+    return response.data.data as ClientSubmissionPackage[]
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
 export async function createClientSubmission(
   clientId: string,
   name: string,
@@ -327,7 +339,9 @@ export async function listSubmissions(params?: {
  */
 export async function getSubmissionStats(): Promise<SubmissionStats> {
   try {
+    console.log("kkkkkk")
     const response = await api.get('/submissions/stats')
+    console.log("kkkkkkk2")
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to load stats')
     }

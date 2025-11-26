@@ -60,21 +60,14 @@ class ClientService:
     
     def get_client(self, client_id: str) -> Optional[Dict[str, Any]]:
         """
-        Get client by ID.
-        
-        Args:
-            client_id: Client identifier
-            
-        Returns:
-            Client metadata or None if not found
+        Get client by ID (metadata only)
         """
         metadata = self.db.get_client_metadata(client_id)
         if metadata is None:
             return None
         
-        # Attach submission package details if available
         metadata.setdefault('submissions', [])
-        metadata['submissions_detailed'] = self._build_submission_packages(metadata)
+        metadata['submission_count'] = len(metadata['submissions'])
         return metadata
     
     def list_clients(self) -> List[Dict[str, Any]]:
@@ -88,6 +81,7 @@ class ClientService:
         for metadata in clients:
             metadata.setdefault('submissions', [])
             metadata['submissions_detailed'] = self._build_submission_packages(metadata)
+            metadata['submission_count'] = len(metadata['submissions'])
         clients.sort(key=lambda x: x.get('name', '').lower())
         return clients
     
@@ -192,6 +186,16 @@ class ClientService:
             'inputs': inputs,
             'outputs': outputs,
         }
+
+    def list_client_packages(self, client_id: str) -> Optional[List[Dict[str, Any]]]:
+        """
+        Return all submission packages for a client.
+        """
+        metadata = self.db.get_client_metadata(client_id)
+        if metadata is None:
+            return None
+        metadata.setdefault('submissions', [])
+        return self._build_submission_packages(metadata)
     
     def remove_submission(self, client_id: str, submission_id: str) -> bool:
         """
@@ -210,4 +214,3 @@ class ClientService:
             self._persist_client_metadata(metadata)
         return True
     
-    # Legacy path helpers removed; clients/submissions now live entirely in Supabase.

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Client, ClientSubmissionPackage } from '@/types'
-import { getClientById, createClientSubmission, uploadPdf } from '@/lib/api-client'
+import { getClientById, getClientSubmissions, createClientSubmission, uploadPdf } from '@/lib/api-client'
 import useToast from '@/hooks/useToast' 
 export type UploadedRow = {
   submissionId: string
@@ -142,13 +142,16 @@ export function useClientSubmissions(clientId: string) {
       if (!options?.silent) {
         setLoading(true)
       }
-      const detail = await getClientById(clientId)
+      const [detail, clientPackages] = await Promise.all([
+        getClientById(clientId),
+        getClientSubmissions(clientId),
+      ])
       if (!detail) {
         setError('Client not found')
         return
       }
       setClient(detail)
-      setPackages(detail.submissions_detailed || [])
+      setPackages(clientPackages || [])
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load client data')

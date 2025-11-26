@@ -73,7 +73,7 @@ def create_client():
 @client_bp.route('/<client_id>', methods=['GET'])
 def get_client(client_id):
     """
-    Get client by ID with all submissions.
+    Get client by ID with metadata only.
     
     Args:
         client_id: Client identifier
@@ -93,6 +93,23 @@ def get_client(client_id):
             
         }), 200
         
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@client_bp.route('/<client_id>/submissions', methods=['GET'])
+def list_client_submissions(client_id):
+    """
+    List submissions/packages for a given client.
+    """
+    try:
+        packages = client_service.list_client_packages(client_id)
+        if packages is None:
+            return jsonify({'error': 'Client not found'}), 404
+
+        return jsonify({
+            'success': True,
+            'data': packages,
+        }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

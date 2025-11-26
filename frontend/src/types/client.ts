@@ -53,6 +53,7 @@ export interface Client {
     file_size?: number
     extraction_status?: 'extracted' | 'extracting' | 'error' | 'ready'
     uploaded_at: string
+    confidence?: number
   }
 
   export interface SubmissionOutputFile {

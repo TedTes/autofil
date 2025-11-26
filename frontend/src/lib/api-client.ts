@@ -16,7 +16,7 @@ import type {
   ClientSubmissionPackage,
   SubmissionListResponse,
   SubmissionListItem,
-  SubmissionStats
+  SubmissionStats,
 } from '@/types'
 
 
@@ -262,6 +262,30 @@ export async function getClientSubmissions(clientId: string): Promise<ClientSubm
       throw new Error(response.data.error || 'Failed to load client submissions')
     }
     return response.data.data as ClientSubmissionPackage[]
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
+export interface SubmissionTemplateSummary {
+  template_id: string
+  name: string
+  description: string
+  expected_documents: string[]
+  suggested_forms: string[]
+  expected_fields: string[]
+  template_url?: string | null
+}
+
+export async function getSubmissionTemplates(): Promise<SubmissionTemplateSummary[]> {
+  try {
+    console.log("hey doododood")
+    const response = await api.get('/clients/templates')
+    console.log(response)
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to load templates')
+    }
+    return response.data.data as SubmissionTemplateSummary[]
   } catch (error) {
     handleApiError(error)
   }

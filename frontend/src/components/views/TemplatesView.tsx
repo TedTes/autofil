@@ -1,12 +1,12 @@
 /**
  * TemplatesView Component
- * COMMIT 2: Placeholder for Templates & Forms library
  */
 
 'use client'
 
-import React, { useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { FileText, Download, Eye, Search, Grid3x3, List, FileCheck } from 'lucide-react'
+import { getSubmissionTemplates, type SubmissionTemplateSummary } from '@/lib/api-client'
 
 interface TemplatesViewProps {
   onTemplateClick?: (templateId: string) => void
@@ -16,14 +16,63 @@ interface TemplatesViewProps {
 export function TemplatesView({ onTemplateClick, onDownloadTemplate }: TemplatesViewProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+  const [templates, setTemplates] = useState<SubmissionTemplateSummary[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  // Placeholder ACORD forms
-  const placeholderForms = [
-    { id: 'acord-25', name: 'ACORD 25', description: 'Certificate of Liability Insurance' },
-    { id: 'acord-126', name: 'ACORD 126', description: 'Commercial General Liability' },
-    { id: 'acord-140', name: 'ACORD 140', description: 'Property Section' },
-    { id: 'acord-125', name: 'ACORD 125', description: 'Commercial Insurance Application' },
-  ]
+  useEffect(() => {
+    let isMounted = true
+    const load = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        const data = await getSubmissionTemplates()
+        if (isMounted) {
+          setTemplates(data || [])
+        }
+      } catch (err) {
+        if (isMounted) {
+          const message = err instanceof Error ? err.message : 'Failed to load templates'
+          setError(message)
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false)
+        }
+      }
+    }
+    load()
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  const displayTemplates = useMemo(() => {
+    const list = templates.map((tpl) => ({
+      id: tpl.template_id,
+      name: tpl.name,
+      description: tpl.description,
+      expectedDocuments: tpl.expected_documents || [],
+      suggestedForms: tpl.suggested_forms || [],
+      url: tpl.template_url,
+    }))
+
+    if (!searchQuery.trim()) {
+      return list
+    }
+    const q = searchQuery.toLowerCase()
+    return list.filter(
+      (item) =>
+        item.name.toLowerCase().includes(q) ||
+        item.description.toLowerCase().includes(q) ||
+        (item.suggestedForms || []).some((form) => form.toLowerCase().includes(q))
+    )
+  }, [templates, searchQuery])
+
+  const openTemplate = (url?: string|undefined|null) => {
+    if (!url) return
+    window.location.href = url
+  }
 
   return (
     <div className="h-full flex flex-col bg-gray-50">
@@ -82,18 +131,45 @@ export function TemplatesView({ onTemplateClick, onDownloadTemplate }: Templates
           <div className="mb-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Available ACORD Forms</h3>
             <p className="text-sm text-gray-600">
-              Preview of forms that will be available for auto-filling
+              Preview of forms that are currently configured for auto-filling
             </p>
           </div>
 
-          {/* Form Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-            {placeholderForms.map((form) => (
-              <div
-                key={form.id}
-                className="border border-gray-200 rounded-lg p-4 hover:border-green-500 hover:shadow-md transition-all cursor-pointer group"
-              >
-                <div className="flex items-start justify-between mb-3">
+          {error && (
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          {loading ? (
+            <div className="py-8 text-center text-sm text-gray-500">Loading templates…</div>
+          ) : displayTemplates.length === 0 ? (
+            <div className="py-8 text-center text-sm text-gray-500">
+              No templates available yet.
+            </div>
+          ) : (
+            <div
+              className={
+                viewMode === 'grid'
+                  ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8'
+                  : 'space-y-3 mb-8'
+              }
+            >
+              {displayTemplates.map((form) => (
+                <div
+                  key={form.id}
+                  className="border border-gray-200 rounded-lg p-4 hover:border-green-500 hover:shadow-md transition-all cursor-pointer group"
+                  onClick={() => openTemplate(form.url)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      openTemplate(form.url)
+                    }
+                  }}
+                >
+                  <div className="flex items-start justify-between mb-3">
                   <div className="w-12 h-12 bg-green-50 rounded-lg flex items-center justify-center group-hover:bg-green-100 transition-colors">
                     <FileCheck className="w-6 h-6 text-green-600" />
                   </div>
@@ -101,7 +177,11 @@ export function TemplatesView({ onTemplateClick, onDownloadTemplate }: Templates
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
-                        onDownloadTemplate?.(form.id)
+                        if (onDownloadTemplate) {
+                          onDownloadTemplate(form.id)
+                        } else {
+                          openTemplate(form.url)
+                        }
                       }}
                       className="p-1.5 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded"
                       title="Download blank"
@@ -111,7 +191,11 @@ export function TemplatesView({ onTemplateClick, onDownloadTemplate }: Templates
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
-                        onTemplateClick?.(form.id)
+                        if (onTemplateClick) {
+                          onTemplateClick(form.id)
+                        } else {
+                          openTemplate(form.url)
+                        }
                       }}
                       className="p-1.5 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded"
                       title="Preview"
@@ -122,9 +206,10 @@ export function TemplatesView({ onTemplateClick, onDownloadTemplate }: Templates
                 </div>
                 <h4 className="font-semibold text-gray-900 mb-1">{form.name}</h4>
                 <p className="text-xs text-gray-600">{form.description}</p>
-              </div>
-            ))}
-          </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Info Section */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">

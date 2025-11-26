@@ -746,14 +746,6 @@ const handleMobileSidebarClose = () => {
 
 {currentView.type === 'templates' && (
   <TemplatesView
-    onTemplateClick={(templateId) => {
-      // TODO: Show template preview
-      console.log('View template:', templateId)
-    }}
-    onDownloadTemplate={(templateId) => {
-      // TODO: Download blank template
-      console.log('Download template:', templateId)
-    }}
   />
 )}
 

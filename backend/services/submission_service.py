@@ -694,16 +694,21 @@ class SubmissionService:
         Returns:
             List of all submissions
         """
-        submissions = []
-        for metadata in self.db.list_submissions_metadata():
-            submission_id = metadata.get("submission_id")
-            if not submission_id:
-                continue
-            submission = self.get_submission(submission_id)
-            if submission:
-                submissions.append(submission)
-        return submissions
-
+        try: 
+            submissions = []
+            data = self.db.list_submissions_metadata()
+            
+            for metadata in data:
+                submission_id = metadata.get("submission_id")
+                if not submission_id:
+                    continue
+                submission = self.get_submission(submission_id)
+                if submission:
+                    submissions.append(submission)
+            return submissions
+        except Exception as e:
+            print("error from get all submissions ", str(e))
+            raise e
     def get_submissions_by_ids(self, submission_ids: List[str]) -> List[Dict[str, Any]]:
         """
         Get multiple submissions by IDs.
@@ -793,7 +798,10 @@ class SubmissionService:
         Returns submissions sorted by latest activity desc.
         Activity = max(uploaded_at, last_edited_at, filled_at, updated_at) that exists.
         """
-        subs = self.get_all_submissions()
+        subs = [
+            s for s in self.get_all_submissions()
+            if (s.get("file_count") or 0) > 0
+        ]
 
         # optional filters
         if status:

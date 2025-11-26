@@ -95,7 +95,11 @@ class SupabaseDatabaseService:
             )
             if not rows:
                 return []
-            return [row.get("metadata") for row in rows if row.get("metadata")]
+            return [
+                meta for meta in
+                (row.get("metadata") for row in rows)
+                if meta and (meta.get("file_count") or 0) > 0
+            ]
         except Exception as exc:
             print(f"[supabase-db] Failed to list submissions: {exc}")
             return []

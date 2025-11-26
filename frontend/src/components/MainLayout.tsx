@@ -194,8 +194,6 @@ export default function MainLayout({ children }: MainLayoutProps) {
   useEffect(() => {
     void (async () => {
       try {
-        const stats = await getSubmissionStats()
-        setSubmissionStats(stats)
       } catch (err) {
         console.warn('Failed to load submission stats', err)
       }

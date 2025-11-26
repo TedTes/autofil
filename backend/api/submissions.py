@@ -611,6 +611,7 @@ def list_all_submissions():
                 "uploaded_at": s.get("uploaded_at"),
                 "confidence": s.get("confidence"),
                 "folder_id": s.get("folder_id"),
+                "client_name": s.get("client_name"),
             }
             for s in submissions
         ]

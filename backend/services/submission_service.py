@@ -80,7 +80,7 @@ class SubmissionService:
 
             is_existing_submission = submission_id is not None
             metadata: Dict[str, Any] = {}
-
+            client_name: Optional[str] = None
             if not submission_id:
                 submission_id = str(uuid.uuid4())
 
@@ -96,10 +96,12 @@ class SubmissionService:
                     raise ValueError("Submission does not belong to the specified client")
                 client_id = existing_client_id or client_id
                 folder_id = metadata.get("folder_id") or folder_id
+                client_name = metadata.get("client_name")
             elif client_id:
                 client = self.client_service.get_client(client_id)
                 if not client:
                     raise ValueError("Client not found")
+                client_name = client.get("name")
                 self.client_service.add_submission(client_id, submission_id)
 
             temp_upload_dir = tempfile.mkdtemp(prefix=f"upload_{submission_id}_")
@@ -165,6 +167,8 @@ class SubmissionService:
             metadata["updated_at"] = timestamp
             metadata["folder_id"] = folder_id
             metadata["client_id"] = client_id
+            if not metadata.get("client_name") and client_name:
+                metadata["client_name"] = client_name
             metadata["filename"] = metadata.get("filename") or filename
             metadata.setdefault("name", metadata["filename"])
             metadata["status"] = "extracted"
@@ -187,7 +191,6 @@ class SubmissionService:
 
             merged_data = self._merge_input_data(inputs_meta) or json_data
             metadata["data"] = merged_data
-
             version_id = self.version_service.create_version(
                 submission_id=submission_id,
                 data=merged_data,
@@ -196,13 +199,11 @@ class SubmissionService:
                 notes=f"{version_notes} from {filename}",
             )
             metadata["current_version_id"] = version_id
-
             self._persist_submission_metadata(metadata)
 
             if folder_id:
                 from services.folder_service import FolderService
                 FolderService().add_submission(folder_id, submission_id, filename)
-
             if progress_callback:
                 progress_callback(submission_id, 100, "ready", "Extraction complete")
 
@@ -210,6 +211,8 @@ class SubmissionService:
                 "submission_id": submission_id,
                 "data": json_data,
             }
+        except Exception as e:
+            print("uploading and extracting error", str(e))
         finally:
             if temp_upload_dir:
                 shutil.rmtree(temp_upload_dir, ignore_errors=True)
@@ -652,6 +655,38 @@ class SubmissionService:
         return form
 
 
+    def list_submission_summaries(self) -> List[Dict[str, Any]]:
+        """
+        Return lightweight submission metadata records without loading full JSON data.
+        """
+        metadata_rows = self.db.list_submissions_metadata()
+        client_name_cache: Dict[str, Optional[str]] = {}
+        summaries: List[Dict[str, Any]] = []
+
+        for metadata in metadata_rows:
+            if not metadata:
+                continue
+            submission_id = metadata.get("submission_id")
+            if not submission_id:
+                continue
+
+            client_id = metadata.get("client_id")
+            client_name = metadata.get("client_name")
+            
+
+            summaries.append({
+                "submission_id": submission_id,
+                "filename": metadata.get("filename") or metadata.get("name") or "Untitled.pdf",
+                "status": metadata.get("status") or metadata.get("workflow_status") or "uploaded",
+                "uploaded_at": metadata.get("uploaded_at") or metadata.get("created_at"),
+                "confidence": metadata.get("confidence"),
+                "folder_id": metadata.get("folder_id"),
+                "client_id": client_id,
+                "client_name": client_name,
+            })
+        return summaries
+
+
     def get_all_submissions(self) -> List[Dict[str, Any]]:
         """
         Get all submissions.
@@ -719,6 +754,23 @@ class SubmissionService:
         self._persist_submission_metadata(metadata)
 
         return {'submission_id': submission_id, 'status': status}
+
+    def _resolve_client_name(
+        self,
+        client_id: Optional[str],
+        cache: Dict[str, Optional[str]],
+    ) -> Optional[str]:
+        if not client_id:
+            return None
+        if client_id in cache:
+            return cache[client_id]
+        try:
+            client = self.client_service.get_client(client_id)
+        except Exception:
+            client = None
+        name = client.get("name") if client else None
+        cache[client_id] = name
+        return name
 
     def _parse_iso(self, s: Optional[str]) -> Optional[datetime]:
         if not s:

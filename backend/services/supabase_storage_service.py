@@ -113,6 +113,17 @@ class SupabaseStorageService:
             print(f"[supabase] Download failed for {storage_path}: {exc}")
             return None
 
+    def download_text(self, storage_path: str, encoding: str = "utf-8") -> Optional[str]:
+        """Download a text file and decode it."""
+        data = self.download_file(storage_path)
+        if data is None:
+            return None
+        try:
+            return data.decode(encoding)
+        except Exception as exc:
+            print(f"[supabase] Failed to decode {storage_path}: {exc}")
+            return None
+
     # --------------------------------------------------------------- deletion
     def delete_file(self, storage_path: str) -> None:
         """Remove a file from storage (best-effort)."""
@@ -142,3 +153,36 @@ class SupabaseStorageService:
         except Exception as exc:
             print(f"[supabase] Signed URL failed for {storage_path}: {exc}")
             return None
+
+    def get_public_url(self, storage_path: str) -> Optional[str]:
+        """Return the public URL for a storage path if available."""
+        if not self.enabled or not self._client:
+            return None
+        try:
+            bucket = self._client.storage.from_(self.bucket)
+            response = bucket.get_public_url(storage_path)
+            if isinstance(response, dict):
+                data = response.get("data") or {}
+                return data.get("publicUrl")
+            return response
+        except Exception as exc:
+            print(f"[supabase] Public URL failed for {storage_path}: {exc}")
+            return None
+
+    # --------------------------------------------------------------- listing
+    def list_objects(self, *parts: Optional[str], **options) -> list:
+        """List objects within a path."""
+        if not self.enabled or not self._client:
+            return []
+        path = self.build_path(*parts)
+        opts = {"limit": 1000, "offset": 0}
+        opts.update(options)
+        try:
+            bucket = self._client.storage.from_(self.bucket)
+            response = bucket.list(path, opts)
+            if isinstance(response, dict) and response.get("error"):
+                raise RuntimeError(response["error"])
+            return response or []
+        except Exception as exc:
+            print(f"[supabase] List failed for {path}: {exc}")
+            return []

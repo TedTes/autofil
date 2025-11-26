@@ -7,10 +7,12 @@ Endpoints for client management.
 from flask import Blueprint, request, jsonify
 from services.client_service import ClientService
 from services.submission_service import SubmissionService
+from services.template_library_service import TemplateLibraryService
 
 client_bp = Blueprint('clients', __name__)
 client_service = ClientService()
 submission_service = SubmissionService()
+template_library = TemplateLibraryService()
 
 
 @client_bp.route('/', methods=['GET'])
@@ -242,9 +244,7 @@ def list_templates():
         JSON with list of templates
     """
     try:
-        from lib.submission_templates import list_templates as get_all_templates
-        
-        templates = get_all_templates()
+        templates = template_library.list_templates()
         
         return jsonify({
             'success': True,

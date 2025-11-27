@@ -265,13 +265,6 @@ export function HomeView({
           </div>
         )}
       </div>
-
-      {/* Recent Submissions */}
-      <RecentSubmissionsCard
-        limit={5}
-        onSubmissionClick={handleRecentSubmissionClick}
-        onViewAll={onNavigateToDocuments}
-      />
     </div>
   )
 }

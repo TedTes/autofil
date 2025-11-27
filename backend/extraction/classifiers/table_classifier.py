@@ -49,15 +49,19 @@ class TableClassifier(IClassifier):
         },
         DocumentType.SOV: {
             'required_columns': [
-                r'location',
-                r'(building|property).*value',
+                r'(location|loc\.?|site)',
+                r'(building|property).*(value|limit|tiv|amount)',
             ],
             'strong_columns': [
                 r'address',
-                r'contents.*value',
+                r'city',
+                r'state',
+                r'zip',
+                r'contents.*(value|limit|amount)',
+                r'business.*(income|interruption)',
                 r'construction',
                 r'occupancy',
-                r'total.*value',
+                r'(total|combined).*(value|limit|tiv|insured)',
                 r'(tiv|total.*insured.*value)',
                 r'year.*built',
             ],

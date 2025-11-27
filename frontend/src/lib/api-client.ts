@@ -155,8 +155,8 @@ export async function getSubmission(
     }
     
     const rawData = response.data.data
-    
-    // ✅ CHECK: Is this CanonicalOutput format?
+
+
     if (isCanonicalOutput(rawData)) {
       console.log('📦 Detected CanonicalOutput format, transforming...')
       

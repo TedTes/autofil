@@ -100,7 +100,8 @@ class KeywordClassifier(IClassifier):
         },
         DocumentType.SOV: {
             'required': [
-                r'(schedule\s+of\s+values|statement\s+of\s+values|sov)',
+                r'(schedule\s+of\s+values|statement\s+of\s+values|\bsov\b)',
+                r'(total\s+insured\s+value|\btiv\b)',
             ],
             'strong': [
                 r'(building|property)\s+value',

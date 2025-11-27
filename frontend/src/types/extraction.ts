@@ -164,3 +164,46 @@ export interface GrossSalesStructure {
 export type NestedData = {
   [key: string]: string | number | boolean | null | NestedData | NestedData[] | unknown[]
 }
+
+export interface SovProperty {
+  location_number?: string
+  address?: string
+  city?: string
+  state?: string
+  zip?: string
+  building_value?: number
+  contents_value?: number
+  business_income?: number
+  total_value?: number
+  construction?: string
+  occupancy?: string
+  square_feet?: number
+  stories?: number
+  year_built?: number
+  sprinkler?: string
+  roof_type?: string
+  [key: string]: unknown
+}
+
+export interface SovTotals {
+  total_locations?: number
+  total_building_value?: number
+  total_contents_value?: number
+  total_business_income?: number
+  total_insured_value?: number
+  [key: string]: number | undefined
+}
+
+export interface SovScheduleData {
+  document_type: 'sov'
+  extraction_date?: string
+  property_count?: number
+  properties?: SovProperty[]
+  totals?: SovTotals
+  schedule_information?: Record<string, unknown>
+  success?: boolean
+  warnings?: string[]
+  errors?: string[]
+  metadata?: Record<string, unknown>
+  [key: string]: unknown
+}

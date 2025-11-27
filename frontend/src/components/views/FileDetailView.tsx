@@ -1,18 +1,20 @@
 'use client'
 
 import { useState, useEffect,useCallback } from 'react'
-import { ArrowLeft, Download, Save, Loader2,Edit,Check } from 'lucide-react'
+import { ArrowLeft, Download, Save, Loader2,Edit,Check, FileSpreadsheet } from 'lucide-react'
 import { PdfPreview } from '@/components/PdfPreview'
 import { ExtractionDataForm} from '@/components/ExtractionDataForm'
-import {type ExtractedField, type ExtractionData,type FileDetailActions,type FillReport  } from "../../types";
+import {type ExtractedField, type ExtractionData,type FileDetailActions,type FillReport, type SovScheduleData  } from "../../types";
 import { getSubmission,  downloadBlob,exportSingleSubmission,updateSubmissionData } from '@/lib/api-client'
 import {transformFormFieldsToApi,fieldsToNestedObject} from "../../lib"
 import {ExportModal} from "../ExportModal";
 import { CleanDataDisplay } from '../extraction/CleanDataDisplay'
 import { FillModal } from '../FillModal'
+import { SovScheduleView, getSovScheduleData } from '../extraction/SovSchedule'
 
 interface FileDetailViewProps {
   submissionId: string
+  inputId?: string
   filename?: string
   onBack?: () => void
   onActionsReady?: (actions: FileDetailActions | null) => void
@@ -21,6 +23,7 @@ interface FileDetailViewProps {
 
 export function FileDetailView({
   submissionId,
+  inputId,
   filename = 'Document',
   onBack,
   onActionsReady
@@ -40,7 +43,11 @@ export function FileDetailView({
   // Export state
   const [showExportModal, setShowExportModal] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
-  
+  const resolvedFilename = extractedData?.filename || filename
+  const sovScheduleData = getSovScheduleData(extractedData?.data)
+  const hasSovSchedule = Boolean(sovScheduleData)
+  const isPdfPreview = !!resolvedFilename && resolvedFilename.toLowerCase().endsWith('.pdf')
+
 
   // Fetch submission data
   useEffect(() => {
@@ -58,7 +65,7 @@ export function FileDetailView({
     }
 
     loadSubmission()
-  }, [submissionId])
+  }, [submissionId, inputId])
 
   const handleSaveChanges = useCallback(async () => {
     if (!extractedData?.data) return
@@ -87,7 +94,7 @@ export function FileDetailView({
       try {
         const pdfBlob = await exportSingleSubmission(submissionId)
         const timestamp = new Date().toISOString().split('T')[0]
-        const baseFilename = filename.replace('.pdf', '') || 'document'
+        const baseFilename = (resolvedFilename || 'document').replace('.pdf', '')
         const exportFilename = `${baseFilename}_filled_${timestamp}.pdf`
         
         downloadBlob(pdfBlob, exportFilename)
@@ -146,6 +153,10 @@ const handleFillComplete = useCallback(async (report: FillReport) => {
 
   // Toggle edit mode
   const handleToggleEditMode = () => {
+    if (hasSovSchedule) {
+      setIsEditMode(false)
+      return
+    }
     if (isEditMode && hasUnsavedChanges) {
       // Warn about unsaved changes
       if (confirm('You have unsaved changes. Do you want to discard them?')) {
@@ -234,16 +245,22 @@ const handleFillComplete = useCallback(async (report: FillReport) => {
         </div>
       )}
 
-      {/* Main Content - Two Column Layout */}
-      <div className="flex-1 overflow-hidden flex flex-col lg:grid lg:grid-cols-2 lg:gap-0">
+      {/* Main Content */}
+      <div
+        className={`flex-1 overflow-hidden flex flex-col ${
+          isPdfPreview ? 'lg:grid lg:grid-cols-2 lg:gap-0' : ''
+        }`}
+      >
         {/* PDF Preview */}
-        <div className="h-full overflow-hidden bg-gray-900 border-r border-gray-700">
-          <PdfPreview
-            fileUrl={getInputPreviewUrl(submissionId)}
-            filename={filename}
-            onDownload={handleDownloadOriginal}
-          />
-        </div>
+        {isPdfPreview && (
+          <div className="h-full overflow-hidden bg-gray-900 border-r border-gray-700">
+            <PdfPreview
+              fileUrl={getInputPreviewUrl(submissionId)}
+              filename={resolvedFilename}
+              onDownload={handleDownloadOriginal}
+            />
+          </div>
+        )}
 
         {/* Data Panel */}
         <div className="h-full bg-white overflow-y-auto">
@@ -255,39 +272,42 @@ const handleFillComplete = useCallback(async (report: FillReport) => {
                   Extracted Data
                 </h3>
                 <p className="text-xs text-gray-600">
-                  {isEditMode 
+                  {hasSovSchedule
+                    ? 'Schedule of Values detected. Review the extracted property schedule below.'
+                    : isEditMode
                     ? 'Edit the information below and click Save when done'
-                    : 'Review the extracted information or click Edit to make changes'
-                  }
+                    : 'Review the extracted information or click Edit to make changes'}
                 </p>
               </div>
 
               {/* Edit Mode Toggle Button */}
-              <button
-                onClick={handleToggleEditMode}
-                disabled={isSavingChanges}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ml-4 ${
-                  isEditMode
-                    ? 'bg-blue-600 text-white hover:bg-blue-700'
-                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                } disabled:opacity-50 disabled:cursor-not-allowed`}
-              >
-                {isEditMode ? (
-                  <>
-                    <Check className="w-4 h-4" />
-                    <span className="hidden sm:inline">Done</span>
-                  </>
-                ) : (
-                  <>
-                    <Edit className="w-4 h-4" />
-                    <span className="hidden sm:inline">Edit</span>
-                  </>
-                )}
-              </button>
+              {!hasSovSchedule && (
+                <button
+                  onClick={handleToggleEditMode}
+                  disabled={isSavingChanges}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ml-4 ${
+                    isEditMode
+                      ? 'bg-blue-600 text-white hover:bg-blue-700'
+                      : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  {isEditMode ? (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span className="hidden sm:inline">Done</span>
+                    </>
+                  ) : (
+                    <>
+                      <Edit className="w-4 h-4" />
+                      <span className="hidden sm:inline">Edit</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
 
             {/* Unsaved Changes Indicator */}
-            {hasUnsavedChanges && (
+            {!hasSovSchedule && hasUnsavedChanges && (
               <div className="mb-4 px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
@@ -307,6 +327,21 @@ const handleFillComplete = useCallback(async (report: FillReport) => {
 
             {/* Extraction Data Form */}
             <div>
+  {!isPdfPreview && (
+    <div className="mb-4 flex flex-wrap items-center gap-3 text-sm text-gray-600">
+      <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-700 rounded-full">
+        <FileSpreadsheet className="w-4 h-4" />
+        {hasSovSchedule ? 'Schedule of Values file' : 'Original file'}
+      </div>
+      <button
+        onClick={handleDownloadOriginal}
+        className="inline-flex items-center gap-2 px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+      >
+        <Download className="w-4 h-4" />
+        Download {resolvedFilename || 'file'}
+      </button>
+    </div>
+  )}
   {/* Overall Confidence */}
   {extractedData && extractedData.confidence !== undefined && (
     <div className="mb-4 bg-white rounded-lg border border-gray-200 p-4">
@@ -342,7 +377,9 @@ const handleFillComplete = useCallback(async (report: FillReport) => {
   )}
 
   {/* Clean Data Display */}
-  {extractedData && extractedData.data ? (
+  {hasSovSchedule && sovScheduleData ? (
+    <SovScheduleView schedule={sovScheduleData} />
+  ) : extractedData && extractedData.data ? (
     <CleanDataDisplay
       data={extractedData.data}
       fieldConfidence={extractedData.field_confidence}
@@ -394,14 +431,14 @@ const handleFillComplete = useCallback(async (report: FillReport) => {
         isOpen={showExportModal}
         onClose={() => setShowExportModal(false)}
         submissionId={submissionId}
-        filename={filename}
+        filename={resolvedFilename}
         onExport={handleExport}
       />
        <FillModal
         isOpen={showFillModal}
         onClose={() => setShowFillModal(false)}
         submissionId={submissionId}
-        filename={filename}
+        filename={resolvedFilename}
         onFillComplete={handleFillComplete}
       />
     </div>

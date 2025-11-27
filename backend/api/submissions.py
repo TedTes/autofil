@@ -664,6 +664,21 @@ def get_submissions_stats():
         return jsonify({"error": str(e)}), 500
 
 
+@submission_bp.route("/reports/summary", methods=["GET"])
+def get_reports_summary():
+    """Return aggregated metrics for the reports dashboard."""
+    try:
+        range_days = int(request.args.get("range_days", 30))
+        summary = submission_service.get_reports_summary(range_days=range_days)
+        return jsonify({
+            "success": True,
+            "data": summary,
+            "message": "Report summary generated successfully",
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @submission_bp.route('/recent', methods=['GET'])
 def list_recent_submissions():
     """

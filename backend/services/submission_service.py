@@ -8,7 +8,7 @@ import os
 import shutil
 import tempfile
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from werkzeug.utils import secure_filename
@@ -858,7 +858,84 @@ class SubmissionService:
         ]
 
         return {"items": items, "total": total}
-    
+
+    def get_reports_summary(self, range_days: int = 30) -> Dict[str, Any]:
+        """
+        Aggregate submission metrics for the reports dashboard.
+        """
+        metadata_rows = self.db.list_submissions_metadata()
+        now = datetime.utcnow()
+        cutoff = now - timedelta(days=max(range_days, 1))
+
+        records: List[Dict[str, Any]] = []
+        for metadata in metadata_rows:
+            uploaded = self._parse_iso(metadata.get("uploaded_at") or metadata.get("created_at"))
+            if uploaded and uploaded < cutoff:
+                continue
+            metadata_copy = dict(metadata)
+            metadata_copy["_uploaded_dt"] = uploaded
+            metadata_copy["_filled_dt"] = self._parse_iso(metadata.get("filled_at"))
+            records.append(metadata_copy)
+
+        total = len(records)
+        status_counts: Dict[str, int] = {}
+        client_counts: Dict[str, Dict[str, Any]] = {}
+
+        completed_statuses = {"filled", "extracted"}
+        completed = 0
+
+        turnaround_minutes = []
+        volume_by_day: Dict[str, int] = {}
+
+        for record in records:
+            status = record.get("status") or "created"
+            status_counts[status] = status_counts.get(status, 0) + 1
+            if status in completed_statuses:
+                completed += 1
+
+            uploaded_dt = record.get("_uploaded_dt")
+            filled_dt = record.get("_filled_dt")
+            if uploaded_dt:
+                day_key = uploaded_dt.date().isoformat()
+                volume_by_day[day_key] = volume_by_day.get(day_key, 0) + 1
+            if uploaded_dt and filled_dt and filled_dt >= uploaded_dt:
+                minutes = (filled_dt - uploaded_dt).total_seconds() / 60.0
+                turnaround_minutes.append(minutes)
+
+            client_id = record.get("client_id") or "unknown"
+            client_entry = client_counts.setdefault(
+                client_id,
+                {
+                    "client_id": record.get("client_id"),
+                    "client_name": record.get("client_name") or "Unknown client",
+                    "submissions": 0,
+                },
+            )
+            client_entry["submissions"] += 1
+
+        avg_turnaround = sum(turnaround_minutes) / len(turnaround_minutes) if turnaround_minutes else 0.0
+        success_rate = (completed / total * 100.0) if total else 0.0
+
+        top_clients = sorted(client_counts.values(), key=lambda x: x["submissions"], reverse=True)[:5]
+        volume_series = [
+            {"date": day, "count": volume_by_day[day]}
+            for day in sorted(volume_by_day.keys())
+        ]
+
+        return {
+            "totals": {
+                "total_submissions": total,
+                "completed": completed,
+                "success_rate": round(success_rate, 2),
+            },
+            "status_breakdown": status_counts,
+            "turnaround": {
+                "average_minutes": round(avg_turnaround, 2),
+                "sample_size": len(turnaround_minutes),
+            },
+            "submission_volume": volume_series,
+            "top_clients": top_clients,
+        }
 
 
     

@@ -307,15 +307,6 @@ const handleFillComplete = useCallback(async (report: FillReport) => {
 
             {/* Extraction Data Form */}
             <div>
-  <div className="flex items-center justify-between mb-4">
-    <div>
-      <h3 className="text-lg font-semibold text-gray-900">Extracted Data</h3>
-      <p className="text-sm text-gray-600 mt-1">
-        Review the extracted information or click Edit to make changes
-      </p>
-    </div>
-  </div>
-
   {/* Overall Confidence */}
   {extractedData && extractedData.confidence !== undefined && (
     <div className="mb-4 bg-white rounded-lg border border-gray-200 p-4">

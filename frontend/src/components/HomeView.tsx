@@ -168,7 +168,7 @@ export function HomeView({
 
       {/* Quick Access */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Access</h3>
+        <h3 className="text-md font-semibold text-gray-500 mb-4">Quick Access</h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <button
             onClick={onNavigateToClients}
@@ -213,7 +213,7 @@ export function HomeView({
               <AlertTriangle className="w-5 h-5 text-red-600" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Pending Review</h3>
+              <h3 className="text-md font-semibold text-gray-500">Pending Review</h3>
               <p className="text-xs text-gray-500">Files needing attention</p>
             </div>
           </div>

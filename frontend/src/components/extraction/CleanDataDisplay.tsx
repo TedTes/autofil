@@ -26,7 +26,18 @@ function extractFieldValue(value: unknown): string {
   
   // If it's an object with a 'value' property, extract it
   if (typeof value === 'object' && value !== null && 'value' in value) {
-    return String((value as { value: unknown }).value)
+    const inner = (value as { value: unknown }).value
+    if (inner === null || inner === undefined) {
+      return ''
+    }
+    if (typeof inner === 'object') {
+      try {
+        return JSON.stringify(inner, null, 2)
+      } catch {
+        return '[object]'
+      }
+    }
+    return String(inner)
   }
   
   // If it's an array, join the values (limit preview)
@@ -40,7 +51,11 @@ function extractFieldValue(value: unknown): string {
   
   // If it's a plain object, stringify it
   if (typeof value === 'object') {
-    return JSON.stringify(value)
+    try {
+      return JSON.stringify(value, null, 2)
+    } catch {
+      return '[object]'
+    }
   }
   
   return String(value)

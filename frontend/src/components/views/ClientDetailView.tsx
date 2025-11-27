@@ -355,7 +355,7 @@ function CompactFolderList({
   selectedInputsByPackage: Record<string, string[]>
   selectedOutputsByPackage: Record<string, string[]>
   onToggle?: (pkg: ClientSubmissionPackage) => void
-  onViewFile?: (submissionId: string, filename?: string) => void
+  onViewFile?: (submissionId: string, filename?: string, inputId?: string) => void
   onDownloadFile?: (submissionId: string, filename: string) => void
   onToggleInput?: (submissionId: string, inputId: string) => void
   onSelectAllInputs?: (submissionId: string, inputIds: string[]) => void
@@ -480,7 +480,7 @@ function CompactFolderList({
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
-                            onViewFile?.(pkg.submission_id, input.filename)
+                          onViewFile?.(pkg.submission_id, input.filename, input.input_id)
                           }}
                           className="flex-1 text-left min-w-0 hover:bg-transparent"
                         >
@@ -648,7 +648,7 @@ interface ClientDetailViewProps {
   clientId: string
   clientName?: string
   onNavigateBack?: () => void
-  onFileClick?: (submissionId: string, filename?: string) => void
+  onFileClick?: (submissionId: string, filename?: string, inputId?: string) => void
 }
 
 export function ClientDetailView({
@@ -724,9 +724,9 @@ export function ClientDetailView({
     await createFolder(name)
   }
 
-  const handleViewFile = (submissionId: string, filename?: string) => {
+  const handleViewFile = (submissionId: string, filename?: string, inputId?: string) => {
     if (filename) {
-      onFileClick?.(submissionId, filename)
+      onFileClick?.(submissionId, filename, inputId)
     }
   }
 

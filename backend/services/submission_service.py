@@ -3,8 +3,10 @@ Submission service - orchestrates extraction and filling workflow.
 """
 
 import copy
+import hashlib
 import json
 import os
+import re
 import shutil
 import tempfile
 import uuid
@@ -18,6 +20,7 @@ from extraction.core import UniversalFileLoader
 from extraction.core.document import Document, DocumentType
 from extraction.core.readers.pdf_reader import PdfReader
 from extraction.extractors import extractor_registry
+from extraction.extractors.mfc import MFC
 from filling.fillers import Acord126Filler
 from lib.submission_templates import TEMPLATES, get_template
 from services.client_service import ClientService
@@ -38,6 +41,7 @@ class SubmissionService:
     - PDF filling
     - File retrieval
     """
+
     
     def __init__(self):
         """Initialize service dependencies."""
@@ -158,10 +162,9 @@ class SubmissionService:
             if progress_callback:
                 progress_callback(submission_id, 80, "extracting", "Saving extracted data...")
 
-            json_data = extraction_result.to_dict()
-            version_notes = "Re-extraction" if is_existing_submission else "Initial extraction"
-
+            json_data = self._dedupe_entity_values(extraction_result.to_dict())
             timestamp = datetime.utcnow().isoformat()
+            version_notes = "Re-extraction" if is_existing_submission else "Initial extraction"
             metadata.setdefault("submission_id", submission_id)
             metadata.setdefault("uploaded_at", timestamp)
             metadata["updated_at"] = timestamp
@@ -175,6 +178,32 @@ class SubmissionService:
             if extraction_confidence is not None:
                 metadata["confidence"] = extraction_confidence
 
+            extraction_hash = self._compute_extraction_hash(json_data)
+            inputs_meta = metadata.setdefault("inputs", [])
+
+            duplicate_entry = None
+            for entry in inputs_meta:
+                if "extraction_hash" not in entry:
+                    existing_data = entry.get("data")
+                    if existing_data:
+                        entry["extraction_hash"] = self._compute_extraction_hash(existing_data)
+                if entry.get("extraction_hash") == extraction_hash:
+                    duplicate_entry = entry
+                    break
+
+            if duplicate_entry:
+                merged_data = self._dedupe_entity_values(self._merge_input_data(inputs_meta) or json_data)
+                metadata["data"] = merged_data
+                metadata["file_count"] = len(inputs_meta)
+                self._persist_submission_metadata(metadata)
+                if progress_callback:
+                    progress_callback(submission_id, 100, "ready", "Duplicate document detected; using existing data.")
+                return {
+                    "submission_id": submission_id,
+                    "data": json_data,
+                    "duplicate_of": duplicate_entry.get("input_id"),
+                }
+
             input_entry = {
                 "input_id": str(uuid.uuid4()),
                 "filename": filename,
@@ -184,12 +213,12 @@ class SubmissionService:
                 "url": remote_input.get("public_url") if remote_input else None,
                 "storage": remote_input,
                 "data": json_data,
+                "extraction_hash": extraction_hash,
             }
-            inputs_meta = metadata.setdefault("inputs", [])
             inputs_meta.append(input_entry)
             metadata["file_count"] = len(inputs_meta)
 
-            merged_data = self._merge_input_data(inputs_meta) or json_data
+            merged_data = self._dedupe_entity_values(self._merge_input_data(inputs_meta) or json_data)
             metadata["data"] = merged_data
             version_id = self.version_service.create_version(
                 submission_id=submission_id,
@@ -220,7 +249,12 @@ class SubmissionService:
     def get_submission_metadata(self, submission_id: str) -> Optional[Dict[str, Any]]:
         return self.db.get_submission_metadata(submission_id)
 
-    def get_submission(self, submission_id: str, client_id: Optional[str] = None):
+    def get_submission(
+        self,
+        submission_id: str,
+        client_id: Optional[str] = None,
+        input_id: Optional[str] = None,
+    ):
         """
         Get submission data.
         
@@ -247,17 +281,33 @@ class SubmissionService:
             except Exception:
                 client_name = None
         
+        selected_input_id = None
+        payload_data = metadata.get('data', {})
+        filename = metadata['filename']
+
+        if input_id:
+            input_entry = next(
+                (entry for entry in metadata.get('inputs', []) if entry.get('input_id') == input_id),
+                None,
+            )
+            if not input_entry:
+                return None
+            payload_data = input_entry.get('data', {}) or payload_data
+            filename = input_entry.get('filename') or filename
+            selected_input_id = input_entry.get('input_id')
+
         return {
             'submission_id': submission_id,
             'client_id': resolved_client_id,
             'client_name': client_name,
             'folder_id': metadata.get('folder_id'),
-            'filename': metadata['filename'],
+            'filename': filename,
             'status': metadata['status'],
             'uploaded_at': metadata['uploaded_at'],
             'confidence': metadata.get('confidence'),
             'warnings': metadata.get('warnings', []),
-            'data': metadata.get('data', {})
+            'data': payload_data,
+            'input_id': selected_input_id,
         }
     
     def update_data(
@@ -424,6 +474,80 @@ class SubmissionService:
             if data:
                 merged = self._deep_merge_dict(merged, data)
         return merged
+
+    def _canonicalize_value_for_hash(self, value: Any):
+        if isinstance(value, dict):
+            return {
+                key: self._canonicalize_value_for_hash(value[key])
+                for key in sorted(value.keys())
+            }
+        if isinstance(value, list):
+            return [self._canonicalize_value_for_hash(item) for item in value]
+        if isinstance(value, str):
+            collapsed = re.sub(r"\s+", " ", value.strip().lower())
+            numeric_candidate = re.sub(r"[,$]", "", collapsed)
+            if re.fullmatch(r"[-+]?\d+(\.\d+)?", numeric_candidate):
+                try:
+                    return float(numeric_candidate)
+                except ValueError:
+                    pass
+            return collapsed
+        return value
+
+    def _compute_extraction_hash(self, data: Any) -> str:
+        canonical_data = self._canonicalize_value_for_hash(data)
+        canonical_json = json.dumps(canonical_data, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+
+    def _normalize_entity_value(self, value: Any) -> str:
+        canonical = self._canonicalize_value_for_hash(value)
+        return json.dumps(canonical, sort_keys=True, separators=(",", ":"))
+
+    def _dedupe_entity_values(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        if not isinstance(data, dict):
+            return data
+        entities = data.get("entities")
+        if not isinstance(entities, dict):
+            return data
+        for key, values in entities.items():
+            if not isinstance(values, list):
+                continue
+            seen = set()
+            deduped = []
+            for entry in values:
+                if isinstance(entry, dict):
+                    normalized = self._normalize_entity_value(entry.get("value"))
+                else:
+                    normalized = self._normalize_entity_value(entry)
+                if normalized in seen:
+                    continue
+                seen.add(normalized)
+                deduped.append(entry)
+            def entry_conf(entry: Any) -> float:
+                if isinstance(entry, dict):
+                    try:
+                        return float(entry.get("confidence") or 0)
+                    except Exception:
+                        return 0.0
+                return 0.0
+
+            deduped.sort(key=entry_conf, reverse=True)
+            if not self._field_allows_multiple(key) and deduped:
+                entities[key] = [deduped[0]]
+            else:
+                entities[key] = deduped
+        return data
+
+    def _debug_compare_hashes(self, data1: Any, data2: Any) -> bool:
+        hash1 = self._compute_extraction_hash(data1)
+        hash2 = self._compute_extraction_hash(data2)
+        print(f"[debug] hash1={hash1} hash2={hash2}")
+        return hash1 == hash2
+
+    def _field_allows_multiple(self, field_id: str) -> bool:
+        field_meta = MFC.field(field_id) or {}
+        cardinality = str(field_meta.get("cardinality", "")).lower()
+        return "many" in cardinality
 
     def _deep_merge_dict(self, base: Dict[str, Any], incoming: Dict[str, Any]) -> Dict[str, Any]:
         if not base:

@@ -11,7 +11,6 @@ import json
 from datetime import datetime
 from flask import Blueprint, request, jsonify, send_file, Response
 from services.submission_service import SubmissionService
-
 # Blueprint for submission-specific routes
 submission_bp = Blueprint("submissions", __name__)
 submission_service = SubmissionService()
@@ -100,6 +99,7 @@ def upload_pdf():
         }), status
 
     except Exception as e:
+        print("error from upload pdf method",str(e))
         return jsonify({"error": f"Upload failed: {str(e)}"}), 500
 
 
@@ -107,7 +107,8 @@ def upload_pdf():
 def get_submission(submission_id):
     """Retrieve submission data with field-level confidence/hints."""
     try:
-        submission = submission_service.get_submission(submission_id)
+        input_id = request.args.get("input_id")
+        submission = submission_service.get_submission(submission_id, input_id=input_id)
         if not submission:
             return jsonify({"error": "Submission not found"}), 404
 

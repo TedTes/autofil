@@ -81,6 +81,8 @@ class ACORD126Extractor(BaseExtractor):
           - matching against MFC aliases
           - handling special cases (Classification rows, etc. if you want)
         """
+        template_hits: set[str] = set()
+
         for field_name, value in raw_fields.items():
             if value is None or str(value).strip() in ("", "/Off", "Off"):
                 continue
@@ -91,8 +93,12 @@ class ACORD126Extractor(BaseExtractor):
                 continue
 
             canonical_id: Optional[str] = None
+            mapped_via_template = False
             if template_config:
                 canonical_id = self._map_via_template(field_name, template_config)
+                if canonical_id:
+                    mapped_via_template = True
+                    template_hits.add(canonical_id)
 
             if not canonical_id:
                 canonical_id = self._map_pdf_field_to_canonical(field_name)

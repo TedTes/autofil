@@ -10,6 +10,7 @@ signature_fields:
 
 field_map:
   InsuredName: NamedInsured_FullName_A
+  LineOfBusiness: GeneralLiabilityLineOfBusiness_RemarkText_A
   ProducerName: Producer_FullName_A
   Carrier: Insurer_FullName_A
   PolicyNumber: Policy_PolicyNumberIdentifier_A

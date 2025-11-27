@@ -291,6 +291,35 @@ export async function getSubmissionTemplates(): Promise<SubmissionTemplateSummar
   }
 }
 
+export interface ReportsSummary {
+  totals: {
+    total_submissions: number
+    completed: number
+    success_rate: number
+  }
+  status_breakdown: Record<string, number>
+  turnaround: {
+    average_minutes: number
+    sample_size: number
+  }
+  submission_volume: { date: string; count: number }[]
+  top_clients: { client_id?: string; client_name?: string; submissions: number }[]
+}
+
+export async function getReportsSummary(rangeDays?: number): Promise<ReportsSummary> {
+  try {
+    const response = await api.get('/submissions/reports/summary', {
+      params: { range_days: rangeDays ?? 30 },
+    })
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to load reports')
+    }
+    return response.data.data as ReportsSummary
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
 export async function createClientSubmission(
   clientId: string,
   name: string,

@@ -41,8 +41,8 @@ class Acord126Filler(BaseFiller):
 
     def __init__(self):
         super().__init__()
-        # Base dir for local templates (TemplateLoader also uses this)
-        self.template_base_dir = Path(__file__).parent / "templates"
+        # Base dir for local templates (shared across backend/templates)
+        self.template_base_dir = Path(__file__).resolve().parent.parent / "templates"
 
     # ------------------------------------------------------------------ #
     # Public API

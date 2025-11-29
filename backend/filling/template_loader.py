@@ -23,18 +23,18 @@ class TemplateLoader:
         - Local filesystem (default)
         - Cloud storage (if TEMPLATE_CLOUD_BASE_URL is set)
 
-    Local layouts supported:
+    Local layouts supported under backend/templates:
 
     1) Versioned:
-        filling/templates/acord_126_2016/v2016_09/template.json
-        filling/templates/acord_126_2016/v2016_09/template.pdf
+        backend/templates/acord_126_2016/v2016_09/template.json
+        backend/templates/acord_126_2016/v2016_09/template.pdf
 
     2) Simple (no version folders):
-        filling/templates/acord_126_2016/template.json
-        filling/templates/acord_126_2016/template.pdf
+        backend/templates/acord_126_2016/template.json
+        backend/templates/acord_126_2016/template.pdf
     """
 
-    local_template_dir = Path(__file__).parent / "templates"
+    local_template_dir = Path(__file__).resolve().parent.parent / "templates"
     cloud_base_url = os.environ.get("TEMPLATE_CLOUD_BASE_URL")  # optional
 
     @classmethod
@@ -93,17 +93,15 @@ class TemplateLoader:
     @classmethod
     def _load_from_local(cls, template_id: str, version: str) -> Optional[TemplateConfig]:
         """
-        Local template layout:
+        Local template layout inside backend/templates:
 
         Versioned:
-            filling/templates/{template_id}/{version}/template.json
+            templates/{template_id}/{version}/template.json
         Simple:
-            filling/templates/{template_id}/template.json
+            templates/{template_id}/template.json
         """
 
         template_dir = cls.local_template_dir / template_id
-        print("template _ dir")
-        print(template_dir)
         if not template_dir.exists():
             print(f"[template_loader] template_dir does not exist: {template_dir}")
             return None

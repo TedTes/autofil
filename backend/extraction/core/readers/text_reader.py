@@ -9,7 +9,7 @@ from ..document import Document
 from ..file_loader import reader_registry
 
 
-@reader_registry.register('text/plain', 'text/csv')
+@reader_registry.register('text/plain')
 class TextReader(BaseReader):
     """
     Plain text file reader.

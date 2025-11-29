@@ -56,7 +56,7 @@ class SubmissionService:
         self.classifier = classifier_registry.create_composite(
             classifier_names=['mime', 'keyword', 'table'],
             strategy='highest_confidence'
-    )
+        )
         self.remote_storage = SupabaseStorageService()
         if not getattr(self.remote_storage, "enabled", False):
             raise RuntimeError("Supabase storage must be configured for file storage.")
@@ -292,7 +292,7 @@ class SubmissionService:
             )
             if not input_entry:
                 return None
-            payload_data = input_entry.get('data', {}) or payload_data
+            payload_data = self._load_input_data(input_entry) or payload_data
             filename = input_entry.get('filename') or filename
             selected_input_id = input_entry.get('input_id')
 
@@ -465,7 +465,18 @@ class SubmissionService:
 
     
     def _load_input_data(self, entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        return entry.get("data")
+        data = entry.get("data")
+        if data:
+            return data
+        data_path = entry.get("data_path")
+        abs_path = self._abs_storage_path(data_path)
+        if abs_path and os.path.exists(abs_path):
+            try:
+                with open(abs_path, "r") as f:
+                    return json.load(f)
+            except Exception:
+                return None
+        return None
 
     def _merge_input_data(self, inputs: List[Dict[str, Any]]) -> Dict[str, Any]:
         merged: Dict[str, Any] = {}

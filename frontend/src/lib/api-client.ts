@@ -17,11 +17,23 @@ import type {
   SubmissionListResponse,
   SubmissionListItem,
   SubmissionStats,
+  SovScheduleData,
 } from '@/types'
 
 
 import { transformEntities } from './entity-transformer'
 import {isCanonicalOutput} from "../lib/utils";
+
+function extractSovSchedule(raw: any): SovScheduleData | null {
+  if (!raw || typeof raw !== 'object') return null
+  if (raw.document_type === 'sov' && Array.isArray(raw.properties)) {
+    return raw as SovScheduleData
+  }
+  if (raw.data && typeof raw.data === 'object' && raw.data.document_type === 'sov') {
+    return raw.data as SovScheduleData
+  }
+  return null
+}
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
 
@@ -134,7 +146,8 @@ export async function uploadMultiplePdfs(
  * Get submission by ID.
  */
 export async function getSubmission(
-  submissionId: string
+  submissionId: string,
+  options?: { inputId?: string }
 ): Promise<{
   submission_id: string
   filename: string
@@ -148,14 +161,31 @@ export async function getSubmission(
   extraction_issues?: Record<string, unknown>
 }> {
   try {
-    const response = await api.get(`/submissions/${submissionId}`)
+    const response = await api.get(`/submissions/${submissionId}`, {
+      params: options?.inputId ? { input_id: options.inputId } : undefined,
+    })
     
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to get submission')
     }
-    
+   
     const rawData = response.data.data
-
+    const sovSchedule = extractSovSchedule(rawData)
+    if (sovSchedule) {
+      const s = rawData as Record<string, any>
+      return {
+        submission_id: s.submission_id || submissionId,
+        filename: s.filename || 'document.csv',
+        status: s.status || 'extracted',
+        uploaded_at: s.uploaded_at || new Date().toISOString(),
+        data: sovSchedule,
+        confidence: typeof s.confidence === 'number' ? s.confidence : 0,
+        field_confidence: s.field_confidence || {},
+        warnings: s.warnings || [],
+        field_hints: s.field_hints || {},
+        extraction_issues: s.extraction_issues || {},
+      }
+    }
 
     if (isCanonicalOutput(rawData)) {
       console.log('📦 Detected CanonicalOutput format, transforming...')

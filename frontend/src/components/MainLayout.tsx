@@ -270,8 +270,12 @@ const handleMobileSidebarClose = () => {
   }, [router])
 
   // Handle file click - navigate to file detail view
-  const handleFileClick = useCallback((submissionId: string, filename?: string) => {
-    navigateTo('file-detail', { submissionId, filename }, ['Dashboard', 'Documents', filename || 'File'])
+  const handleFileClick = useCallback((submissionId: string, filename?: string, inputId?: string) => {
+    navigateTo(
+      'file-detail',
+      { submissionId, filename, inputId },
+      ['Dashboard', 'Documents', filename || 'File']
+    )
   }, [navigateTo])
 
   const navigationItems = useMemo(
@@ -703,6 +707,7 @@ const handleMobileSidebarClose = () => {
             {currentView.type === 'file-detail' && currentView.data && 'submissionId' in currentView.data && (
               <FileDetailView
                 submissionId={currentView.data.submissionId}
+                inputId={'inputId' in currentView.data ? currentView.data.inputId : undefined}
                 filename={currentView.data.filename}
                 onBack={navigateBack}
                 onActionsReady={setFileDetailActions}

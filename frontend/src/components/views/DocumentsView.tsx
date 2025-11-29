@@ -19,7 +19,7 @@ import {BulkExportProgressModal} from "../BulkExportProgressModal"
 
 interface DocumentsViewProps {
   onNavigate: (type: ViewType, data?: unknown, breadcrumbs?: string[]) => void
-  onFileClick?: (submissionId: string, filename?: string) => void
+  onFileClick?: (submissionId: string, filename?: string, inputId?: string) => void
 }
 
 type SelectedStatus = 'all' | 'ready' | 'extracted' | 'filled'
@@ -1090,7 +1090,7 @@ function FileListView({
 }: {
   files: SubmissionListItem[]
   selectedFiles: Set<string>
-  onFileClick?: (submissionId: string, name: string) => void
+  onFileClick?: (submissionId: string, name: string, inputId?: string) => void
   onToggleSelect: (id: string) => void
   toggleSelectAll: () => void
   sortBy: 'date' | 'filename' | 'confidence' | 'client'
@@ -1284,7 +1284,7 @@ function FileGridView({
 }: {
   files: SubmissionListItem[]
   selectedFiles: Set<string>
-  onFileClick?: (submissionId: string, name: string) => void
+  onFileClick?: (submissionId: string, name: string, inputId?: string) => void
   onToggleSelect: (id: string) => void
 }) {
   return (
@@ -1424,7 +1424,7 @@ function ErrorState({ error, onRetry }: { error: string; onRetry: () => void }) 
 }
 
 // Empty State (when no files uploaded yet)
-function EmptyState({ onFileClick }: { onFileClick?: (submissionId: string, name: string) => void }) {
+function EmptyState({ onFileClick }: { onFileClick?: (submissionId: string, name: string, inputId?: string) => void }) {
   return (
     <div className="max-w-2xl mx-auto text-center py-12">
       <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">

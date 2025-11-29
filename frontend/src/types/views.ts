@@ -26,7 +26,7 @@ export type ViewDataMap = {
   'dashboard': undefined
   'documents': undefined
   'upload': undefined
-  'file-detail': { submissionId: string; filename?: string }
+  'file-detail': { submissionId: string; filename?: string; inputId?: string }
   'clients': undefined
   'client-detail': { clientId: string; clientName?: string }
   'submissions': { status?: string; clientId?: string } | undefined

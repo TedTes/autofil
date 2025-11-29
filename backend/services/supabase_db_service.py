@@ -69,7 +69,7 @@ class SupabaseDatabaseService:
                 self._client.table("submissions_metadata")
                 .select("metadata")
                 .eq("submission_id", submission_id)
-                .single()
+                .maybe_single()
             )
             if data:
                 return data.get("metadata")

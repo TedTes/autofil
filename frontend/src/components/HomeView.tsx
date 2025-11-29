@@ -20,7 +20,7 @@ import RecentSubmissionsCard from './dashboard/RecentSubmissionsCard'
 type HomeViewProps = {
   totalSubmissions: number
   submissionStats?: SubmissionStats | null
-  onGoToFile?: (submissionId: string, filename?: string) => void
+  onGoToFile?: (submissionId: string, filename?: string, inputId?: string) => void
   onNavigateToDocuments?: () => void
   onNavigateToClients?: () => void
 }

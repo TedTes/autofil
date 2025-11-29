@@ -50,22 +50,26 @@ export function FileDetailView({
 
 
   // Fetch submission data
-  useEffect(() => {
-    async function loadSubmission() {
-      try {
+  const fetchSubmission = useCallback(async (options?: { silent?: boolean }) => {
+    try {
+      if (!options?.silent) {
         setIsLoading(true)
-        const data = await getSubmission(submissionId)
-        setExtractedData(data)
-      } catch (err) {
-        console.error('Failed to load submission:', err)
-        setError(err instanceof Error ? err.message : 'Failed to load submission')
-      } finally {
+      }
+      const data = await getSubmission(submissionId, inputId ? { inputId } : undefined)
+      setExtractedData(data)
+    } catch (err) {
+      console.error('Failed to load submission:', err)
+      setError(err instanceof Error ? err.message : 'Failed to load submission')
+    } finally {
+      if (!options?.silent) {
         setIsLoading(false)
       }
     }
-
-    loadSubmission()
   }, [submissionId, inputId])
+
+  useEffect(() => {
+    void fetchSubmission()
+  }, [fetchSubmission])
 
   const handleSaveChanges = useCallback(async () => {
     if (!extractedData?.data) return
@@ -114,12 +118,11 @@ const handleFillComplete = useCallback(async (report: FillReport) => {
   setSuccessMessage(`✓ PDF filled successfully! ${report.written} fields written, ${report.skipped} skipped.`)
   setTimeout(() => setSuccessMessage(null), 5000)
   try {
-    const updatedData = await getSubmission(submissionId)
-    setExtractedData(updatedData)
+    await fetchSubmission({ silent: true })
   } catch (err) {
     console.error('Failed to reload submission after fill:', err)
   }
-}, [])
+}, [fetchSubmission])
    // Provide actions to parent (MainLayout)
    useEffect(() => {
     if (onActionsReady) {
@@ -163,7 +166,10 @@ const handleFillComplete = useCallback(async (report: FillReport) => {
         setIsEditMode(false)
         setHasUnsavedChanges(false)
         // Reload data to reset changes
-        getSubmission(submissionId).then(setExtractedData)
+        fetchSubmission({ silent: true }).then(() => {
+          setIsEditMode(false)
+          setHasUnsavedChanges(false)
+        })
       }
     } else {
       setIsEditMode(!isEditMode)

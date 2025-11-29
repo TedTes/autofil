@@ -16,24 +16,14 @@ import type {
   ClientSubmissionPackage,
   SubmissionListResponse,
   SubmissionListItem,
-  SubmissionStats,
-  SovScheduleData,
+  SubmissionStats
 } from '@/types'
 
 
 import { transformEntities } from './entity-transformer'
 import {isCanonicalOutput} from "../lib/utils";
 
-function extractSovSchedule(raw: any): SovScheduleData | null {
-  if (!raw || typeof raw !== 'object') return null
-  if (raw.document_type === 'sov' && Array.isArray(raw.properties)) {
-    return raw as SovScheduleData
-  }
-  if (raw.data && typeof raw.data === 'object' && raw.data.document_type === 'sov') {
-    return raw.data as SovScheduleData
-  }
-  return null
-}
+
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
 
@@ -116,8 +106,12 @@ export async function uploadPdf(
     throw new Error(response.data.error || 'Upload failed')
   }
 
-  const { submission_id, extraction } = response.data
-  return { submission_id: submission_id!, extraction: extraction! }
+  const { submission_id, confidence,warnings,data,filename,
+    status,
+    uploaded_at,field_confidence } = response.data
+  return { submission_id, confidence,warnings,data,filename,
+    status,
+    uploaded_at, field_confidence  }
 }
 
 /**
@@ -148,18 +142,7 @@ export async function uploadMultiplePdfs(
 export async function getSubmission(
   submissionId: string,
   options?: { inputId?: string }
-): Promise<{
-  submission_id: string
-  filename: string
-  status: string
-  uploaded_at: string
-  data: Record<string, unknown>
-  confidence: number
-  field_confidence: Record<string, number>
-  warnings: string[]
-  field_hints?: Record<string, string>
-  extraction_issues?: Record<string, unknown>
-}> {
+): Promise<SubmissionResponse> {
   try {
     const response = await api.get(`/submissions/${submissionId}`, {
       params: options?.inputId ? { input_id: options.inputId } : undefined,
@@ -168,24 +151,9 @@ export async function getSubmission(
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to get submission')
     }
-   
+
     const rawData = response.data.data
-    const sovSchedule = extractSovSchedule(rawData)
-    if (sovSchedule) {
-      const s = rawData as Record<string, any>
-      return {
-        submission_id: s.submission_id || submissionId,
-        filename: s.filename || 'document.csv',
-        status: s.status || 'extracted',
-        uploaded_at: s.uploaded_at || new Date().toISOString(),
-        data: sovSchedule,
-        confidence: typeof s.confidence === 'number' ? s.confidence : 0,
-        field_confidence: s.field_confidence || {},
-        warnings: s.warnings || [],
-        field_hints: s.field_hints || {},
-        extraction_issues: s.extraction_issues || {},
-      }
-    }
+  
 
     if (isCanonicalOutput(rawData)) {
       console.log('📦 Detected CanonicalOutput format, transforming...')
@@ -422,9 +390,7 @@ export async function listSubmissions(params?: {
  */
 export async function getSubmissionStats(): Promise<SubmissionStats> {
   try {
-    console.log("kkkkkk")
     const response = await api.get('/submissions/stats')
-    console.log("kkkkkkk2")
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to load stats')
     }
@@ -547,10 +513,24 @@ export async function uploadPdfToFolder(
   if (!response.data.success) {
     throw new Error(response.data.error || 'Upload failed')
   }
-
+ const {  submission_id,
+  filename,
+  status,
+  uploaded_at,
+  data,
+  confidence,
+  field_confidence,
+  warnings,
+ } = response.data
   return {
-    submission_id: response.data.submission_id,
-    extraction: response.data.extraction,
+    submission_id,
+    filename,
+    status,
+    uploaded_at,
+    data,
+    confidence,
+    field_confidence,
+    warnings
   }
 }
 

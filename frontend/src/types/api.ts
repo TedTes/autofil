@@ -11,11 +11,16 @@ export interface ApiResponse<T=unknown> {
   
   export interface SubmissionResponse {
     submission_id: string
-    extraction: {
-      confidence: number
-      warnings: string[]
-      data: unknown
-    }
+    filename: string
+    status: string
+    uploaded_at: string
+    data: Record<string, unknown>
+    confidence: number
+    field_confidence: Record<string, number>
+    warnings: string[]
+    field_hints?: Record<string, string>
+    extraction_issues?: Record<string, unknown>,
+    document_type?:string
   }
   
   export interface FillResponse {

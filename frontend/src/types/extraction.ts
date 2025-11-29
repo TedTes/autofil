@@ -14,8 +14,13 @@ export interface ClassificationResult {
 }
 export interface ExtractionData {
   submission_id: string
+  client_id?: string,
+  client_name?: string
+  folder_id?:string
+  input_id?:string
   filename: string
   status: string
+  suggested_fixes?:string
   uploaded_at: string
   confidence?: number
   warnings?: string[]
@@ -24,7 +29,7 @@ export interface ExtractionData {
   field_hints?: Record<string, string>
   extraction_issues?: Record<string, unknown>
 }
-
+ 
 export interface ExtractionResult {
   success: boolean
   data: Record<string, unknown>
@@ -195,7 +200,7 @@ export interface SovTotals {
 }
 
 export interface SovScheduleData {
-  document_type: 'sov'
+  document_type?: 'sov'
   extraction_date?: string
   property_count?: number
   properties?: SovProperty[]

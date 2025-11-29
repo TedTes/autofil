@@ -267,8 +267,7 @@ const currentPackage = packages.find(pkg => pkg.submission_id === activePackageI
           { clientId, submissionId: activePackageId }
         )
 
-      const extractionResult = result.extraction
-      const extractionPayload = extractionResult?.data as Record<string, unknown> | undefined
+      const extractionPayload = result?.data as Record<string, unknown> | undefined
       const payloadConfidence =
         typeof extractionPayload?.['confidence'] === 'number'
           ? (extractionPayload['confidence'] as number)
@@ -281,10 +280,10 @@ const currentPackage = packages.find(pkg => pkg.submission_id === activePackageI
                 ...row,
                 submissionId: result.submission_id,
                 uploadPercent: 100,
-                status: extractionResult ? 'extracted' : 'uploaded',
-                extractionStatus: extractionResult ? 'extracted' : 'pending',
-                extractionProgress: extractionResult ? 100 : 0,
-                confidence: extractionResult?.confidence ?? payloadConfidence,
+                status: result ? 'extracted' : 'uploaded',
+                extractionStatus: result ? 'extracted' : 'pending',
+                extractionProgress: result ? 100 : 0,
+                confidence: result?.confidence ?? payloadConfidence,
                 extractionData: extractionPayload,
               }
             : row
@@ -293,7 +292,7 @@ const currentPackage = packages.find(pkg => pkg.submission_id === activePackageI
 
       successCount += 1
 
-      if (!extractionResult) {
+      if (!result) {
         setMessage(`Uploaded ${file.name} (awaiting extraction)`)
       } else {
         setMessage(`Extracted ${file.name}`)

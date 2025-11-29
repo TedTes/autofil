@@ -1,0 +1,60 @@
+fields:
+  claim_number:
+    aliases:
+      - claim number
+      - claim no
+      - claim id
+      - claim #
+      - file number
+      - file #
+  date_of_loss:
+    aliases:
+      - date of loss
+      - loss date
+      - accident date
+      - incident date
+  claim_amount:
+    aliases:
+      - claim amount
+      - loss amount
+      - total amount
+  paid:
+    aliases:
+      - amount paid
+      - total paid
+      - paid
+  incurred:
+    aliases:
+      - amount incurred
+      - total incurred
+      - incurred
+  reserve:
+    aliases:
+      - reserve
+      - outstanding
+      - case reserve
+  status:
+    aliases:
+      - claim status
+      - status
+  claimant:
+    aliases:
+      - claimant
+      - claimant name
+      - insured name
+  description:
+    aliases:
+      - loss description
+      - claim description
+      - description of loss
+  policy_number:
+    aliases:
+      - policy number
+      - policy no
+      - policy #
+  date_reported:
+    aliases:
+      - date reported
+      - report date
+      - reported date
+      - notification date

@@ -10,7 +10,7 @@ from ..interfaces.extractor import IExtractor
 from ..core.document import Document, DocumentType
 from ..models.extraction_result import ExtractionResult
 from ..parsers import PdfFieldParser, TableParser
-from ..templates.versioned_template_loader import (
+from utils.versioned_template_loader import (
     VersionedTemplateLoader,
     TemplateRecognizer,
     TemplateConfig,

@@ -22,7 +22,7 @@ from ..extractors.mfc import MFC
 from ..validation.validator import validate
 from ..core.document import Document
 from ..parsers import PdfFieldParser, OcrFallbackParser
-from ..templates.versioned_template_loader import (
+from utils.versioned_template_loader import (
     VersionedTemplateLoader,
     TemplateRecognizer,
     TemplateConfig,

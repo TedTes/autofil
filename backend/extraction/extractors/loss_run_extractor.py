@@ -8,11 +8,18 @@ Extracts claim data from loss run reports in various formats:
 """
 
 from typing import Dict, Any, List, Optional
+import csv
+import re
+import os
+from pathlib import Path
+import yaml
 from datetime import datetime
 from ..interfaces.extractor import IExtractor
 from ..core.document import Document, DocumentType
 from ..models.extraction_result import ExtractionResult
 from ..parsers import TableParser, OcrFallbackParser
+
+FIELD_CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "templates" / "loss_run_fields.yaml"
 
 
 class LossRunExtractor(IExtractor):
@@ -28,61 +35,14 @@ class LossRunExtractor(IExtractor):
     Supports multiple formats and layouts.
     """
     
-    # Common column header patterns
-    COLUMN_PATTERNS = {
-        'claim_number': [
-            r'claim.*(?:number|no|id|#)',
-            r'(?:claim|file).*#',
-        ],
-        'date_of_loss': [
-            r'(?:date|dt).*(?:loss|accident|incident|occurrence)',
-            r'loss.*date',
-            r'accident.*date',
-        ],
-        'claim_amount': [
-            r'(?:claim|loss).*amount',
-            r'(?:paid|incurred|total).*amount',
-            r'amount.*(?:paid|incurred)',
-        ],
-        'paid': [
-            r'(?:amount.*)?paid',
-            r'total.*paid',
-        ],
-        'incurred': [
-            r'(?:amount.*)?incurred',
-            r'total.*incurred',
-        ],
-        'reserve': [
-            r'(?:case.*)?reserve',
-            r'outstanding',
-        ],
-        'status': [
-            r'claim.*status',
-            r'status',
-        ],
-        'claimant': [
-            r'claimant.*name',
-            r'claimant',
-        ],
-        'description': [
-            r'(?:description|desc).*(?:loss|claim)',
-            r'loss.*(?:description|desc)',
-            r'accident.*description',
-        ],
-        'policy_number': [
-            r'policy.*(?:number|no|#)',
-        ],
-        'date_reported': [
-            r'(?:date|dt).*(?:report|notif)',
-            r'report.*date',
-        ],
-    }
+    COLUMN_PATTERNS: Dict[str, List[str]] = {}
     
     def __init__(self):
         """Initialize Loss Run extractor."""
         self.table_parser = TableParser(flavor='auto', min_confidence=60.0)
         self.ocr_parser = OcrFallbackParser()
-    
+        if not self.COLUMN_PATTERNS:
+            self.COLUMN_PATTERNS = self._load_field_patterns()
     def extract(self, document: Document) -> ExtractionResult:
         """
         Extract loss run data from document.
@@ -110,7 +70,11 @@ class LossRunExtractor(IExtractor):
             
             # Fallback: Extract from text
             if document.raw_text:
+                print("akalsjljfsjkadfsjk")
+                
                 result = self._extract_from_text(document)
+                print(document.raw_text)
+                print(result.success)
                 if result.success:
                     return result
             
@@ -119,8 +83,9 @@ class LossRunExtractor(IExtractor):
                 data={},
                 errors=["No extractable loss run data found"]
             )
-            
+
         except Exception as e:
+            print("error from loss of run extractor",str(e))
             return ExtractionResult(
                 success=False,
                 data={},
@@ -129,10 +94,14 @@ class LossRunExtractor(IExtractor):
     
     def can_extract(self, document: Document) -> bool:
         """Check if can extract from document."""
-        return (
-            document.document_type == DocumentType.LOSS_RUN and
-            (bool(document.tables) or bool(document.raw_text))
-        )
+        try:
+            return (
+                document.document_type == DocumentType.LOSS_RUN and
+                (bool(document.tables) or bool(document.raw_text))
+            )
+        except Exception as e: 
+            print("error from can_extract ", str(e))
+            raise
     
     def get_supported_types(self) -> List[DocumentType]:
         """Get supported document types."""
@@ -142,91 +111,243 @@ class LossRunExtractor(IExtractor):
         """Extract claims from table data."""
         claims = []
         warnings = []
-        
-        for table_idx, table in enumerate(document.tables):
-            # Map columns to fields
-            column_map = self._map_columns(table.headers)
-            
-            if not column_map:
-                warnings.append(f"Table {table_idx}: Could not map columns to claim fields")
-                continue
-            
-            # Extract claims from rows
-            for row_idx, row in enumerate(table.rows):
-                try:
-                    claim = self._extract_claim_from_row(row, column_map, table.headers)
-                    if claim and self._is_valid_claim(claim):
-                        claim['_source'] = {
-                            'table_index': table_idx,
-                            'row_index': row_idx
-                        }
-                        claims.append(claim)
-                except Exception as e:
-                    warnings.append(f"Table {table_idx}, Row {row_idx}: {str(e)}")
-        
-        if not claims:
+        try:
+            for table_idx, table in enumerate(document.tables):
+                column_map = self._map_columns(table.headers)
+
+                if not column_map:
+                    warnings.append(f"Table {table_idx}: Could not map columns to claim fields")
+                    continue
+
+                for row_idx, row in enumerate(table.rows):
+                    try:
+                        claim = self._extract_claim_from_row(row, column_map, table.headers)
+                        if claim and self._is_valid_claim(claim):
+                            claim['_source'] = {
+                                'table_index': table_idx,
+                                'row_index': row_idx
+                            }
+                            claims.append(claim)
+                    except Exception as e:
+                        warnings.append(f"Table {table_idx}, Row {row_idx}: {str(e)}")
+
+            if not claims:
+                summary = self._detect_no_loss_statement(document)
+                if summary:
+                    warnings.append("Document states that there are no known losses for the policy term.")
+                    data = {
+                        'document_type': 'loss_run',
+                        'extraction_date': datetime.utcnow().isoformat(),
+                        'policy_information': self._extract_policy_info(document),
+                        'claims': [],
+                        'claim_count': 0,
+                        'totals': {'paid': 0, 'incurred': 0, 'reserve': 0},
+                        'summary': summary,
+                    }
+                    return ExtractionResult(
+                        success=True,
+                        data=data,
+                        warnings=warnings,
+                        confidence=0.85,
+                    )
+                return ExtractionResult(
+                    success=False,
+                    data={},
+                    errors=["No valid claims found in tables"]
+                )
+
+            totals = self._calculate_totals(claims)
+            policy_info = self._extract_policy_info(document)
+            data = {
+                'document_type': 'loss_run',
+                'extraction_date': datetime.utcnow().isoformat(),
+                'policy_information': policy_info,
+                'claims': claims,
+                'claim_count': len(claims),
+                'totals': totals,
+            }
+
+            return ExtractionResult(
+                success=True,
+                data=data,
+                warnings=warnings,
+                confidence=self._calculate_confidence(claims, warnings)
+            )
+        except Exception as e:
+            print("error from _extract_from_tables", str(e))
+            raise e
+    
+    def _extract_from_text(self, document: Document) -> ExtractionResult:
+        """Extract claims from raw text (fallback method)."""
+        text = document.raw_text or ""
+        lines = [line for line in text.splitlines() if line.strip()]
+        if len(lines) < 2:
             return ExtractionResult(
                 success=False,
                 data={},
-                errors=["No valid claims found in tables"]
+                errors=["Insufficient structured text to parse"],
+                warnings=["Text-based extraction not possible"]
             )
-        
-        # Calculate totals
+
+        sample = "\n".join(lines[:10])
+        try:
+            dialect = csv.Sniffer().sniff(sample, delimiters=",\t|;")
+            delimiter = dialect.delimiter
+        except csv.Error:
+            if '\t' in sample:
+                delimiter = '\t'
+            elif '|' in sample:
+                delimiter = '|'
+            elif ',' in sample:
+                delimiter = ','
+            else:
+                return ExtractionResult(
+                    success=False,
+                    data={},
+                    errors=["Unable to detect delimiter in text"],
+                    warnings=["Text-based extraction not possible"]
+                )
+
+        reader = csv.reader(lines, delimiter=delimiter)
+        rows = [
+            [cell.strip() for cell in row]
+            for row in reader
+            if any(cell.strip() for cell in row)
+        ]
+
+        if len(rows) < 2:
+            return ExtractionResult(
+                success=False,
+                data={},
+                errors=["Structured rows not found in text"],
+                warnings=["Text-based extraction not possible"]
+            )
+
+        headers = rows[0]
+        column_map = self._map_columns(headers)
+        if not column_map:
+            return ExtractionResult(
+                success=False,
+                data={},
+                errors=["Could not map text columns to claim fields"],
+                warnings=["Text-based extraction not possible"]
+            )
+
+        claims = []
+        warnings = ["Parsed data from raw text – accuracy may be reduced"]
+
+        for row_idx, row in enumerate(rows[1:], start=1):
+            try:
+                claim = self._extract_claim_from_row(row, column_map, headers)
+                if claim and self._is_valid_claim(claim):
+                    claim['_source'] = {'text_row_index': row_idx}
+                    claims.append(claim)
+            except Exception as exc:
+                warnings.append(f"Text row {row_idx}: {exc}")
+
+        if not claims:
+            summary = self._detect_no_loss_statement(document)
+            if summary:
+                warnings.append("Document states that there are no known losses for the policy term.")
+                return ExtractionResult(
+                    success=True,
+                    data={
+                        'document_type': 'loss_run',
+                        'extraction_date': datetime.utcnow().isoformat(),
+                        'policy_information': self._extract_policy_info(document),
+                        'claims': [],
+                        'claim_count': 0,
+                        'totals': {'paid': 0, 'incurred': 0, 'reserve': 0},
+                        'summary': summary,
+                    },
+                    warnings=warnings,
+                    confidence=0.75,
+                )
+            return ExtractionResult(
+                success=False,
+                data={},
+                errors=["No valid claims found in text rows"],
+                warnings=warnings
+            )
+
         totals = self._calculate_totals(claims)
-        
-        # Extract policy info
-        policy_info = self._extract_policy_info(document)
-        
         data = {
             'document_type': 'loss_run',
             'extraction_date': datetime.utcnow().isoformat(),
-            'policy_information': policy_info,
+            'policy_information': self._extract_policy_info(document),
             'claims': claims,
             'claim_count': len(claims),
             'totals': totals,
         }
-        
         return ExtractionResult(
             success=True,
             data=data,
             warnings=warnings,
             confidence=self._calculate_confidence(claims, warnings)
         )
-    
-    def _extract_from_text(self, document: Document) -> ExtractionResult:
-        """Extract claims from raw text (fallback method)."""
-        # Simple text-based extraction
-        # This is a basic implementation - can be enhanced
-        
-        text = document.raw_text
-        claims = []
-        warnings = ["Using text-based extraction - may be less accurate"]
-        
-        # Look for claim patterns in text
-        # TODO: Implement regex-based claim extraction from text
-        
-        return ExtractionResult(
-            success=False,
-            data={},
-            errors=["Text-based extraction not fully implemented"],
-            warnings=warnings
-        )
+
+    def _detect_no_loss_statement(self, document: Document) -> Optional[str]:
+        """Detect statements indicating no reported losses."""
+        text = (document.raw_text or "").lower()
+        patterns = [
+            r'no\s+known\s+losses',
+            r'no\s+losses\s+reported',
+            r'loss\s+history\s+not\s+available',
+            r'no\s+claims\s+reported',
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, text)
+            if match:
+                start = max(0, match.start() - 40)
+                end = min(len(document.raw_text or ""), match.end() + 40)
+                snippet = (document.raw_text or "")[start:end].strip()
+                return snippet or "No losses reported"
+        return None
+
+    def _load_field_patterns(self) -> Dict[str, List[str]]:
+        try:
+            with open(FIELD_CONFIG_PATH, 'r', encoding='utf-8') as f:
+                data = yaml.safe_load(f) or {}
+        except FileNotFoundError:
+            return {}
+        fields = data.get('fields', {})
+        normalized = {}
+        for field, meta in fields.items():
+            aliases = meta.get('aliases', []) or []
+            normalized[field] = [self._normalize_header(alias) for alias in aliases]
+        return normalized
+
+    def _normalize_header(self, header: Any) -> str:
+        if header is None:
+            return ""
+        header = str(header).strip()
+        if not header:
+            return ""
+        # Insert spaces between camelCase or number boundaries
+        header = re.sub(r'(?<=[a-z])(?=[A-Z0-9])', ' ', header)
+        header = header.replace('_', ' ')
+        # Remove all non alphanumeric characters and collapse to single token
+        header = re.sub(r'[^a-z0-9]+', '', header.lower())
+        return header
     
     def _map_columns(self, headers: List[str]) -> Dict[str, int]:
         """Map table columns to claim fields."""
         column_map = {}
-        headers_lower = [h.lower() for h in headers]
-        
-        for field, patterns in self.COLUMN_PATTERNS.items():
-            for col_idx, header in enumerate(headers_lower):
-                for pattern in patterns:
-                    import re
-                    if re.search(pattern, header, re.IGNORECASE):
+        normalized_headers = [self._normalize_header(h) for h in headers]
+
+        for field, aliases in self.COLUMN_PATTERNS.items():
+            for col_idx, header in enumerate(normalized_headers):
+                if not header:
+                    continue
+                for alias in aliases:
+                    if not alias:
+                        continue
+                    if alias in header or header in alias:
                         column_map[field] = col_idx
                         break
                 if field in column_map:
                     break
-        
+
         return column_map
     
     def _extract_claim_from_row(
@@ -241,9 +362,15 @@ class LossRunExtractor(IExtractor):
         # Extract mapped fields
         for field, col_idx in column_map.items():
             if col_idx < len(row):
-                value = row[col_idx].strip()
-                if value:
-                    claim[field] = value
+                value = row[col_idx]
+                if value is None:
+                    continue
+                if isinstance(value, str):
+                    cleaned = value.strip()
+                else:
+                    cleaned = str(value).strip()
+                if cleaned != "":
+                    claim[field] = cleaned
         
         # Parse dates
         for date_field in ['date_of_loss', 'date_reported']:
@@ -297,6 +424,12 @@ class LossRunExtractor(IExtractor):
     
     def _parse_amount(self, amount_str: str) -> Optional[float]:
         """Parse amount string to float."""
+        if amount_str is None:
+            return None
+        
+        if isinstance(amount_str, (int, float)):
+            return float(amount_str)
+
         if not amount_str:
             return None
         

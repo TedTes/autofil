@@ -8,7 +8,7 @@ from ..core.document import Document
 from ..extractors.extractor_base import BaseExtractor
 from ..parsers.pdf_field_parser import PdfFieldParser
 from ..extractors.mfc import MFC
-from ..templates.versioned_template_loader import (
+from utils.versioned_template_loader import (
     VersionedTemplateLoader,
     TemplateRecognizer,
     TemplateConfig,

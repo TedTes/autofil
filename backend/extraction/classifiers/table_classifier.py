@@ -27,30 +27,32 @@ class TableClassifier(IClassifier):
     TABLE_PATTERNS = {
         DocumentType.LOSS_RUN: {
             'required_columns': [
-                r'(date|dt).*loss',
-                r'claim.*amount',
+                r'claim.*(number|no|#|id)',
+                r'(date|dt).*(loss|accident|occurrence)',
             ],
             'strong_columns': [
-                r'claim.*(number|no|id)',
                 r'(paid|incurred|reserve)',
-                r'claimant',
+                r'total.*paid',
+                r'total.*incurred',
                 r'status',
-                r'description.*(loss|claim)',
+                r'claimant',
+                r'description',
                 r'policy.*(number|no)',
+                r'date.*reported',
             ],
             'weak_columns': [
-                r'date.*report',
                 r'adjuster',
                 r'carrier',
                 r'coverage',
+                r'loss\s+location',
             ],
-            'min_columns': 3,
+            'min_columns': 4,
             'min_rows': 2
         },
         DocumentType.SOV: {
             'required_columns': [
-                r'(location|loc\.?|site)',
-                r'(building|property).*(value|limit|tiv|amount)',
+                r'(location|loc|site|premises)',
+                r'(building|property|structure).*(value|limit|amount|tiv)',
             ],
             'strong_columns': [
                 r'address',
@@ -69,8 +71,8 @@ class TableClassifier(IClassifier):
                 r'stories',
                 r'square.*feet',
                 r'sprinkler',
-                r'alarm',
                 r'roof',
+                r'seismic',
             ],
             'min_columns': 3,
             'min_rows': 2
@@ -102,7 +104,8 @@ class TableClassifier(IClassifier):
         'required': 0.35,
         'strong': 0.08,
         'weak': 0.02,
-        'structure_bonus': 0.15  # Bonus if table structure is good
+        'structure_bonus': 0.15,  # Bonus if table structure is good
+        'coverage_bonus': 0.12,
     }
     
     def __init__(self, min_confidence: float = 0.6):
@@ -129,7 +132,9 @@ class TableClassifier(IClassifier):
         
         # Score each document type
         scores = {}
+        
         for doc_type in self.TABLE_PATTERNS.keys():
+         
             score = self._score_document_type(document, doc_type)
             if score > 0:
                 scores[doc_type] = score
@@ -259,6 +264,9 @@ class TableClassifier(IClassifier):
         score += len(matches['required']) * self.CONFIDENCE_WEIGHTS['required']
         score += len(matches['strong']) * self.CONFIDENCE_WEIGHTS['strong']
         score += len(matches['weak']) * self.CONFIDENCE_WEIGHTS['weak']
+        header_count = max(1, len(table.headers))
+        coverage = len(set(matches['required'] + matches['strong'])) / header_count
+        score += coverage * self.CONFIDENCE_WEIGHTS['coverage_bonus']
         return min(1.0, score)
     
     def get_table_type_hints(self, document: Document) -> Dict[int, List[Tuple[DocumentType, float]]]:

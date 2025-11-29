@@ -83,38 +83,46 @@ class KeywordClassifier(IClassifier):
         },
         DocumentType.LOSS_RUN: {
             'required': [
-                r'(loss\s+run|claim\s+history|loss\s+history)',
+                r'(loss\s+run|claim\s+(?:history|listing|summary)|loss\s+history)',
+                r'claim\s+number',
+                r'date\s+of\s+loss',
             ],
             'strong': [
-                r'date\s+of\s+loss',
-                r'claim\s+(number|amount|status)',
-                r'(paid|incurred|reserve)',
                 r'claimant',
+                r'(total\s+)?paid',
+                r'(total\s+)?incurred',
+                r'reserve',
+                r'status',
+                r'date\s+reported',
                 r'description\s+of\s+loss',
             ],
             'weak': [
-                r'policy\s+number',
-                r'policy\s+period',
+                r'policy\s+(number|period)',
+                r'adjuster',
+                r'loss\s+location',
                 r'total\s+(paid|incurred)',
             ]
         },
         DocumentType.SOV: {
             'required': [
-                r'(schedule\s+of\s+values|statement\s+of\s+values|\bsov\b)',
+                r'(schedule|statement)\s+of\s+values',
                 r'(total\s+insured\s+value|\btiv\b)',
             ],
             'strong': [
-                r'(building|property)\s+value',
-                r'contents\s+value',
-                r'(location|address)',
+                r'(building|property|structure)\s+(value|limit|amount)',
+                r'contents\s+(value|limit|amount)',
+                r'business\s+income',
+                r'location\s+#',
+                r'premises\s+address',
                 r'construction\s+type',
                 r'occupancy',
-                r'total\s+insured\s+value',
             ],
             'weak': [
                 r'year\s+built',
                 r'square\s+feet',
                 r'number\s+of\s+stories',
+                r'sprinkler',
+                r'roof\s+type',
             ]
         },
         DocumentType.FINANCIAL_STATEMENT: {
@@ -170,7 +178,7 @@ class KeywordClassifier(IClassifier):
         # Score each document type
         scores = {}
         for doc_type in self.KEYWORD_PATTERNS.keys():
-            score = self._score_document_type(text, doc_type)
+            score = self._score_document_type(text, doc_type, document)
             if score > 0:
                 scores[doc_type] = score
         
@@ -217,7 +225,7 @@ class KeywordClassifier(IClassifier):
         """Medium priority - runs after MIME."""
         return 30
     
-    def _score_document_type(self, text: str, doc_type: DocumentType) -> float:
+    def _score_document_type(self, text: str, doc_type: DocumentType, document: Document) -> float:
         """Calculate confidence score for document type."""
         patterns = self.KEYWORD_PATTERNS.get(doc_type, {})
         score = 0.0
@@ -250,6 +258,23 @@ class KeywordClassifier(IClassifier):
         )
         score += weak_found * self.CONFIDENCE_WEIGHTS['weak']
         
+        ext = (document.file_extension or '').lower()
+        mime = (document.mime_type or '').lower()
+        is_tabular = any(ext.endswith(suffix) for suffix in ['.csv', '.xls', '.xlsx'])
+        is_pdf = ext == '.pdf' or mime == 'application/pdf'
+
+        if is_tabular and doc_type in (
+            DocumentType.ACORD_125,
+            DocumentType.ACORD_126,
+            DocumentType.ACORD_130,
+            DocumentType.ACORD_140,
+        ):
+            score *= 0.4
+        if is_tabular and doc_type in (DocumentType.LOSS_RUN, DocumentType.SOV):
+            score *= 1.25
+        if is_pdf and doc_type == DocumentType.LOSS_RUN:
+            score *= 0.9
+
         return score
     
     def __repr__(self) -> str:

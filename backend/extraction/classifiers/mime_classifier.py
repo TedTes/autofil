@@ -5,7 +5,11 @@ Uses file MIME type and extension to provide initial classification hints.
 This is a fast, lightweight classifier that runs first.
 """
 
-from typing import List, Dict, Any, Tuple
+import os
+import re
+from typing import List, Dict, Any, Tuple, Optional, Iterable
+
+import yaml
 from ..interfaces.classifier import IClassifier
 from ..core.document import Document, DocumentType
 
@@ -87,6 +91,13 @@ class MimeClassifier(IClassifier):
         '.doc': [DocumentType.SUPPLEMENTAL, DocumentType.GENERIC]
     }
     
+    FIELD_CONFIG_PATH = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)),
+        "extractors",
+        "loss_run_fields.yaml",
+    )
+    _LOSS_RUN_ALIASES: Optional[set[str]] = None
+
     def __init__(self, confidence_multiplier: float = 0.3):
         """
         Initialize MIME classifier.
@@ -111,14 +122,20 @@ class MimeClassifier(IClassifier):
             Returns LOW confidence (0.2-0.4) because MIME type alone
             cannot determine document content accurately.
         """
+        csv_hint = self._guess_csv_type(document)
+        if csv_hint:
+            return csv_hint, 0.85
+
         # Get possible document types from MIME
         possible_types = self._get_possible_types(document)
         
         if not possible_types:
             return DocumentType.UNKNOWN, 0.0
         
-        # For MIME-based classification, we can't distinguish between types
-        # Return the first (most common) type with low confidence
+        tabular_hint = self._detect_tabular_hint(document)
+        if tabular_hint:
+            return tabular_hint, 0.8
+
         primary_type = possible_types[0]
         
         # Calculate confidence based on specificity
@@ -242,6 +259,84 @@ class MimeClassifier(IClassifier):
                 unique_types.append(dt)
         
         return unique_types
+
+    def _detect_tabular_hint(self, document: Document) -> Optional[DocumentType]:
+        """
+        Inspect tables/headers to detect common insurance CSV/Excel layouts.
+        """
+        if not document.tables:
+            return None
+
+        headers: List[str] = []
+        for table in document.tables:
+            headers.extend([str(h).lower() for h in table.headers if h])
+
+        if not headers and document.raw_text:
+            headers = [segment.strip() for segment in document.raw_text.lower().splitlines()[:5]]
+
+        if not headers:
+            return None
+
+        def header_hits(patterns: List[str]) -> int:
+            count = 0
+            for token in headers:
+                for pattern in patterns:
+                    if re.search(pattern, token):
+                        count += 1
+                        break
+            return count
+
+        loss_run_patterns = [
+            r'claim.*(number|no|#|id)',
+            r'(date|dt).*(loss|accident|occurrence)',
+            r'(paid|incurred|reserve)',
+            r'status',
+            r'claimant',
+            r'policy.*(number|no)',
+        ]
+        sov_patterns = [
+            r'(location|loc|site|premises)',
+            r'(address|city|state|zip)',
+            r'(building|property|structure).*(value|limit|amount|tiv)',
+            r'contents.*(value|limit|amount)',
+            r'(total|combined).*(insured|tiv|value)',
+            r'occupancy',
+        ]
+
+        normalized_tokens = self._extract_normalized_tokens(headers)
+        if self._count_alias_hits(
+            normalized_tokens, self._get_loss_run_aliases()
+        ) >= 3 or header_hits(loss_run_patterns) >= 2:
+            return DocumentType.LOSS_RUN
+        if header_hits(sov_patterns) >= 2:
+            return DocumentType.SOV
+        return None
+
+    def _guess_csv_type(self, document: Document) -> Optional[DocumentType]:
+        ext = (document.file_extension or '').lower()
+        mime = (document.mime_type or '').lower()
+        if ext != '.csv' and mime != 'text/csv':
+            return None
+        text = (document.raw_text or '')
+        if not text:
+            return None
+
+        normalized_tokens = self._extract_normalized_tokens(text.splitlines())
+        if self._count_alias_hits(
+            normalized_tokens, self._get_loss_run_aliases()
+        ) >= 3:
+            return DocumentType.LOSS_RUN
+
+        lowered = text.lower()
+        if re.search(r'(loss\s*run|claim\s*history|claim\s*summary)', lowered):
+            return DocumentType.LOSS_RUN
+        if re.search(r'(claim\s*number|date\s*of\s*loss)', lowered):
+            return DocumentType.LOSS_RUN
+        if re.search(r'(schedule|statement)\s+of\s+values', lowered):
+            return DocumentType.SOV
+        if re.search(r'(total\s+insured\s+value|\btiv\b)', lowered):
+            return DocumentType.SOV
+        return None
     
     def get_likely_types_with_confidence(self, document: Document) -> List[Tuple[DocumentType, float]]:
         """
@@ -272,3 +367,51 @@ class MimeClassifier(IClassifier):
     def __repr__(self) -> str:
         """String representation."""
         return f"MimeClassifier(confidence_multiplier={self.confidence_multiplier})"
+
+    @classmethod
+    def _get_loss_run_aliases(cls) -> set[str]:
+        if cls._LOSS_RUN_ALIASES is not None:
+            return cls._LOSS_RUN_ALIASES
+        aliases: set[str] = set()
+        try:
+            with open(cls.FIELD_CONFIG_PATH, "r") as fp:
+                data = yaml.safe_load(fp) or {}
+            for config in (data.get("fields") or {}).values():
+                for alias in config.get("aliases", []):
+                    norm = cls._normalize_alias(alias)
+                    if norm:
+                        aliases.add(norm)
+        except FileNotFoundError:
+            aliases = set()
+        except Exception:
+            aliases = set()
+        cls._LOSS_RUN_ALIASES = aliases
+        return cls._LOSS_RUN_ALIASES
+
+    @staticmethod
+    def _normalize_alias(value: str) -> str:
+        if not value:
+            return ""
+        return re.sub(r"[^a-z0-9]+", "", value.lower())
+
+    def _extract_normalized_tokens(self, items: Iterable[str]) -> List[str]:
+        tokens: List[str] = []
+        for item in items:
+            if not item:
+                continue
+            parts = re.split(r"[,\t|\r\n]+", item.lower())
+            for part in parts:
+                normalized = self._normalize_alias(part.strip())
+                if normalized:
+                    tokens.append(normalized)
+        return tokens
+
+    @staticmethod
+    def _count_alias_hits(tokens: Iterable[str], alias_set: set[str]) -> int:
+        if not alias_set:
+            return 0
+        hits = 0
+        for token in tokens:
+            if token in alias_set:
+                hits += 1
+        return hits

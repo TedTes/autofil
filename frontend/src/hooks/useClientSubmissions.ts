@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Client, ClientSubmissionPackage } from '@/types'
 import { getClientById, getClientSubmissions, createClientSubmission, uploadPdf } from '@/lib/api-client'
 import useToast from '@/hooks/useToast' 
+import type { MergedData } from '@/types/merged-data'
 export type UploadedRow = {
   submissionId: string
   filename: string
@@ -39,6 +40,11 @@ export function useClientSubmissions(clientId: string) {
   const [statusText, setStatusText] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [workflowError, setWorkflowError] = useState<string | null>(null)
+
+  const [mergedData, setMergedData] = useState<MergedData | null>(null)
+  const [isMergedDataLoading, setIsMergedDataLoading] = useState(false)
+  const [mergedDataError, setMergedDataError] = useState<string | null>(null)
+
   const toast = useToast()
   // Input file selection (existing)
   const [selectedInputsByPackage, setSelectedInputsByPackage] = useState<
@@ -52,6 +58,46 @@ export function useClientSubmissions(clientId: string) {
 
   const tempIdRef = useRef(0)
 
+  const activePackage = activePackageId
+    ? packages.find(pkg => pkg.submission_id === activePackageId)
+    : undefined
+  const loadMergedData = useCallback(async (packageId: string) => {
+    setIsMergedDataLoading(true)
+    setMergedDataError(null)
+    try {
+      // TODO: Replace with actual API call when backend is ready
+      // const data = await getMergedData(packageId)
+      
+      // For now, simulate API call with mock data
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      // Import and use sample data for demo
+      const { SAMPLE_MERGED_DATA } = await import('@/lib/mock-data/merged-data-sample')
+      setMergedData(SAMPLE_MERGED_DATA)
+    } catch (err) {
+      setMergedDataError(err instanceof Error ? err.message : 'Failed to load merged data')
+      setMergedData(null)
+    } finally {
+      setIsMergedDataLoading(false)
+    }
+  }, [])
+useEffect(() => {
+    if (activePackageId && activePackage) {
+      // Check if package has extracted files
+      const hasExtractedFiles = activePackage.inputs?.some(
+        input => input.extraction_status === 'extracted' || input.extraction_status === 'ready'
+      ) || false
+      
+      if (hasExtractedFiles) {
+        loadMergedData(activePackageId)
+      } else {
+        setMergedData(null)
+      }
+    } else {
+      setMergedData(null)
+    }
+  }, [activePackageId, activePackage, loadMergedData])
+  
   // ---- helpers for uploadedRows ----
   const addRow = (row: UploadedRow) => {
     setUploadedRows(prev => [row, ...prev])
@@ -64,7 +110,11 @@ export function useClientSubmissions(clientId: string) {
       )
     )
   }
+  
 
+
+
+  
   const removeRow = (submissionId: string) => {
     setUploadedRows(prev => prev.filter(row => row.submissionId !== submissionId))
   }
@@ -205,9 +255,6 @@ export function useClientSubmissions(clientId: string) {
     })
   }, [packages])
 
-  const activePackage = activePackageId
-    ? packages.find(pkg => pkg.submission_id === activePackageId)
-    : undefined
 
   // ---- create folder ----
   const createFolder = async (name: string) => {
@@ -387,5 +434,9 @@ const currentPackage = packages.find(pkg => pkg.submission_id === activePackageI
     refreshClient,
 
     stats,
+    mergedData,
+  isMergedDataLoading,
+  mergedDataError,
+  loadMergedData,
   }
 }

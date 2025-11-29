@@ -50,21 +50,7 @@ export default function MergedDataView({
   return (
     <div className="h-full flex flex-col bg-gray-50">
       {/* Header */}
-      <div className="flex-shrink-0 bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">Merged Submission Data</h2>
-            <p className="text-sm text-gray-500 mt-0.5">
-              Extracted from {mergedData.metadata.sourceFileCount} document
-              {mergedData.metadata.sourceFileCount !== 1 ? 's' : ''}
-            </p>
-          </div>
-          <DataQualityBadge
-            score={mergedData.metadata.completeness}
-            confidence={mergedData.metadata.confidence}
-          />
-        </div>
-      </div>
+ 
 
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto px-6 py-6">
@@ -524,22 +510,7 @@ function LossRecordCard({ loss }: { loss: LossRecord }) {
   )
 }
 
-function DataQualityBadge({ score, confidence }: { score: number; confidence: number }) {
-  const avgScore = (score + confidence) / 2
-  return (
-    <div className="flex items-center gap-2">
-      {avgScore >= 80 ? (
-        <CheckCircle2 className="w-5 h-5 text-green-600" />
-      ) : (
-        <AlertCircle className="w-5 h-5 text-amber-600" />
-      )}
-      <div className="text-right">
-        <p className="text-xs font-medium text-gray-900">{Math.round(avgScore)}% Complete</p>
-        <p className="text-xs text-gray-500">{Math.round(confidence)}% Confidence</p>
-      </div>
-    </div>
-  )
-}
+
 
 function EmptySection({ message }: { message: string }) {
   return (

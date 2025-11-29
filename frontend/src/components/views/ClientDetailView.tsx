@@ -1,9 +1,10 @@
 'use client'
 
-import React, { useRef, useState, useEffect } from 'react'
+import React, { useRef, useState, useEffect,useCallback } from 'react'
 import { formatDate } from '@/lib/utils'
 import { useClientSubmissions, type UploadedRow } from '@/hooks/useClientSubmissions'
 import { fillPdf, downloadPDF } from '@/lib/api-client'
+import UploadOrMergedDataPanel from '@/components/client/UploadOrMergedDataPanel'
 import type { ClientSubmissionPackage } from '@/types'
 import {
   ArrowLeft,
@@ -25,8 +26,9 @@ import {
   Table,
   FolderOpen,
   Folder,
-  Plus,
+  FolderPlus,
   Combine,
+  Plus
 } from 'lucide-react'
 
 function getFileIcon(filename: string) {
@@ -145,26 +147,24 @@ function FileUploadDropZone({
   return (
     <div className="bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col h-full overflow-hidden">
       {/* Header*/}
-      <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900">File Upload</h3>
-            {activePackageName && (
-              <p className="text-xs text-gray-500 mt-0.5">
-                Uploading to: <span className="font-medium">{activePackageName}</span>
-              </p>
-            )}
-          </div>
-          <button
-            onClick={onUploadMore}
-            disabled={isUploading || !activePackageName}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed text-xs font-medium shadow-sm"
-          >
-            <Upload className="w-3.5 h-3.5" />
-            <span>Add Files</span>
-          </button>
-        </div>
-      </div>
+      <div className="px-4 py-2.5 border-b border-gray-100 bg-gray-50 flex-shrink-0">
+  <div className="flex items-center justify-between">
+    <div className="flex items-center gap-2 text-sm">
+      <Upload className="w-4 h-4 text-gray-600" />
+      <span className="font-medium text-gray-700">
+        {activePackageName ? `Upload to ${activePackageName}` : 'Select Package'}
+      </span>
+    </div>
+    <button
+    onClick={onUploadMore}
+    disabled={isUploading || !activePackageName}
+    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm disabled:bg-gray-300 disabled:cursor-not-allowed"
+  >
+    <Plus className="w-4 h-4" />
+    Add Files
+  </button>
+  </div>
+</div>
 
       {/* Main Content Area - SCROLLABLE */}
       <div className="flex-1 overflow-y-auto p-4">
@@ -392,30 +392,64 @@ function CompactFolderList({
         }`}
       >
         {/* Package Header */}
-        <button
-          onClick={() => onToggle?.(pkg)}
-          className="w-full px-3 py-2.5 flex items-center gap-2 text-left hover:bg-gray-50 transition-colors"
-        >
-          <div className="flex-shrink-0">
-            {isOpen ? (
-              <ChevronDown className="w-4 h-4 text-gray-600" />
-            ) : (
-              <ChevronRight className="w-4 h-4 text-gray-600" />
-            )}
-          </div>
-          <Folder className={`w-4 h-4 flex-shrink-0 ${isOpen ? 'text-blue-600' : 'text-gray-400'}`} />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate">{pkg.name}</p>
-            <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
-              <span>{totalInputs} input{totalInputs !== 1 ? 's' : ''}</span>
-              <span>•</span>
-              <span>{totalOutputs} output{totalOutputs !== 1 ? 's' : ''}</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <Icon className={`w-3.5 h-3.5 ${badge.color.split(' ')[0]}`} />
-          </div>
-        </button>
+     {/* Package Header - WITH INLINE STATS */}
+<button
+  onClick={() => onToggle?.(pkg)}
+  className="w-full px-3 py-2.5 flex items-center gap-2 text-left hover:bg-gray-50 transition-colors"
+>
+  <div className="flex-shrink-0">
+    {isOpen ? (
+      <ChevronDown className="w-4 h-4 text-gray-600" />
+    ) : (
+      <ChevronRight className="w-4 h-4 text-gray-600" />
+    )}
+  </div>
+  <Folder className={`w-4 h-4 flex-shrink-0 ${isOpen ? 'text-blue-600' : 'text-gray-400'}`} />
+  
+  <div className="flex-1 min-w-0">
+    <div className="flex items-center justify-between gap-2">
+      <p className="text-sm font-medium text-gray-900 truncate">{pkg.name}</p>
+      
+      {/* Package Stats Badge */}
+      <div className="flex items-center gap-1.5 text-xs text-gray-500 flex-shrink-0">
+        <span className="inline-flex items-center gap-1">
+          <FileText className="w-3 h-3" />
+          {totalInputs}
+        </span>
+        {totalOutputs > 0 && (
+          <>
+            <span>→</span>
+            <span className="inline-flex items-center gap-1">
+              <FileStack className="w-3 h-3" />
+              {totalOutputs}
+            </span>
+          </>
+        )}
+      </div>
+    </div>
+    
+    {/* Extraction Progress (TODO: if applicable) */}
+    {totalInputs > 0 && (
+      <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
+        <span>
+          {pkg.inputs?.filter(i => i.extraction_status === 'extracted' || i.extraction_status === 'ready').length || 0}/{totalInputs} extracted
+        </span>
+        {badge.label !== 'Ready' && (
+          <>
+            <span>•</span>
+            <span className={`${badge.color.split(' ')[0]}`}>
+              {badge.label}
+            </span>
+          </>
+        )}
+      </div>
+    )}
+  </div>
+
+  <div className="flex items-center gap-1 flex-shrink-0">
+    <Icon className={`w-3.5 h-3.5 ${badge.color.split(' ')[0]}`} />
+  </div>
+</button>
 
         {/* Package Content */}
         {isOpen && (
@@ -659,6 +693,12 @@ export function ClientDetailView({
 }: ClientDetailViewProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+
+  const handleEditMergedField = useCallback((fieldPath: string, value: string | number | boolean) => {
+    console.log('Edit merged field:', fieldPath, value)
+    // TODO: Implement field editing logic when backend supports it
+    // This will call an API to update the specific field in the merged data
+  }, [])
   const {
     client,
     loading,
@@ -683,7 +723,13 @@ export function ClientDetailView({
     uploadFilesToActiveFolder,
     refreshClient,
     stats,
+    mergedData,
+    isMergedDataLoading,
+    mergedDataError,
   } = useClientSubmissions(clientId)
+  const hasExtractedFiles = activePackage?.inputs?.some(
+    input => input.extraction_status === 'extracted' || input.extraction_status === 'ready'
+  ) || false
 
   const [fillState, setFillState] = useState<{
     loading: boolean
@@ -834,116 +880,137 @@ export function ClientDetailView({
       />
 
       {/* Top Bar*/}
-      <div className="bg-white border-b border-gray-200 px-4 py-3 flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {onNavigateBack && (
-              <button
-                onClick={onNavigateBack}
-                className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                <ArrowLeft className="w-5 h-5 text-gray-600" />
-              </button>
-            )}
-            <div className="flex items-center gap-3">
-              <Building2 className="w-6 h-6 text-blue-600" />
-              <div>
-                <h1 className="text-lg font-bold text-gray-900">
-                  {clientName || client?.name || 'Client'}
-                </h1>
-                <p className="text-xs text-gray-500 flex items-center gap-2">
-                  <Calendar className="w-3 h-3" />
-                  {client?.created_at ? formatDate(client.created_at) : ''}
-                  {' • '}
-                  {stats.totalFiles} file{stats.totalFiles === 1 ? '' : 's'} •{' '}
-                  {stats.totalPackages} package{stats.totalPackages === 1 ? '' : 's'}
-                </p>
-              </div>
-            </div>
-          </div>
-          <button
-            onClick={handleCreatePackageClick}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium shadow-sm"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">New Package</span>
-            <span className="sm:hidden">New</span>
-          </button>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
-          <div className="bg-gray-50 rounded-lg px-3 py-2">
-            <p className="text-xs text-gray-600 mb-0.5">Total Files</p>
-            <p className="text-lg font-semibold text-gray-900">{stats.totalFiles}</p>
-          </div>
-          <div className="bg-gray-50 rounded-lg px-3 py-2">
-            <p className="text-xs text-gray-600 mb-0.5">Extracted</p>
-            <p className="text-lg font-semibold text-gray-900">{stats.extractedFiles}</p>
-          </div>
-          <div className="bg-gray-50 rounded-lg px-3 py-2">
-            <p className="text-xs text-gray-600 mb-0.5">Outputs</p>
-            <p className="text-lg font-semibold text-gray-900">{stats.outputFiles}</p>
-          </div>
-          <div className="bg-gray-50 rounded-lg px-3 py-2">
-            <p className="text-xs text-gray-600 mb-0.5">Packages</p>
-            <p className="text-lg font-semibold text-gray-900">{stats.totalPackages}</p>
-          </div>
-        </div>
+     {/* SPLIT HEADER - Client info on left, Package info on right */}
+<div className="bg-white border-b border-gray-200 px-4 py-2.5 flex-shrink-0">
+  <div className="flex items-center justify-between gap-4">
+    {/* LEFT: Client Stats */}
+    <div className="flex items-center gap-3">
+      <button
+        onClick={onNavigateBack}
+        className="p-1.5 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100 transition-colors flex-shrink-0"
+        title="Back to clients"
+      >
+        <ArrowLeft className="w-5 h-5" />
+      </button>
+      
+      <div className="flex items-center gap-2 text-sm text-gray-600">
+        <Building2 className="w-4 h-4 flex-shrink-0" />
+        <span className="font-medium text-gray-700">{clientName || 'Client'}</span>
+        <span className="text-gray-400">•</span>
+        <span>{stats.totalFiles} files</span>
+        <span className="text-gray-400">•</span>
+        <span className="text-emerald-600 font-medium">
+          {stats.extractedFiles}/{stats.totalFiles} extracted
+        </span>
+        <span className="text-gray-400">•</span>
+        <span>{stats.totalPackages} packages</span>
       </div>
+    </div>
+
+    {/* RIGHT: Active Package Info (if merged data is shown) */}
+    {hasExtractedFiles && activePackage && (
+      <div className="flex items-center gap-3 border-l border-gray-200 pl-4">
+        <div className="flex items-center gap-2 text-sm">
+          <FileStack className="w-4 h-4 text-gray-600" />
+          <span className="font-semibold text-gray-700">{activePackage.name}</span>
+          <span className="text-gray-400">•</span>
+          <div className="flex items-center gap-1.5 text-emerald-600">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            <span className="text-xs font-medium">90% Complete</span>
+          </div>
+        </div>
+        
+        <button
+          onClick={triggerFileUpload}
+          disabled={isUploading}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm disabled:bg-gray-300 disabled:cursor-not-allowed"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Add Files
+        </button>
+      </div>
+    )}
+  </div>
+</div>
 
       {/* Main Content - TWO COLUMN LAYOUT WITH PROPER SCROLLING */}
       <div className="flex-1 min-h-0 overflow-hidden">
         <div className="h-full grid grid-cols-1 lg:grid-cols-3 gap-4 p-4">
-          {/* LEFT PANEL: Packages - SCROLLABLE */}
-          <div className="lg:col-span-1 h-full flex flex-col">
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col h-full max-h-[calc(100vh-220px)] overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0">
-                <h3 className="text-sm font-semibold text-gray-900">Packages</h3>
-              </div>
-              <div className="flex-1 min-h-0 p-2 overflow-y-auto">
-                <CompactFolderList
-                  submissions={packages}
-                  activeId={activePackageId}
-                  selectedInputsByPackage={selectedInputsByPackage}
-                  selectedOutputsByPackage={selectedOutputsByPackage}
-                  onToggle={(pkg) =>
-                    setActivePackageId((prev) =>
-                      prev === pkg.submission_id ? null : pkg.submission_id
-                    )
-                  }
-                  onViewFile={handleViewFile}
-                  onDownloadFile={handleDownloadOutput}
-                  onToggleInput={toggleInputSelection}
-                  onSelectAllInputs={selectAllInputs}
-                  onToggleOutput={toggleOutputSelection}
-                  onSelectAllOutputs={selectAllOutputs}
-                  onFillPackage={handleFillPackage}
-                  onMergePackage={handleMergeOutputsForPackage}
-                  fillingPackageId={fillState.packageId}
-                  mergingPackageId={mergeState.packageId}
-                  fillMessage={fillState.message}
-                  mergeMessage={mergeState.message}
-                />
-              </div>
-            </div>
-          </div>
+        {/* LEFT PANEL: Packages - SCROLLABLE */}
+<div className="lg:col-span-1 h-full flex flex-col">
+  <div className="bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col h-full max-h-[calc(100vh-90px)] overflow-hidden">
+    
+    {/* Packages content with "New Package" button at top */}
+    <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="p-3 space-y-2">
+        {/* New Package Button - Dashed style */}
+        <button
+          onClick={handleCreatePackageClick}
+          className="w-full py-3 px-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 text-sm text-gray-600 hover:text-blue-600 transition-all flex items-center justify-center gap-2 group"
+        >
+          <FolderPlus className="w-4 h-4 group-hover:scale-110 transition-transform" />
+          <span className="font-medium">New Package</span>
+        </button>
+        {packages.length === 0 ? (
+      <div className="text-center py-12">
+        <FolderOpen className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+        <p className="text-sm text-gray-500 mb-1">No packages yet</p>
+        <p className="text-xs text-gray-400">
+          Create a package to organize your submissions
+        </p>
+      </div>
+    ) : (
+        //  Package List 
+        <CompactFolderList
+          submissions={packages}
+          activeId={activePackageId}
+          selectedInputsByPackage={selectedInputsByPackage}
+          selectedOutputsByPackage={selectedOutputsByPackage}
+          onToggle={(pkg) =>
+            setActivePackageId((prev) =>
+              prev === pkg.submission_id ? null : pkg.submission_id
+            )
+          }
+          onViewFile={handleViewFile}
+          onDownloadFile={handleDownloadOutput}
+          onToggleInput={toggleInputSelection}
+          onSelectAllInputs={selectAllInputs}
+          onToggleOutput={toggleOutputSelection}
+          onSelectAllOutputs={selectAllOutputs}
+          onFillPackage={handleFillPackage}
+          onMergePackage={handleMergeOutputsForPackage}
+          fillingPackageId={fillState.packageId}
+          mergingPackageId={mergeState.packageId}
+          fillMessage={fillState.message}
+          mergeMessage={mergeState.message}
+        />
+      )}
+      </div>
+    </div>
+  </div>
+</div>
 
           {/* RIGHT PANEL: File Upload */}
           <div className="lg:col-span-2 h-full flex flex-col">
-            <div className="h-full max-h-[calc(100vh-220px)]">
-              <FileUploadDropZone
-                rows={uploadedRows}
-                isUploading={isUploading}
-                uploadStatus={statusText}
-                message={message}
-                error={workflowError}
-                onUploadMore={triggerFileUpload}
-                onRemove={removeRow}
-                onView={handleViewFile}
-                activePackageName={activePackage?.name}
-              />
-            </div>
-          </div>
+  <div className="h-full max-h-[calc(100vh-140px)]">
+    <UploadOrMergedDataPanel
+      hasExtractedFiles={hasExtractedFiles}
+      mergedData={mergedData}
+      isMergedDataLoading={isMergedDataLoading}
+      uploadedRows={uploadedRows}
+      isUploading={isUploading}
+      uploadStatus={statusText}
+      message={message}
+      error={workflowError || mergedDataError}
+      activePackageName={activePackage?.name}
+      onUploadMore={triggerFileUpload}
+      onRemoveRow={removeRow}
+      onViewFile={handleViewFile}
+      onEditMergedField={handleEditMergedField}
+      FileUploadDropZoneComponent={FileUploadDropZone}
+    />
+  </div>
+</div>
         </div>
       </div>
     </div>

@@ -10,7 +10,7 @@ interface UploadOrMergedDataPanelProps {
   // Condition check
   hasExtractedFiles: boolean
   
-  // Merged data (only shown when hasExtractedFiles = true)
+  // Merged data (shown when hasExtractedFiles = true)
   mergedData: MergedData | null
   isMergedDataLoading?: boolean
   
@@ -28,7 +28,7 @@ interface UploadOrMergedDataPanelProps {
   onViewFile: (submissionId: string, filename?: string, inputId?: string) => void
   onEditMergedField?: (fieldPath: string, value: string | number | boolean) => void
   
-  // Reference to the existing FileUploadDropZone component
+  // Reference to the FileUploadDropZone component
   FileUploadDropZoneComponent: React.ComponentType<{
     rows: UploadedRow[]
     isUploading: boolean
@@ -45,8 +45,8 @@ interface UploadOrMergedDataPanelProps {
 /**
  * UploadOrMergedDataPanel
  * 
- * Smart wrapper that shows:
- * - Existing FileUploadDropZone when NO extracted files
+ * Conditional wrapper that shows:
+ * - FileUploadDropZone when no extracted files exist
  * - MergedDataView + "Add More Files" button when files are extracted
  */
 export default function UploadOrMergedDataPanel({
@@ -87,22 +87,6 @@ export default function UploadOrMergedDataPanel({
   return (
     <div className="h-full flex flex-col bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden relative">
       {/* Header with "Add More Files" button */}
-      <div className="flex-shrink-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-semibold text-gray-900">Merged Submission Data</h3>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {activePackageName || 'Active Package'}
-          </p>
-        </div>
-        <button
-          onClick={onUploadMore}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm hover:shadow-md"
-        >
-          <Plus className="w-4 h-4" />
-          Add More Files
-        </button>
-      </div>
-
       {/* Merged Data View */}
       <div className="flex-1 overflow-hidden">
         <MergedDataView
@@ -122,6 +106,13 @@ export default function UploadOrMergedDataPanel({
             </p>
             {message && <p className="text-xs text-gray-500 mt-1">{message}</p>}
           </div>
+        </div>
+      )}
+
+      {/* Error banner */}
+      {error && !isUploading && (
+        <div className="absolute top-16 left-4 right-4 bg-red-50 border border-red-200 rounded-lg px-4 py-3 shadow-lg z-20">
+          <p className="text-sm text-red-800">{error}</p>
         </div>
       )}
     </div>

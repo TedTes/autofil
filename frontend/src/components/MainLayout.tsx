@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import React from 'react'
 import {
   Download,
   Settings,
@@ -15,6 +16,7 @@ import {
   FileStack,
   FolderOpen,
   BarChart3,
+  ChevronRight
 } from 'lucide-react'
 import {
   UploadView,
@@ -635,25 +637,26 @@ const handleMobileSidebarClose = () => {
                   </button>
                 )}
              {/* Breadcrumbs */}
-             <nav className="hidden lg:flex items-center gap-2 text-sm">
-  {currentView.breadcrumbs.map((crumb, idx) => (
-    <div key={idx} className="flex items-center gap-2">
-      {idx > 0 && (
-        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
-      )}
-      {idx < currentView.breadcrumbs.length - 1 ? (
-        <button
-          onClick={() => handleBreadcrumbClick(idx, crumb)}
-          className="text-gray-600 hover:text-gray-900 transition-colors font-medium"
-        >
-          {crumb}
-        </button>
-      ) : (
-        <span className="text-gray-900 font-semibold">{crumb}</span>
-      )}
-    </div>
+            
+
+<nav className="flex items-center gap-2 text-xs text-gray-500 py-2 px-4 bg-white border-b border-gray-100">
+  {currentView.breadcrumbs.map((crumb, i) => (
+    <React.Fragment key={i}>
+      {i > 0 && <ChevronRight className="w-3 h-3" />}
+      <button
+        onClick={() => {
+          const targetView = breadcrumbViewMap[crumb]
+          if (targetView) navigateTo(targetView)
+        }}
+        className={`hover:text-gray-900 transition-colors ${
+          i === currentView.breadcrumbs.length - 1
+            ? 'text-gray-900 font-medium'
+            : 'text-gray-500'
+        }`}
+      >
+        {crumb}
+      </button>
+    </React.Fragment>
   ))}
 </nav>
               </div>

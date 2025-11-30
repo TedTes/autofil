@@ -446,7 +446,7 @@ function LocationCard({
 function LossSummaryCard({ summary }: { summary: LossSummary }) {
   return (
     <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div>
           <p className="text-xs text-amber-700 font-medium">Total Claims</p>
           <p className="text-xl font-bold text-amber-900 mt-1">{summary.totalClaims}</p>
@@ -477,7 +477,7 @@ function LossSummaryCard({ summary }: { summary: LossSummary }) {
 function LossRecordCard({ loss }: { loss: LossRecord }) {
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-3 hover:border-gray-300 transition-colors">
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xs font-medium text-gray-900">{loss.lossType}</span>
@@ -499,7 +499,7 @@ function LossRecordCard({ loss }: { loss: LossRecord }) {
             {loss.claimNumber && <span>Claim #{loss.claimNumber}</span>}
           </div>
         </div>
-        <div className="text-right ml-4 flex-shrink-0">
+        <div className="text-left sm:text-right sm:ml-4 flex-shrink-0">
           <p className="text-sm font-semibold text-gray-900">
             {formatCurrency(loss.totalIncurred || loss.paidAmount || 0)}
           </p>

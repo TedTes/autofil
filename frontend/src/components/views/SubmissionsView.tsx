@@ -68,33 +68,21 @@ export function SubmissionsView({ onSubmissionClick }: SubmissionsViewProps) {
   return (
     <div className="h-full flex flex-col bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-              <FileStack className="w-6 h-6 text-purple-600" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Submissions</h1>
-              <p className="text-sm text-gray-600">View all submissions across clients</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
-              <Filter className="w-4 h-4" />
-              Filters
-            </button>
-            <button className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
-              <Download className="w-4 h-4" />
-              Export
-            </button>
-          </div>
+      <div className="bg-white border-b border-gray-200 px-4 py-3 sm:px-6">
+        <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-end">
+          <button className="flex w-full items-center justify-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors sm:w-auto">
+            <Filter className="w-4 h-4" />
+            Filters
+          </button>
+          <button className="flex w-full items-center justify-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors sm:w-auto">
+            <Download className="w-4 h-4" />
+            Export
+          </button>
         </div>
-
         {/* Stats Row */}
-        <div className="grid grid-cols-4 gap-4 mb-4">
+        <div className="grid grid-cols-2 gap-3 mt-3 sm:grid-cols-4 xl:grid-cols-4">
           {statusSummary.map((stat) => (
-            <div key={stat.label} className="bg-gray-50 rounded-lg p-3">
+            <div key={stat.label} className="bg-gray-50 rounded-lg p-2.5">
               <p className="text-xs text-gray-600 mb-1">{stat.label}</p>
               <p className={`text-2xl font-bold text-${stat.color}-600`}>{stat.value}</p>
             </div>
@@ -102,12 +90,12 @@ export function SubmissionsView({ onSubmissionClick }: SubmissionsViewProps) {
         </div>
 
         {/* Search & Filter Bar */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-2 mt-3 md:flex-row">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Search submissions by client, form type, or status..."
+              placeholder="Search submissions..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
@@ -116,7 +104,7 @@ export function SubmissionsView({ onSubmissionClick }: SubmissionsViewProps) {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent md:w-40"
           >
             <option value="all">All Status</option>
             <option value="pending">Pending</option>
@@ -128,7 +116,7 @@ export function SubmissionsView({ onSubmissionClick }: SubmissionsViewProps) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
         {loading ? (
           <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
             <Loader2 className="w-10 h-10 text-gray-400 mx-auto mb-4 animate-spin" />
@@ -159,7 +147,40 @@ export function SubmissionsView({ onSubmissionClick }: SubmissionsViewProps) {
           </div>
         ) : (
           <div className="bg-white rounded-xl border border-gray-200">
-            <div className="overflow-x-auto">
+            {/* Mobile Card List */}
+            <div className="md:hidden divide-y divide-gray-100">
+              {filteredSubmissions.map((sub) => (
+                <div key={sub.submission_id} className="p-4 space-y-3">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900 truncate">
+                      {sub.filename || 'Untitled'}
+                    </p>
+                    <p className="text-xs text-gray-500 break-all">{sub.submission_id}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
+                    <StatusBadge status={sub.status} />
+                    <span className="text-gray-400">•</span>
+                    <span>{new Date(sub.uploaded_at).toLocaleString()}</span>
+                    {sub.confidence != null && (
+                      <>
+                        <span className="text-gray-400">•</span>
+                        <span>{`${(sub.confidence * 100).toFixed(0)}% confidence`}</span>
+                      </>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => onSubmissionClick?.(sub.submission_id)}
+                    className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50"
+                  >
+                    <Eye className="w-4 h-4" />
+                    View Details
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>

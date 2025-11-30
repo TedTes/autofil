@@ -79,8 +79,8 @@ export function ClientsView({ onClientClick, onCreateClient }: ClientsViewProps)
   return (
     <div className="h-full flex flex-col bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between">
+      <div className="bg-white border-b border-gray-200 px-4 py-4 sm:px-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
               <Users className="w-6 h-6 text-blue-600" />
@@ -92,7 +92,7 @@ export function ClientsView({ onClientClick, onCreateClient }: ClientsViewProps)
           </div>
           <button 
             onClick={handleCreateClient}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+            className="flex w-full items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm md:w-auto"
             disabled={isCreating}
           >
             {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
@@ -116,7 +116,7 @@ export function ClientsView({ onClientClick, onCreateClient }: ClientsViewProps)
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
         {loading ? (
           <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
             <Loader2 className="w-8 h-8 text-gray-400 mx-auto mb-4 animate-spin" />

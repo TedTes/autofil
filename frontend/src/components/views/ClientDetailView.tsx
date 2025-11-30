@@ -882,9 +882,9 @@ export function ClientDetailView({
       {/* Top Bar*/}
      {/* SPLIT HEADER - Client info on left, Package info on right */}
 <div className="bg-white border-b border-gray-200 px-4 py-2.5 flex-shrink-0">
-  <div className="flex items-center justify-between gap-4">
+  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
     {/* LEFT: Client Stats */}
-    <div className="flex items-center gap-3">
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
       <button
         onClick={onNavigateBack}
         className="p-1.5 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100 transition-colors flex-shrink-0"
@@ -893,7 +893,7 @@ export function ClientDetailView({
         <ArrowLeft className="w-5 h-5" />
       </button>
       
-      <div className="flex items-center gap-2 text-sm text-gray-600">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:text-sm text-gray-600">
         <Building2 className="w-4 h-4 flex-shrink-0" />
         <span className="font-medium text-gray-700">{clientName || 'Client'}</span>
         <span className="text-gray-400">•</span>
@@ -909,8 +909,8 @@ export function ClientDetailView({
 
     {/* RIGHT: Active Package Info (if merged data is shown) */}
     {hasExtractedFiles && activePackage && (
-      <div className="flex items-center gap-3 border-l border-gray-200 pl-4">
-        <div className="flex items-center gap-2 text-sm">
+      <div className="flex flex-col gap-3 border-t border-gray-200 pt-3 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2 text-sm text-gray-600">
           <FileStack className="w-4 h-4 text-gray-600" />
           <span className="font-semibold text-gray-700">{activePackage.name}</span>
           <span className="text-gray-400">•</span>
@@ -923,7 +923,7 @@ export function ClientDetailView({
         <button
           onClick={triggerFileUpload}
           disabled={isUploading}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm disabled:bg-gray-300 disabled:cursor-not-allowed"
+          className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm disabled:bg-gray-300 disabled:cursor-not-allowed"
         >
           <Plus className="w-3.5 h-3.5" />
           Add Files

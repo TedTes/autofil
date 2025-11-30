@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from services.supabase_storage_service import SupabaseStorageService
 
@@ -34,7 +34,7 @@ class TemplateLibraryService:
         self.storage = SupabaseStorageService()
         self.templates_root = os.getenv("SUPABASE_TEMPLATES_PREFIX", "templates").strip("/")
 
-    def list_templates(self) -> List[Dict[str, Any]]:
+    def list_templates(self, form_type: Optional[str] = None) -> List[Dict[str, Any]]:
         if not getattr(self.storage, "enabled", False):
             return []
         items = self.storage.list_objects(self.templates_root)
@@ -62,14 +62,46 @@ class TemplateLibraryService:
             except json.JSONDecodeError:
                 continue
 
-            templates.append({
-                "template_id": data.get("template_id") or template_id,
-                "name": data.get("name") or template_id,
-                "description": data.get("description") or "",
-                "expected_documents": data.get("expected_documents") or [],
-                "suggested_forms": data.get("suggested_forms") or [],
-                "expected_fields": data.get("expected_fields") or [],
-                "template_url": self.storage.get_public_url(pdf_path),
-            })
+            template = self._map_template(template_id, data, pdf_path)
+            if form_type and template.get("formType") != form_type:
+                continue
+            templates.append(template)
 
         return templates
+
+    def get_template(self, template_id: str) -> Optional[Dict[str, Any]]:
+        if not getattr(self.storage, "enabled", False):
+            return None
+        json_path = self.storage.build_path(self.templates_root, template_id, "template.json")
+        pdf_path = self.storage.build_path(self.templates_root, template_id, "template.pdf")
+        json_text = self.storage.download_text(json_path)
+        if not json_text:
+            return None
+        try:
+            data = json.loads(json_text)
+        except json.JSONDecodeError:
+            return None
+        return self._map_template(template_id, data, pdf_path)
+
+    def _map_template(self, template_id: str, data: Dict[str, Any], pdf_path: str) -> Dict[str, Any]:
+        def _get(key: str, default=None):
+            return data.get(key) or data.get(key.replace('_', '')) or default
+
+        return {
+            "id": data.get("id") or data.get("template_id") or template_id,
+            "name": data.get("name") or template_id,
+            "description": data.get("description") or "",
+            "formType": _get("form_type", "CUSTOM"),
+            "filler": data.get("filler"),
+            "requiredDataSections": _get("required_data_sections", []) or [],
+            "optionalDataSections": _get("optional_data_sections", []),
+            "estimatedFields": int(_get("estimated_fields", 0) or 0),
+            "version": data.get("version"),
+            "icon": data.get("icon"),
+            "isPopular": bool(data.get("is_popular") or data.get("isPopular", False)),
+            "estimatedSize": _get("estimated_size"),
+            "templateUrl": self.storage.get_public_url(pdf_path),
+            "expectedDocuments": _get("expected_documents", []),
+            "createdAt": data.get("created_at"),
+            "updatedAt": data.get("updated_at"),
+        }

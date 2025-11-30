@@ -193,11 +193,31 @@ def fill_pdf(submission_id):
     try:
         payload = request.get_json(silent=True) or {}
         input_ids = payload.get("input_ids")
+        template_ids = payload.get("templateIds") or payload.get("template_ids")
+        template_id = payload.get("templateId") or payload.get("template_id")
 
-        report = submission_service.fill_pdf(submission_id, input_ids=input_ids)
+        if template_ids:
+            if not isinstance(template_ids, list):
+                return jsonify({"error": "templateIds must be an array"}), 400
+            result = submission_service.generate_outputs(
+                submission_id,
+                [str(tid) for tid in template_ids],
+                input_ids=input_ids,
+            )
+            return jsonify({
+                "success": result["totalFailed"] == 0,
+                "data": result,
+                "message": "Outputs generated" if result["totalGenerated"] else "No outputs generated",
+            }), 200
+
+        report, output_meta = submission_service.fill_pdf(
+            submission_id,
+            input_ids=input_ids,
+            template_id=template_id,
+        )
         
         return jsonify({
-            "success": True,
+            "success": report.success,
             "data": {
                 "written": report.filled_fields,
                 "skipped": len(report.unmapped_fields),
@@ -205,7 +225,13 @@ def fill_pdf(submission_id):
                 "unmapped_fields": report.unmapped_fields,
                 "warnings": report.warnings,
                 "errors": report.errors,
-                "submission_id": submission_id
+                "submission_id": submission_id,
+                "output": {
+                    "filename": output_meta.get("filename"),
+                    "url": output_meta.get("url"),
+                    "template_id": output_meta.get("template_id"),
+                    "generated_at": output_meta.get("generated_at"),
+                },
             },
             "message": "PDF filled successfully" if report.success else "PDF fill completed with issues"
         }), 200
@@ -243,6 +269,8 @@ def download_pdf(submission_id):
     except Exception as e:
         print(f"Download error: {str(e)}")
         return jsonify({"error": str(e)}), 500
+
+
 
 
 @submission_bp.route("/<submission_id>/preview-input", methods=["GET"])

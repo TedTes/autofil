@@ -192,6 +192,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
     [pathname, searchParams]
   )
   const autoCollapsedRef = useRef(false)
+  const widthCollapsedRef = useRef(false)
 
   useEffect(() => {
     void (async () => {
@@ -225,6 +226,23 @@ export default function MainLayout({ children }: MainLayoutProps) {
       autoCollapsedRef.current = false
     }
   }, [currentView.type, desktopSidebarCollapsed])
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (typeof window === 'undefined') return
+      const shouldCollapse = window.innerWidth <= 1300
+      if (shouldCollapse && !desktopSidebarCollapsed) {
+        setDesktopSidebarCollapsed(true)
+        widthCollapsedRef.current = true
+      } else if (!shouldCollapse && widthCollapsedRef.current && !autoCollapsedRef.current) {
+        setDesktopSidebarCollapsed(false)
+        widthCollapsedRef.current = false
+      }
+    }
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [desktopSidebarCollapsed])
 
 
   // Enhanced navigation with unsaved changes guard

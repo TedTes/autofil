@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Client, ClientSubmissionPackage } from '@/types'
-import { getClientById, getClientSubmissions, createClientSubmission, uploadPdf } from '@/lib/api-client'
+import { getClientById, getClientSubmissions, createClientSubmission, uploadPdf, getMergedData } from '@/lib/api-client'
 import useToast from '@/hooks/useToast' 
 import type { MergedData } from '@/types/merged-data'
 export type UploadedRow = {
@@ -65,15 +65,8 @@ export function useClientSubmissions(clientId: string) {
     setIsMergedDataLoading(true)
     setMergedDataError(null)
     try {
-      // TODO: Replace with actual API call when backend is ready
-      // const data = await getMergedData(packageId)
-      
-      // For now, simulate API call with mock data
-      await new Promise(resolve => setTimeout(resolve, 500))
-      
-      // Import and use sample data for demo
-      const { SAMPLE_MERGED_DATA } = await import('@/lib/mock-data/merged-data-sample')
-      setMergedData(SAMPLE_MERGED_DATA)
+      const data = await getMergedData(packageId)
+      setMergedData(data)
     } catch (err) {
       setMergedDataError(err instanceof Error ? err.message : 'Failed to load merged data')
       setMergedData(null)

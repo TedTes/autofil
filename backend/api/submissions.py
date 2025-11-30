@@ -11,9 +11,11 @@ import json
 from datetime import datetime
 from flask import Blueprint, request, jsonify, send_file, Response
 from services.submission_service import SubmissionService
+from services.merged_data_service import MergedDataService
 # Blueprint for submission-specific routes
 submission_bp = Blueprint("submissions", __name__)
 submission_service = SubmissionService()
+merged_data_service = MergedDataService(submission_service)
 
 @submission_bp.route("/upload", methods=["POST"])
 def upload_pdf():
@@ -131,6 +133,21 @@ def get_submission(submission_id):
         }), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@submission_bp.route("/<submission_id>/merged-data", methods=["GET"])
+def get_submission_merged_data(submission_id: str):
+    """Return merged view data for a submission package."""
+    try:
+        merged_data = merged_data_service.get_merged_data(submission_id)
+        return jsonify({
+            "success": True,
+            "data": merged_data,
+        }), 200
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 404
+    except Exception as exc:
+        return jsonify({"error": f"Failed to build merged data: {exc}"}), 500
 
 
 @submission_bp.route("/<submission_id>", methods=["PUT"])

@@ -18,6 +18,7 @@ import type {
   SubmissionListItem,
   SubmissionStats
 } from '@/types'
+import type { MergedData } from '@/types/merged-data'
 
 
 import { transformEntities } from './entity-transformer'
@@ -395,6 +396,21 @@ export async function getSubmissionStats(): Promise<SubmissionStats> {
       throw new Error(response.data.error || 'Failed to load stats')
     }
     return response.data.data as SubmissionStats
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
+/**
+ * Fetch merged data view for a submission package.
+ */
+export async function getMergedData(submissionId: string): Promise<MergedData> {
+  try {
+    const response = await api.get(`/submissions/${submissionId}/merged-data`)
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to load merged data')
+    }
+    return response.data.data as MergedData
   } catch (error) {
     handleApiError(error)
   }

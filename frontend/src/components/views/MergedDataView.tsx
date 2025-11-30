@@ -1,26 +1,21 @@
 'use client'
 
-import React from 'react'
+import React ,{useState} from 'react'
 import {
   Building2,
   MapPin,
   TrendingUp,
   AlertTriangle,
   Shield,
-  Calendar,
-  DollarSign,
-  Users,
   FileText,
   Edit2,
-  CheckCircle2,
-  AlertCircle,
 } from 'lucide-react'
 import type {
   MergedData,
   Location,
   LossSummary,
-  LossRecord,
-} from '@/types/merged-data'
+  LossRecord
+} from '@/types'
 
 interface MergedDataViewProps {
   mergedData: MergedData | null
@@ -34,11 +29,24 @@ interface MergedDataViewProps {
  * Displays the canonical merged dataset in a clean, sectioned layout.
  * Shows data extracted and normalized from multiple uploaded documents.
  */
+
 export default function MergedDataView({
   mergedData,
   onEditField,
   isLoading = false,
 }: MergedDataViewProps) {
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  
+  const handleGenerateClick = () => {
+    setIsModalOpen(true)
+  }
+  
+  const handleModalClose = () => {
+    setIsModalOpen(false)
+  }
+  
+
+  
   if (isLoading) {
     return <LoadingSkeleton />
   }
@@ -46,15 +54,14 @@ export default function MergedDataView({
   if (!mergedData) {
     return <EmptyState />
   }
+  
+
 
   return (
     <div className="h-full flex flex-col bg-gray-50">
-      {/* Header */}
- 
-
       {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto px-6 py-6">
-        <div className="max-w-6xl mx-auto space-y-6">
+      <div className="flex-1 overflow-y-auto px-3 sm:px-4 md:px-6 py-4 sm:py-5 md:py-6">
+        <div className="max-w-6xl mx-auto space-y-4 sm:space-y-5 md:space-y-6">
           {/* Insured Information Section */}
           <Section
             title="Insured Information"
@@ -128,179 +135,85 @@ export default function MergedDataView({
                   onEdit={onEditField ? (v) => onEditField('insured.primaryContact.name', v) : undefined}
                 />
                 <Field
-                  label="Title"
-                  value={mergedData.insured.primaryContact.title}
-                  onEdit={onEditField ? (v) => onEditField('insured.primaryContact.title', v) : undefined}
+                  label="Email"
+                  value={mergedData.insured.primaryContact.email}
+                  onEdit={onEditField ? (v) => onEditField('insured.primaryContact.email', v) : undefined}
                 />
                 <Field
                   label="Phone"
                   value={mergedData.insured.primaryContact.phone}
-                  type="phone"
                   onEdit={onEditField ? (v) => onEditField('insured.primaryContact.phone', v) : undefined}
-                />
-                <Field
-                  label="Email"
-                  value={mergedData.insured.primaryContact.email}
-                  type="email"
-                  onEdit={onEditField ? (v) => onEditField('insured.primaryContact.email', v) : undefined}
                 />
               </FieldGrid>
             </Subsection>
           </Section>
 
           {/* Locations Section */}
-          <Section
-            title="Locations"
-            icon={MapPin}
-            qualityScore={mergedData.metadata.dataQuality.locations}
-          >
-            {mergedData.locations.length === 0 ? (
-              <EmptySection message="No locations found" />
-            ) : (
-              <div className="space-y-4">
-                {mergedData.locations.map((location, index) => (
-                  <LocationCard
-                    key={location.id}
-                    location={location}
-                    index={index}
-                    onEditField={onEditField}
-                  />
-                ))}
-              </div>
-            )}
-          </Section>
+          {mergedData.locations && mergedData.locations.length > 0 && (
+            <Section
+              title="Locations"
+              icon={MapPin}
+              qualityScore={mergedData.metadata.dataQuality.locations}
+            >
+              {mergedData.locations.map((location, idx) => (
+                <LocationCard key={idx} location={location} index={idx} />
+              ))}
+            </Section>
+          )}
 
           {/* Exposures Section */}
-          <Section
-            title="Exposures"
-            icon={TrendingUp}
-            qualityScore={mergedData.metadata.dataQuality.exposures}
-          >
-            <FieldGrid>
-              <Field
-                label="Annual Revenue"
-                value={mergedData.exposures.annualRevenue}
-                type="currency"
-                onEdit={onEditField ? (v) => onEditField('exposures.annualRevenue', v) : undefined}
-              />
-              <Field
-                label="Annual Payroll"
-                value={mergedData.exposures.annualPayroll}
-                type="currency"
-                onEdit={onEditField ? (v) => onEditField('exposures.annualPayroll', v) : undefined}
-              />
-              <Field
-                label="Total Employees"
-                value={mergedData.exposures.numberOfEmployees}
-                type="number"
-                onEdit={onEditField ? (v) => onEditField('exposures.numberOfEmployees', v) : undefined}
-              />
-              <Field
-                label="Full-Time"
-                value={mergedData.exposures.fullTimeEmployees}
-                type="number"
-                onEdit={onEditField ? (v) => onEditField('exposures.fullTimeEmployees', v) : undefined}
-              />
-            </FieldGrid>
-          </Section>
+          {mergedData.exposures && (
+            <Section
+              title="Business Exposures"
+              icon={TrendingUp}
+              qualityScore={mergedData.metadata.dataQuality.exposures}
+            >
+              <FieldGrid>
+                <Field label="Annual Revenue" value={mergedData.exposures.annualRevenue} type="currency" />
+                <Field label="Annual Payroll" value={mergedData.exposures.annualPayroll} type="currency" />
+                <Field label="Number of Employees" value={mergedData.exposures.numberOfEmployees} type="number" />
+                <Field label="Years in Business" value={mergedData.exposures.yearsInBusiness} type="number" />
+              </FieldGrid>
+            </Section>
+          )}
 
           {/* Loss History Section */}
-          <Section
-            title="Loss History"
-            icon={AlertTriangle}
-            qualityScore={mergedData.metadata.dataQuality.lossHistory}
-          >
-            {mergedData.lossHistory.losses.length === 0 ? (
-              <EmptySection message="No loss history found" />
-            ) : (
-              <>
-                <LossSummaryCard summary={mergedData.lossHistory.summary} />
-                <div className="mt-4 space-y-2">
-                  {mergedData.lossHistory.losses.map((loss) => (
-                    <LossRecordCard key={loss.id} loss={loss} />
-                  ))}
-                </div>
-              </>
-            )}
-          </Section>
+          {mergedData.lossHistory && mergedData.lossHistory.losses && mergedData.lossHistory.losses.length > 0 && (
+            <Section
+              title="Loss History"
+              icon={AlertTriangle}
+              qualityScore={mergedData.metadata.dataQuality.lossHistory}
+            >
+              <LossSummaryCard summary={mergedData.lossHistory.summary} />
+              <div className="mt-4 space-y-3">
+                {mergedData.lossHistory.losses.map((loss, idx) => (
+                  <LossRecordCard key={idx} loss={loss} />
+                ))}
+              </div>
+            </Section>
+          )}
 
           {/* Coverage Section */}
-          <Section
-            title="Coverage"
-            icon={Shield}
-            qualityScore={mergedData.metadata.dataQuality.coverage}
-          >
-            <FieldGrid>
-              <Field
-                label="Current Carrier"
-                value={mergedData.coverage.currentCarrier}
-                onEdit={onEditField ? (v) => onEditField('coverage.currentCarrier', v) : undefined}
-              />
-              <Field
-                label="Policy Number"
-                value={mergedData.coverage.policyNumber}
-                onEdit={onEditField ? (v) => onEditField('coverage.policyNumber', v) : undefined}
-              />
-              <Field
-                label="Effective Date"
-                value={mergedData.coverage.effectiveDate}
-                type="date"
-                onEdit={onEditField ? (v) => onEditField('coverage.effectiveDate', v) : undefined}
-              />
-              <Field
-                label="Expiration Date"
-                value={mergedData.coverage.expirationDate}
-                type="date"
-                onEdit={onEditField ? (v) => onEditField('coverage.expirationDate', v) : undefined}
-              />
-            </FieldGrid>
+          {mergedData.coverage && (
+            <Section
+              title="Coverage Information"
+              icon={Shield}
+              qualityScore={mergedData.metadata.dataQuality.coverage}
+            >
+              <FieldGrid>
+                <Field label="Current Carrier" value={mergedData.coverage.currentCarrier} />
+                <Field label="Policy Number" value={mergedData.coverage.policyNumber} />
+                <Field label="Effective Date" value={mergedData.coverage.effectiveDate} />
+                <Field label="Expiration Date" value={mergedData.coverage.expirationDate} />
+                <Field label="Premium" value={mergedData.coverage.premium} type="currency" />
+              </FieldGrid>
+            </Section>
+          )}
 
-            {mergedData.coverage.limits.generalLiability && (
-              <Subsection title="General Liability Limits">
-                <FieldGrid>
-                  <Field
-                    label="Aggregate Limit"
-                    value={mergedData.coverage.limits.generalLiability.aggregateLimit}
-                    type="currency"
-                  />
-                  <Field
-                    label="Per Occurrence"
-                    value={mergedData.coverage.limits.generalLiability.perOccurrenceLimit}
-                    type="currency"
-                  />
-                  <Field
-                    label="Products/Completed Ops"
-                    value={mergedData.coverage.limits.generalLiability.productsCompletedOps}
-                    type="currency"
-                  />
-                  <Field
-                    label="Personal & Advertising Injury"
-                    value={mergedData.coverage.limits.generalLiability.personalAdvertisingInjury}
-                    type="currency"
-                  />
-                </FieldGrid>
-              </Subsection>
-            )}
-          </Section>
+        
         </div>
       </div>
-
-      {/* Warnings Footer (if any) */}
-      {mergedData.metadata.warnings.length > 0 && (
-        <div className="flex-shrink-0 bg-amber-50 border-t border-amber-200 px-6 py-3">
-          <div className="flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-amber-900">Data Quality Warnings</p>
-              <ul className="mt-1 text-xs text-amber-700 space-y-0.5">
-                {mergedData.metadata.warnings.slice(0, 3).map((warning, i) => (
-                  <li key={i}>• {warning}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
-      )}
+    
     </div>
   )
 }
@@ -317,7 +230,12 @@ function Section({
 }: {
   title: string
   icon: React.ComponentType<{ className?: string }>
-  qualityScore?: { score: number; fieldsPopulated: number; fieldsTotal: number }
+  qualityScore?: {
+    score: number
+    fieldsPopulated: number
+    fieldsTotal: number
+    missingCriticalFields?: string[]
+  }
   children: React.ReactNode
 }) {
   return (

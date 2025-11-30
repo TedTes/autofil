@@ -22,6 +22,12 @@ export interface FillReport {
   unmapped_fields?:string[];
   warnings?:string[];
   errors?:string[];
+  output?: {
+    filename?: string
+    url?: string
+    template_id?: string
+    generated_at?: string
+  }
 }
 
 

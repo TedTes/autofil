@@ -1,10 +1,9 @@
 'use client'
 
 import React from 'react'
-import { Plus } from 'lucide-react'
-import MergedDataView from '../views/MergedDataView'
-import type { MergedData } from '@/types/merged-data'
-import type { UploadedRow } from '@/hooks/useClientSubmissions'
+import MergedDataView from '@/components/views/MergedDataView'
+import type { MergedData,UploadedRow } from '@/types'
+
 
 interface UploadOrMergedDataPanelProps {
   // Condition check
@@ -27,7 +26,7 @@ interface UploadOrMergedDataPanelProps {
   onRemoveRow: (id: string) => void
   onViewFile: (submissionId: string, filename?: string, inputId?: string) => void
   onEditMergedField?: (fieldPath: string, value: string | number | boolean) => void
-  
+
   // Reference to the FileUploadDropZone component
   FileUploadDropZoneComponent: React.ComponentType<{
     rows: UploadedRow[]
@@ -64,6 +63,7 @@ export default function UploadOrMergedDataPanel({
   onViewFile,
   onEditMergedField,
   FileUploadDropZoneComponent,
+
 }: UploadOrMergedDataPanelProps) {
   
   // Show existing dropzone if no extracted files yet

@@ -10,3 +10,5 @@ export * from "./export";
 export * from './canonical'
 export * from "./workflow";
 export * from "./views";
+export * from "./template"
+export * from "./merged-data"

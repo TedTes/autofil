@@ -33,7 +33,20 @@ export interface InputFile {
   progress?: number
   progressMessage?: string  // "Uploading file...", "Extracting data...", etc.
 }
-  
+export type UploadedRow = {
+  submissionId: string
+  filename: string
+  uploadedAt: string
+  fileType: 'pdf' | 'excel' | 'csv' | 'other'
+  status?: 'totalFiles' | 'totalFiles' | 'statusFile' | 'extractedFile' | 'outputFile' | 'uploaded' | 'extracting' | 'error' | 'uploading' | 'extracted'
+  fileSize: number
+  uploadPercent: number
+  extractionStatus: 'pending' | 'extracted' | 'error'
+  extractionProgress: number
+  extractionError?: string
+  confidence?: number
+  extractionData?: Record<string, unknown>
+}
   export interface OutputFile {
     id: string
     folderId: string

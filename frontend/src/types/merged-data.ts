@@ -101,6 +101,7 @@ export interface MergedData {
     fullTimeEmployees?: number
     partTimeEmployees?: number
     seasonalEmployees?: number
+    yearsInBusiness?:string
     revenueByClassCode?: RevenueByClass[]
     payrollByClassCode?: PayrollByClass[]
   }
@@ -170,6 +171,7 @@ export interface MergedData {
     policyNumber?: string
     effectiveDate?: string
     expirationDate?: string
+    premium?:string
     limits: CoverageLimits
     deductibles: Deductibles
     additionalCoverages?: AdditionalCoverage[]

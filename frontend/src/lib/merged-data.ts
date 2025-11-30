@@ -12,7 +12,7 @@ export function calculateSectionCompleteness(
   if (!mergedData) return 0
   
   const validSections = ['insured', 'locations', 'exposures', 'lossHistory', 'coverage'] as const
-  if (!validSections.includes(section as any)) return 0
+  if (!validSections.includes(section)) return 0
   
   const qualityScore = mergedData.metadata.dataQuality[section as keyof typeof mergedData.metadata.dataQuality]
   return qualityScore?.score || 0

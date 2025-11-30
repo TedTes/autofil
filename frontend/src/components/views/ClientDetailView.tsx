@@ -1,11 +1,11 @@
 'use client'
 
 import React, { useRef, useState, useEffect,useCallback } from 'react'
-import { formatDate } from '@/lib/utils'
-import { useClientSubmissions, type UploadedRow } from '@/hooks/useClientSubmissions'
-import { fillPdf, downloadPDF } from '@/lib/api-client'
-import UploadOrMergedDataPanel from '@/components/client/UploadOrMergedDataPanel'
-import type { ClientSubmissionPackage } from '@/types'
+import { useClientSubmissions,useTemplateLibrary } from '@/hooks'
+import { fillPdf, downloadPDF} from '@/lib/api-client'
+import {GenerateOutputsModal,UploadOrMergedDataPanel} from "@/components/client"
+import type { ClientSubmissionPackage,UploadedRow  } from '@/types'
+
 import {
   ArrowLeft,
   Building2,
@@ -693,12 +693,7 @@ export function ClientDetailView({
 }: ClientDetailViewProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-
-  const handleEditMergedField = useCallback((fieldPath: string, value: string | number | boolean) => {
-    console.log('Edit merged field:', fieldPath, value)
-    // TODO: Implement field editing logic when backend supports it
-    // This will call an API to update the specific field in the merged data
-  }, [])
+  const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false)
   const {
     client,
     loading,
@@ -726,11 +721,42 @@ export function ClientDetailView({
     mergedData,
     isMergedDataLoading,
     mergedDataError,
+
+    availableTemplates,
+    selectedTemplateIds,
+    isGeneratingOutputs,
+    generateOutputsError,
+    lastGenerationResult,
+    toggleTemplateSelection,
+    selectAllTemplates,
+    deselectAllTemplates,
+    generateOutputsFromTemplates,
+    setTemplates
   } = useClientSubmissions(clientId)
+
+  const {
+    templates: libraryTemplates,
+    loading: templatesLoading,
+    error: templatesError,
+  } = useTemplateLibrary()
+
+  useEffect(() => {
+    if (libraryTemplates.length > 0) {
+      setTemplates(libraryTemplates)
+    }
+  }, [libraryTemplates, setTemplates])
+  const handleEditMergedField = useCallback((fieldPath: string, value: string | number | boolean) => {
+    console.log('Edit merged field:', fieldPath, value)
+  }, [])
   const hasExtractedFiles = activePackage?.inputs?.some(
     input => input.extraction_status === 'extracted' || input.extraction_status === 'ready'
   ) || false
 
+
+  const handleGenerateOutputs = useCallback(async () => {
+    if (!activePackageId) return
+    await generateOutputsFromTemplates(activePackageId)
+  }, [activePackageId, generateOutputsFromTemplates])
   const [fillState, setFillState] = useState<{
     loading: boolean
     message: string | null
@@ -744,6 +770,17 @@ export function ClientDetailView({
   })
 
   const [mergeState, setMergeState] = useState<{
+    loading: boolean
+    message: string | null
+    error: string | null
+    packageId: string | null
+  }>({
+    loading: false,
+    message: null,
+    error: null,
+    packageId: null,
+  })
+  const [outputState, setOutputState] = useState<{
     loading: boolean
     message: string | null
     error: string | null
@@ -814,6 +851,7 @@ export function ClientDetailView({
   useEffect(() => {
     setFillState((prev) => ({ ...prev, message: null, error: null }))
     setMergeState((prev) => ({ ...prev, message: null, error: null }))
+    setOutputState((prev) => ({ ...prev, message: null, error: null }))
   }, [activePackageId])
 
   const handleFillPackage = async (packageId: string) => {
@@ -909,26 +947,26 @@ export function ClientDetailView({
 
     {/* RIGHT: Active Package Info (if merged data is shown) */}
     {hasExtractedFiles && activePackage && (
-      <div className="flex flex-col gap-3 border-t border-gray-200 pt-3 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2 text-sm text-gray-600">
-          <FileStack className="w-4 h-4 text-gray-600" />
-          <span className="font-semibold text-gray-700">{activePackage.name}</span>
-          <span className="text-gray-400">•</span>
-          <div className="flex items-center gap-1.5 text-emerald-600">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            <span className="text-xs font-medium">90% Complete</span>
-          </div>
-        </div>
-        
-        <button
-          onClick={triggerFileUpload}
-          disabled={isUploading}
-          className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm disabled:bg-gray-300 disabled:cursor-not-allowed"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Add Files
-        </button>
-      </div>
+      <div className="flex items-center gap-2">
+      <button
+        onClick={() => setIsGenerateModalOpen(true)}
+        disabled={availableTemplates.length === 0 || isMergedDataLoading}
+        className="inline-flex items-center gap-2 px-4 py-1.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm disabled:bg-gray-300 disabled:cursor-not-allowed"
+      >
+        <FileText className="w-4 h-4" />
+        <span className="hidden sm:inline">Generate</span>
+        <span className="text-xs opacity-90">({selectedTemplateIds.length})</span>
+      </button>
+      
+      <button
+        onClick={triggerFileUpload}
+        disabled={isUploading}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+      >
+        <Plus className="w-3.5 h-3.5" />
+        <span className="hidden sm:inline">Add Files</span>
+      </button>
+    </div>
     )}
   </div>
 </div>
@@ -1009,10 +1047,32 @@ export function ClientDetailView({
       onEditMergedField={handleEditMergedField}
       FileUploadDropZoneComponent={FileUploadDropZone}
     />
+    {outputState.packageId === activePackageId && (outputState.message || outputState.error) && (
+      <div className={`mt-3 rounded-lg border px-4 py-2 text-sm ${
+        outputState.error ? 'border-red-200 bg-red-50 text-red-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+      }`}>
+        {outputState.error || outputState.message}
+      </div>
+    )}
   </div>
 </div>
         </div>
       </div>
+      <GenerateOutputsModal
+  isOpen={isGenerateModalOpen}
+  onClose={() => setIsGenerateModalOpen(false)}
+  availableTemplates={availableTemplates}
+  selectedTemplateIds={selectedTemplateIds}
+  onToggleTemplate={toggleTemplateSelection}
+  mergedData={mergedData}
+  onGenerate={async () => {
+    await handleGenerateOutputs()
+    // Modal will show success, user closes it
+  }}
+  isGenerating={isGeneratingOutputs}
+  generationResult={lastGenerationResult}
+  error={generateOutputsError}
+/>
     </div>
   )
 }

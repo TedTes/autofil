@@ -25,12 +25,18 @@ export interface ApiResponse<T=unknown> {
   
   export interface FillResponse {
     submission_id: string
-    written?:number | 0
-    skipped? : number | 0
-    coverage?:number;
-    unmapped_fields?:string[];
-    warnings?:string[];
-    errors?:string[];
+    written?: number
+    skipped?: number
+    coverage?: number
+    unmapped_fields?: string[]
+    warnings?: string[]
+    errors?: string[]
+    output?: {
+      filename?: string
+      url?: string
+      template_id?: string
+      generated_at?: string
+    }
   }
   
   export interface SubmissionDetail {

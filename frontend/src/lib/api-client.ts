@@ -16,7 +16,11 @@ import type {
   ClientSubmissionPackage,
   SubmissionListResponse,
   SubmissionListItem,
-  SubmissionStats
+  SubmissionStats,
+  OutputTemplate,
+  GenerateOutputsRequest,
+  GenerateOutputsResponse,
+  TemplateLibraryResponse
 } from '@/types'
 import type { MergedData } from '@/types/merged-data'
 
@@ -215,15 +219,25 @@ export async function fillPdf(
   if (!response.data.success) {
     throw new Error(response.data.error || 'Fill failed')
   }
-  const { coverage,errors,skipped,submission_id,unmapped_fields,warnings,written} = response.data.data!
-  return { 
+  const {
+    coverage,
+    errors,
+    skipped,
+    submission_id,
+    unmapped_fields,
+    warnings,
+    written,
+    output,
+  } = response.data.data!
+  return {
     submission_id,
     written,
     skipped,
     coverage,
     unmapped_fields,
     warnings,
-    errors 
+    errors,
+    output,
   }
 }
 
@@ -1295,5 +1309,106 @@ export async function getRecentSubmissionById(
   } catch (error) {
     console.error('Get recent submission by ID error:', error)
     throw error
+  }
+}
+
+
+/**
+ * Fetch available output templates from backend
+ */
+export async function getTemplateLibrary(): Promise<OutputTemplate[]> {
+  try {
+    const response = await api.get<TemplateLibraryResponse>('/templates')
+    return response.data.templates ?? []
+  } catch (error) {
+    console.error('Failed to fetch template library:', error)
+    throw new Error('Failed to load available templates')
+  }
+}
+
+/**
+ * Fetch single template by ID
+ */
+export async function getTemplateById(templateId: string): Promise<OutputTemplate> {
+  try {
+    const response = await api.get<{ template: OutputTemplate; timestamp: string }>(
+      `/templates/${templateId}`
+    )
+    if (!response.data.template) {
+      throw new Error('Template not found')
+    }
+    return response.data.template
+  } catch (error) {
+    console.error(`Failed to fetch template ${templateId}:`, error)
+    throw new Error(`Failed to load template: ${templateId}`)
+  }
+}
+
+/**
+ * Fetch templates filtered by form type
+ */
+export async function getTemplatesByFormType(formType: string): Promise<OutputTemplate[]> {
+  try {
+    const response = await api.get<TemplateLibraryResponse>('/templates', {
+      params: { formType }
+    })
+    return response.data.templates ?? []
+  } catch (error) {
+    console.error(`Failed to fetch templates for ${formType}:`, error)
+    throw new Error(`Failed to load templates for form type: ${formType}`)
+  }
+}
+
+export async function generateOutputs(
+  packageOrPayload: string | GenerateOutputsRequest,
+  templateIds?: string[],
+  customMergedData?: Record<string, unknown>
+): Promise<GenerateOutputsResponse> {
+  try {
+    const packageId =
+      typeof packageOrPayload === 'string' ? packageOrPayload : packageOrPayload.packageId
+    const payload =
+      typeof packageOrPayload === 'string'
+        ? {
+            templateIds: templateIds ?? [],
+            customMergedData,
+          }
+        : {
+            templateIds: packageOrPayload.templateIds,
+            customMergedData: packageOrPayload.customMergedData,
+          }
+    const response = await api.post(`/submissions/${packageId}/fill`, payload)
+    const data = response.data?.data
+    if (!data) throw new Error('Failed to generate outputs')
+    return data as GenerateOutputsResponse
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+/**
+ * Download generated output file
+ */
+export async function downloadOutput(
+  packageId: string,
+  filename: string
+): Promise<void> {
+  try {
+    const response = await api.get(
+      `/api/submissions/${packageId}/outputs/${filename}`,
+      { responseType: 'blob' }
+    )
+    
+    // Create download link
+    const url = window.URL.createObjectURL(response.data)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error('Failed to download output:', error)
+    throw new Error('Failed to download file')
   }
 }

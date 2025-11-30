@@ -1,22 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Client, ClientSubmissionPackage } from '@/types'
-import { getClientById, getClientSubmissions, createClientSubmission, uploadPdf, getMergedData } from '@/lib/api-client'
+import type { Client, ClientSubmissionPackage,OutputTemplate, TemplateSelection, GenerateOutputsResponse } from '@/types'
+import {generateOutputs as generateOutputsAPI, getClientById, getClientSubmissions, createClientSubmission, uploadPdf, getMergedData,calculateTemplateReadiness} from '@/lib'
 import useToast from '@/hooks/useToast' 
-import type { MergedData } from '@/types/merged-data'
-export type UploadedRow = {
-  submissionId: string
-  filename: string
-  uploadedAt: string
-  fileType: 'pdf' | 'excel' | 'csv' | 'other'
-  status?: 'totalFiles' | 'totalFiles' | 'statusFile' | 'extractedFile' | 'outputFile' | 'uploaded' | 'extracting' | 'error' | 'uploading' | 'extracted'
-  fileSize: number
-  uploadPercent: number
-  extractionStatus: 'pending' | 'extracted' | 'error'
-  extractionProgress: number
-  extractionError?: string
-  confidence?: number
-  extractionData?: Record<string, unknown>
-}
+import type { MergedData,UploadedRow } from '@/types'
+
 
 function getFileType(filename: string): UploadedRow['fileType'] {
   const ext = filename.split('.').pop()?.toLowerCase()
@@ -45,6 +32,13 @@ export function useClientSubmissions(clientId: string) {
   const [isMergedDataLoading, setIsMergedDataLoading] = useState(false)
   const [mergedDataError, setMergedDataError] = useState<string | null>(null)
 
+
+  const [availableTemplates, setAvailableTemplates] = useState<OutputTemplate[]>([])
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([])
+  const [isGeneratingOutputs, setIsGeneratingOutputs] = useState(false)
+  const [generateOutputsError, setGenerateOutputsError] = useState<string | null>(null)
+  const [lastGenerationResult, setLastGenerationResult] = useState<GenerateOutputsResponse | null>(null)
+
   const toast = useToast()
   // Input file selection (existing)
   const [selectedInputsByPackage, setSelectedInputsByPackage] = useState<
@@ -56,9 +50,170 @@ export function useClientSubmissions(clientId: string) {
     Record<string, string[]>
   >({})
 
-  const tempIdRef = useRef(0)
 
-  const activePackage = activePackageId
+  /**
+ * Toggle template selection
+ */
+const toggleTemplateSelection = useCallback((templateId: string) => {
+  setSelectedTemplateIds(prev => {
+    const exists = prev.includes(templateId)
+    return exists 
+      ? prev.filter(id => id !== templateId)
+      : [...prev, templateId]
+  })
+}, [])
+
+const tempIdRef = useRef(0)
+
+/**
+ * Select all available templates
+ */
+const selectAllTemplates = useCallback(() => {
+  if (!mergedData || !availableTemplates.length) return
+  
+  const availableIds = availableTemplates
+    .filter(template => {
+      const readiness = calculateTemplateReadiness(
+        template.requiredDataSections,
+        template.optionalDataSections || [],
+        mergedData
+      )
+      return readiness.canGenerate
+    })
+    .map(t => t.id)
+  
+  setSelectedTemplateIds(availableIds)
+}, [availableTemplates, mergedData])
+/**
+ * Deselect all templates
+ */
+const deselectAllTemplates = useCallback(() => {
+  setSelectedTemplateIds([])
+}, [])
+
+/**
+ * Check if a template can be generated
+ */
+const canGenerateTemplate = useCallback((templateId: string): boolean => {
+  if (!mergedData) return false
+  
+  const template = availableTemplates.find(t => t.id === templateId)
+  if (!template) return false
+  
+  const readiness = calculateTemplateReadiness(
+    template.requiredDataSections,
+    template.optionalDataSections || [],
+    mergedData
+  )
+  
+  return readiness.canGenerate
+}, [availableTemplates, mergedData])
+
+/**
+ * Get template availability info
+ */
+const getTemplateAvailability = useCallback((templateId: string) => {
+  if (!mergedData) return null
+  
+  const template = availableTemplates.find(t => t.id === templateId)
+  if (!template) return null
+  
+  const readiness = calculateTemplateReadiness(
+    template.requiredDataSections,
+    template.optionalDataSections || [],
+    mergedData
+  )
+  
+  return {
+    canGenerate: readiness.canGenerate,
+    completeness: readiness.completeness,
+    missingRequired: readiness.missingRequired,
+    availableOptional: readiness.availableOptional,
+  }
+}, [availableTemplates, mergedData])
+
+  // ---- load client & packages ----
+  const loadClientData = useCallback(async (options?: { silent?: boolean }) => {
+    try {
+      if (!options?.silent) {
+        setLoading(true)
+      }
+      const [detail, clientPackages] = await Promise.all([
+        getClientById(clientId),
+        getClientSubmissions(clientId),
+      ])
+      if (!detail) {
+        setError('Client not found')
+        return
+      }
+      setClient(detail)
+      setPackages(clientPackages || [])
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load client data')
+    } finally {
+      if (!options?.silent) {
+        setLoading(false)
+      }
+    }
+  }, [clientId])
+const refreshClient = useCallback(async () => {
+  await loadClientData({ silent: true })
+}, [loadClientData])
+/**
+ * Generate outputs from selected templates
+ */
+const generateOutputsFromTemplates = useCallback(async (packageId: string) => {
+  if (!packageId || selectedTemplateIds.length === 0) {
+    setGenerateOutputsError('No templates selected')
+    return null
+  }
+  
+  setIsGeneratingOutputs(true)
+  setGenerateOutputsError(null)
+  setLastGenerationResult(null)
+  
+  try {
+    const result = await generateOutputsAPI({
+      packageId,
+      templateIds: selectedTemplateIds,
+    })
+    
+    setLastGenerationResult(result)
+    
+    // Refresh client data to show new outputs
+    await refreshClient()
+    
+    // Clear selection after successful generation
+    setSelectedTemplateIds([])
+    
+    return result
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'Failed to generate outputs'
+    setGenerateOutputsError(errorMessage)
+    return null
+  } finally {
+    setIsGeneratingOutputs(false)
+  }
+}, [selectedTemplateIds, refreshClient])
+
+/**
+ * Load available templates (called when templates are fetched)
+ */
+const setTemplates = useCallback((templates: OutputTemplate[]) => {
+  setAvailableTemplates(templates)
+}, [])
+
+// ---- Clear template selection when package changes (ADD TO EXISTING useEffect) ----
+useEffect(() => {
+  // Clear selections when active package changes
+  setSelectedTemplateIds([])
+  setGenerateOutputsError(null)
+  setLastGenerationResult(null)
+}, [activePackageId])
+ 
+
+const activePackage = activePackageId
     ? packages.find(pkg => pkg.submission_id === activePackageId)
     : undefined
   const loadMergedData = useCallback(async (packageId: string) => {
@@ -146,7 +301,7 @@ useEffect(() => {
     })
   }
 
-  // NEW: OUTPUT selection management ----
+  //  OUTPUT selection management ----
   const toggleOutputSelection = (submissionId: string, filename: string) => {
     if (!submissionId || !filename) return
     setSelectedOutputsByPackage(prev => {
@@ -179,31 +334,7 @@ useEffect(() => {
     })
   }
 
-  // ---- load client & packages ----
-  const loadClientData = useCallback(async (options?: { silent?: boolean }) => {
-    try {
-      if (!options?.silent) {
-        setLoading(true)
-      }
-      const [detail, clientPackages] = await Promise.all([
-        getClientById(clientId),
-        getClientSubmissions(clientId),
-      ])
-      if (!detail) {
-        setError('Client not found')
-        return
-      }
-      setClient(detail)
-      setPackages(clientPackages || [])
-      setError(null)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load client data')
-    } finally {
-      if (!options?.silent) {
-        setLoading(false)
-      }
-    }
-  }, [clientId])
+
 
   useEffect(() => {
     void loadClientData()
@@ -365,9 +496,7 @@ const currentPackage = packages.find(pkg => pkg.submission_id === activePackageI
     }
   }
   
-  const refreshClient = useCallback(async () => {
-    await loadClientData({ silent: true })
-  }, [loadClientData])
+
 
   // NEW: Enhanced stats calculation
   const stats = {
@@ -431,5 +560,18 @@ const currentPackage = packages.find(pkg => pkg.submission_id === activePackageI
   isMergedDataLoading,
   mergedDataError,
   loadMergedData,
+
+  availableTemplates,
+  selectedTemplateIds,
+  isGeneratingOutputs,
+  generateOutputsError,
+  lastGenerationResult,
+  toggleTemplateSelection,
+  selectAllTemplates,
+  deselectAllTemplates,
+  canGenerateTemplate,
+  getTemplateAvailability,
+  generateOutputsFromTemplates,
+  setTemplates,
   }
 }

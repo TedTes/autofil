@@ -23,7 +23,6 @@ export type DataSection =
   | 'exposures'
   | 'lossHistory'
   | 'coverage'
-  | string
 
 /**
  * Template generation status

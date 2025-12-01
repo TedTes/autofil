@@ -44,7 +44,7 @@ def upload_pdf():
         if submission_id and len(files) > 1:
             return jsonify({"error": "Cannot upload multiple files to the same submission package at once"}), 400
 
-        results, errors = [], []
+        success_count, errors = 0, []
 
         for idx, file in enumerate(files):
             if not file or not file.filename:
@@ -62,12 +62,8 @@ def upload_pdf():
                     client_id=client_id,
                     submission_id=submission_id,
                 )
-                results.append({
-                    "index": idx,
-                    "filename": file.filename,
-                    "submission_id": result["submission_id"],
-                    "extraction": {"data": result["data"]},
-                })
+                if result:
+                    success_count += 1
             except Exception as e:
                 errors.append({
                     "index": idx,
@@ -75,30 +71,17 @@ def upload_pdf():
                     "error": str(e),
                 })
 
-        if len(files) == 1:
-            if results:
-                single = results[0]
-                return jsonify({
-                    "success": True,
-                    "submission_id": single["submission_id"],
-                    "extraction": single["extraction"],
-                }), 201
-            else:
-                return jsonify({"error": errors[0]["error"]}), 400
+        if success_count > 0:
+            message = f"Processed {len(files)} file(s): {success_count} succeeded"
+            if errors:
+                message += f", {len(errors)} failed"
+            return jsonify({
+                "success": True,
+                "message": message,
+            }), 200
 
-        status = 207 if (errors and results) else 201 if results else 400
-        return jsonify({
-            "success": bool(results),
-            "data": {
-                "total": len(files),
-                "successful": len(results),
-                "failed": len(errors),
-                "results": results,
-                "errors": errors or [],
-            },
-            "message": f"Processed {len(files)} files: "
-                       f"{len(results)} succeeded, {len(errors)} failed",
-        }), status
+        first_error = errors[0]["error"] if errors else "Upload failed"
+        return jsonify({"success": False, "error": first_error}), 400
 
     except Exception as e:
         print("error from upload pdf method",str(e))

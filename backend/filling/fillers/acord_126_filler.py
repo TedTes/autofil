@@ -38,6 +38,7 @@ class Acord126Filler(BaseFiller):
     """
 
     form_type = "ACORD_126"
+    supported_templates = ["acord_126"]
 
     def __init__(self):
         super().__init__()

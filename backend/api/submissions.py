@@ -205,7 +205,7 @@ def fill_pdf(submission_id):
                 input_ids=input_ids,
             )
             return jsonify({
-                "success": result["totalFailed"] == 0,
+                "success": result["success"],
                 "data": result,
                 "message": "Outputs generated" if result["totalGenerated"] else "No outputs generated",
             }), 200

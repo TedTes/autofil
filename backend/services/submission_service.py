@@ -21,7 +21,8 @@ from extraction.core.document import Document, DocumentType
 from extraction.core.readers.pdf_reader import PdfReader
 from extraction.extractors import extractor_registry
 from extraction.extractors.mfc import MFC
-from filling.fillers import Acord126Filler
+from filling.fillers import *  # noqa: F401,F403 - ensure fillers register themselves
+from filling.fillers.base_filler import BaseFiller
 from lib.submission_templates import TEMPLATES, get_template
 from services.client_service import ClientService
 from services.comparison_service import ComparisonService
@@ -46,7 +47,7 @@ class SubmissionService:
     def __init__(self):
         """Initialize service dependencies."""
         self.client_service = ClientService()
-        self.filler = Acord126Filler()  # filler knows how to find its own template(s)
+        self.filler_cache: Dict[str, BaseFiller] = {}
 
         self.version_service = VersionService()
         self.comparison_service = ComparisonService()
@@ -389,7 +390,12 @@ class SubmissionService:
         return True
 
 
-    def fill_pdf(self, submission_id: str, input_ids: Optional[List[str]] = None):
+    def fill_pdf(
+        self,
+        submission_id: str,
+        input_ids: Optional[List[str]] = None,
+        template_id: Optional[str] = None,
+    ):
         """
         Fill PDF with data using the canonical extraction output.
 
@@ -415,14 +421,15 @@ class SubmissionService:
             if not canonical_data:
                 raise ValueError("Extracted data not found")
 
-            template_id = metadata.get("template_type") or "acord_126_2016.pdf"
+            template_choice = template_id or metadata.get("template_type")
+            filler = self._select_filler(template_choice)
             temp_output_dir = tempfile.mkdtemp(prefix=f"filled_{submission_id}_")
             output_path = os.path.join(temp_output_dir, f"{submission_id}_filled.pdf")
 
-            fill_report = self.filler.fill(
+            fill_report = filler.fill(
                 canonical_data=canonical_data,
                 output_path=output_path,
-                template_id=template_id,
+                template_id=template_choice,
             )
             remote_output = self._upload_to_remote(
                 local_path=output_path,
@@ -437,6 +444,7 @@ class SubmissionService:
             metadata['filled_at'] = datetime.utcnow().isoformat()
             outputs_meta = metadata.setdefault('outputs', [])
             outputs_meta.append({
+                "template_id": template_choice,
                 "filename": os.path.basename(output_path),
                 "generated_at": metadata['filled_at'],
                 "url": remote_output.get("public_url") if remote_output else None,
@@ -454,7 +462,7 @@ class SubmissionService:
             }
 
             self._persist_submission_metadata(metadata)
-            return fill_report
+            return fill_report, outputs_meta[-1]
 
         except Exception as e:
             print("error occured in fill_pdf", str(e))
@@ -606,6 +614,15 @@ class SubmissionService:
     def _persist_submission_metadata(self, metadata: Dict[str, Any]) -> None:
         if getattr(self.db, "enabled", False):
             self.db.save_submission_metadata(metadata)
+
+    def _select_filler(self, template_id: str):
+        if not template_id:
+            raise ValueError("Template ID is required to select filler.")
+        filler_cls = BaseFiller.resolve_filler(template_id)
+        cache_key = filler_cls.__name__
+        if cache_key not in self.filler_cache:
+            self.filler_cache[cache_key] = filler_cls()
+        return self.filler_cache[cache_key]
 
     def _download_storage_entry(self, storage_info: Optional[Dict[str, Any]]) -> Optional[bytes]:
         if not storage_info:
@@ -1074,3 +1091,55 @@ class SubmissionService:
 
 
     
+    def generate_outputs(
+        self,
+        submission_id: str,
+        template_ids: List[str],
+        input_ids: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        results = []
+        generated = 0
+        for template_id in template_ids:
+            try:
+                report, output_meta = self.fill_pdf(
+                    submission_id,
+                    input_ids=input_ids,
+                    template_id=template_id,
+                )
+                generated += 1
+                results.append({
+                    "templateId": template_id,
+                    "templateName": template_id.replace("_", " ").upper(),
+                    "success": True,
+                    "fileUrl": output_meta.get("url"),
+                    "filename": output_meta.get("filename"),
+                    "fieldsFilled": report.filled_fields,
+                    "totalFields": report.filled_fields + len(report.unmapped_fields or []),
+                    "coverage": report.coverage,
+                    "warnings": report.warnings,
+                    "generatedAt": output_meta.get("generated_at"),
+                })
+            except Exception as exc:
+                results.append({
+                    "templateId": template_id,
+                    "templateName": template_id.replace("_", " ").upper(),
+                    "success": False,
+                    "fileUrl": None,
+                    "filename": None,
+                    "fieldsFilled": 0,
+                    "totalFields": 0,
+                    "coverage": 0,
+                    "warnings": [],
+                    "error": str(exc),
+                    "generatedAt": datetime.utcnow().isoformat(),
+                })
+        total_requested = len(template_ids)
+        total_failed = total_requested - generated
+        return {
+            "success": total_failed == 0,
+            "results": results,
+            "totalRequested": total_requested,
+            "totalGenerated": generated,
+            "totalFailed": total_failed,
+            "timestamp": datetime.utcnow().isoformat(),
+        }

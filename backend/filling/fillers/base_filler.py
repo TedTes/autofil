@@ -1,5 +1,8 @@
+from __future__ import annotations
+
+import re
 from dataclasses import dataclass
-from typing import List, Optional, Any, Dict
+from typing import ClassVar, Dict, List, Optional, Type, Any
 
 
 @dataclass
@@ -17,9 +20,30 @@ class BaseFiller:
     """Base class for all PDF/DOCX/FORM fillers. Provides common utilities."""
 
     form_type: str = "GENERIC"
+    supported_templates: ClassVar[List[str]] = []
+    _registry: ClassVar[Dict[str, Type['BaseFiller']]] = {}
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        for template_id in getattr(cls, "supported_templates", []) or []:
+            normalized = cls._normalize_template_id(template_id)
+            if normalized:
+                BaseFiller._registry[normalized] = cls
 
     def __init__(self):
         pass
+
+    @staticmethod
+    def _normalize_template_id(template_id: str) -> str:
+        return re.sub(r"[^a-z0-9_-]+", "", template_id.lower())
+
+    @classmethod
+    def resolve_filler(cls, template_id: str) -> Type['BaseFiller']:
+        normalized = cls._normalize_template_id(template_id)
+        for key, filler_cls in cls._registry.items():
+            if normalized == key or normalized.startswith(f"{key}_"):
+                return filler_cls
+        raise ValueError(f"No filler registered for template {template_id}")
 
     # -------------------------------------------------------------- #
     # Public API

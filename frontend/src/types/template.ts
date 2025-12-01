@@ -62,6 +62,9 @@ export interface OutputTemplate {
   /** Template version */
   version?: string
   
+  /** Filler identifier used by backend */
+  filler?: string
+  
   /** Icon name for UI */
   icon?: string
   

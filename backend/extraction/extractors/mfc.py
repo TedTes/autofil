@@ -11,7 +11,7 @@ class MFC:
     @classmethod
     def _load(cls) -> Dict[str, Any]:
         if cls._cache is None:
-            path = Path(__file__).resolve().parents[1] / "mfc.yaml"
+            path = Path(__file__).resolve().parents[2] / "templates" / "mfc.yaml"
             with open(path, "r", encoding="utf-8") as f:
                 cls._cache = yaml.safe_load(f)
         return cls._cache

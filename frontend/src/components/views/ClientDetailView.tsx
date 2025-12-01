@@ -838,26 +838,25 @@ export function ClientDetailView({
 
     {/* RIGHT: Active Package Info (if merged data is shown) */}
     {hasExtractedFiles && activePackage && (
-      <div className="flex items-center gap-2">
-      <button
-        onClick={() => setIsGenerateModalOpen(true)}
-        disabled={availableTemplates.length === 0 || isMergedDataLoading}
-        className="inline-flex items-center gap-2 px-4 py-1.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm disabled:bg-gray-300 disabled:cursor-not-allowed"
-      >
-        <FileText className="w-4 h-4" />
-        <span className="hidden sm:inline">Generate</span>
-        <span className="text-xs opacity-90">({selectedTemplateIds.length})</span>
-      </button>
-      
-      <button
-        onClick={triggerFileUpload}
-        disabled={isUploading}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-      >
-        <Plus className="w-3.5 h-3.5" />
-        <span className="hidden sm:inline">Add Files</span>
-      </button>
-    </div>
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
+        <button
+          onClick={() => setIsGenerateModalOpen(true)}
+          disabled={availableTemplates.length === 0 || isMergedDataLoading}
+          className="inline-flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-xs sm:text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm disabled:bg-gray-300 disabled:cursor-not-allowed"
+        >
+          <FileText className="w-4 h-4" />
+          <span>Generate</span>
+          <span className="text-xs opacity-90">({selectedTemplateIds.length})</span>
+        </button>
+        <button
+          onClick={triggerFileUpload}
+          disabled={isUploading}
+          className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-gray-700 text-xs sm:text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>Add Files</span>
+        </button>
+      </div>
     )}
   </div>
 </div>

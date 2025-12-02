@@ -506,6 +506,76 @@ class SubmissionService:
         merged = self._clean_entities(merged)
         return merged
 
+    def delete_input(self, submission_id: str, input_id: str) -> bool:
+        metadata = self.get_submission_metadata(submission_id)
+        if not metadata:
+            return False
+        inputs = metadata.get("inputs") or []
+        index = next((i for i, entry in enumerate(inputs) if entry.get("input_id") == input_id), None)
+        if index is None:
+            return False
+        entry = inputs.pop(index)
+
+        data_path = entry.get("data_path")
+        abs_data = self._abs_storage_path(data_path)
+        if abs_data and os.path.exists(abs_data):
+            try:
+                os.remove(abs_data)
+            except Exception:
+                pass
+
+        storage_info = entry.get("storage") or entry.get("upload_storage") or {}
+        storage_path = storage_info.get("path")
+        if storage_path:
+            self.remote_storage.delete_file(storage_path)
+
+        metadata["inputs"] = inputs
+        metadata["file_count"] = len(inputs)
+        if inputs:
+            metadata["data"] = self._merge_input_data(inputs)
+            metadata["status"] = metadata.get("status") or "extracted"
+        else:
+            metadata["data"] = {}
+            metadata["status"] = "created"
+
+        self._persist_submission_metadata(metadata)
+        return True
+
+    def delete_output(self, submission_id: str, output_id: str) -> bool:
+        metadata = self.get_submission_metadata(submission_id)
+        if not metadata:
+            return False
+        outputs = metadata.get("outputs") or []
+
+        def _matches(entry: Dict[str, Any]) -> bool:
+            return (
+                entry.get("output_id") == output_id
+                or entry.get("input_id") == output_id
+                or entry.get("filename") == output_id
+            )
+
+        index = next((i for i, entry in enumerate(outputs) if _matches(entry)), None)
+        if index is None:
+            return False
+        entry = outputs.pop(index)
+
+        storage_info = entry.get("storage") or {}
+        storage_path = storage_info.get("path")
+        if storage_path:
+            self.remote_storage.delete_file(storage_path)
+
+        local_path = entry.get("path") or entry.get("output_path")
+        abs_path = self._abs_storage_path(local_path)
+        if abs_path and os.path.exists(abs_path):
+            try:
+                os.remove(abs_path)
+            except Exception:
+                pass
+
+        metadata["outputs"] = outputs
+        self._persist_submission_metadata(metadata)
+        return True
+
 
     def _canonicalize_value_for_hash(self, value: Any):
         if isinstance(value, dict):

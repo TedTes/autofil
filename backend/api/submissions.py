@@ -154,6 +154,30 @@ def update_submission(submission_id):
         return jsonify({"error": str(e)}), 500
 
 
+@submission_bp.route("/<submission_id>/inputs/<input_id>", methods=["DELETE"])
+def delete_submission_input(submission_id, input_id):
+    """Delete a single uploaded input file from a submission."""
+    try:
+        deleted = submission_service.delete_input(submission_id, input_id)
+        if not deleted:
+            return jsonify({"error": "Input file not found"}), 404
+        return jsonify({"success": True, "message": "Input file deleted"}), 200
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@submission_bp.route("/<submission_id>/outputs/<output_id>", methods=["DELETE"])
+def delete_submission_output(submission_id, output_id):
+    """Delete a generated output file from a submission."""
+    try:
+        deleted = submission_service.delete_output(submission_id, output_id)
+        if not deleted:
+            return jsonify({"error": "Output file not found"}), 404
+        return jsonify({"success": True, "message": "Output file deleted"}), 200
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
 @submission_bp.route("/<submission_id>", methods=["DELETE"])
 def delete_submission(submission_id):
     """Delete a submission and all its files."""

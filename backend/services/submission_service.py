@@ -38,17 +38,13 @@ from services.version_service import VersionService
 class MergeConflict:
     """
     Represents a conflict when merging entity values from multiple sources.
-    
-    Example:
-        File 1 (ACORD): insured_name = "ABC Corp" (confidence: 0.98)
-        File 2 (License): insured_name = "ABC Corporation" (confidence: 0.65)
-        → Conflict detected, need to resolve
     """
-    field_id: str                           # Field that has conflict (e.g., "insured_name")
-    values: List[Dict[str, Any]]           # Conflicting values with metadata
-    selected_value: Optional[Any] = None   # Value chosen after resolution
-    resolution_strategy: Optional[str] = None  # How conflict was resolved
-    confidence: float = 0.0                # Confidence in resolution
+    field_id: str
+    values: List[Dict[str, Any]]
+    selected_value: Optional[Any] = None
+    resolution_strategy: Optional[str] = None
+    resolution_reason: Optional[str] = None  # Note: Why this value was chosen
+    confidence: float = 0.0
     
     def __repr__(self) -> str:
         return f"MergeConflict(field={self.field_id}, values={len(self.values)}, selected={self.selected_value})"
@@ -1441,3 +1437,157 @@ class SubmissionService:
             print(f"  - {conflict.field_id}: {len(conflict.values)} values")
             for val in conflict.values:
                 print(f"    → {val.get('value')} (conf: {val.get('confidence', 0):.2f})")
+
+
+    def _select_best_value(
+        self,
+        values: List[Dict[str, Any]],
+        strategy: str = "highest_confidence"
+    ) -> Tuple[Any, float, str]:
+        """
+        Select the best value from multiple candidates based on strategy.
+        
+        Strategies:
+        - "highest_confidence": Pick value with highest confidence score
+        - "most_recent": Pick value from most recently processed file
+        - "first": Pick first value encountered
+        
+        Args:
+            values: List of value dicts with "value", "confidence", "source" keys
+            strategy: Selection strategy
+            
+        Returns:
+            Tuple of (selected_value, confidence, reason)
+            
+        Example:
+            >>> values = [
+            ...     {"value": "ABC Corp", "confidence": 0.98, "source": "acord", "timestamp": "2024-01-01"},
+            ...     {"value": "ABC Corporation", "confidence": 0.65, "source": "license", "timestamp": "2024-01-02"}
+            ... ]
+            >>> val, conf, reason = service._select_best_value(values, "highest_confidence")
+            >>> val
+            'ABC Corp'
+            >>> conf
+            0.98
+            >>> reason
+            'highest_confidence: 0.98 from acord'
+        """
+        if not values:
+            return None, 0.0, "no_values"
+        
+        if len(values) == 1:
+            v = values[0]
+            return v.get("value"), v.get("confidence", 0.5), "single_value"
+        
+        if strategy == "highest_confidence":
+            # Sort by confidence descending
+            sorted_values = sorted(
+                values,
+                key=lambda v: v.get("confidence", 0.0),
+                reverse=True
+            )
+            best = sorted_values[0]
+            
+            # Check for ties (within 0.01 difference)
+            confidence_threshold = 0.01
+            ties = [
+                v for v in sorted_values
+                if abs(v.get("confidence", 0) - best.get("confidence", 0)) < confidence_threshold
+            ]
+            
+            if len(ties) > 1:
+                # Break tie by preferring most recent timestamp
+                ties_with_time = [
+                    v for v in ties
+                    if v.get("timestamp")
+                ]
+                if ties_with_time:
+                    ties_with_time.sort(
+                        key=lambda v: v.get("timestamp", ""),
+                        reverse=True
+                    )
+                    best = ties_with_time[0]
+                    reason = f"tie_broken_by_recency: {best.get('confidence', 0):.2f} from {best.get('source', 'unknown')}"
+                else:
+                    reason = f"highest_confidence: {best.get('confidence', 0):.2f} from {best.get('source', 'unknown')}"
+            else:
+                reason = f"highest_confidence: {best.get('confidence', 0):.2f} from {best.get('source', 'unknown')}"
+            
+            return best.get("value"), best.get("confidence", 0.0), reason
+        
+        elif strategy == "most_recent":
+            # Sort by timestamp descending (most recent first)
+            sorted_values = sorted(
+                values,
+                key=lambda v: v.get("timestamp", ""),
+                reverse=True
+            )
+            best = sorted_values[0]
+            reason = f"most_recent: from {best.get('source', 'unknown')} at {best.get('timestamp', 'unknown')}"
+            return best.get("value"), best.get("confidence", 0.0), reason
+        
+        elif strategy == "first":
+            # Just use first value
+            best = values[0]
+            reason = f"first: from {best.get('source', 'unknown')}"
+            return best.get("value"), best.get("confidence", 0.0), reason
+        
+        else:
+            # Default to highest confidence
+            return self._select_best_value(values, "highest_confidence")
+
+
+    def _values_are_similar(self, val1: Any, val2: Any, threshold: float = 0.85) -> bool:
+        """
+        Check if two values are similar enough to be considered the same.
+        
+        Uses string similarity for text, exact match for numbers.
+        
+        Args:
+            val1: First value
+            val2: Second value
+            threshold: Similarity threshold (0-1)
+            
+        Returns:
+            True if values are similar
+            
+        Example:
+            >>> service._values_are_similar("ABC Corp", "ABC Corporation")
+            True
+            >>> service._values_are_similar("ABC Corp", "XYZ Inc")
+            False
+            >>> service._values_are_similar(100, 100)
+            True
+            >>> service._values_are_similar(100, 101)
+            False
+        """
+        # Handle None/empty
+        if val1 is None or val2 is None:
+            return val1 == val2
+        
+        # Exact match
+        if val1 == val2:
+            return True
+        
+        # Numeric comparison
+        try:
+            num1 = float(val1)
+            num2 = float(val2)
+            # Numbers must be exact or very close
+            return abs(num1 - num2) < 0.01
+        except (ValueError, TypeError):
+            pass
+        
+        # String similarity
+        str1 = str(val1).lower().strip()
+        str2 = str(val2).lower().strip()
+        
+        if not str1 or not str2:
+            return False
+        
+        # Simple character-based similarity
+        # (In production,TODO: use python-Levenshtein or rapidfuzz for better performance)
+        from difflib import SequenceMatcher
+        similarity = SequenceMatcher(None, str1, str2).ratio()
+        
+        return similarity >= threshold

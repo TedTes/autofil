@@ -27,11 +27,31 @@ from lib.submission_templates import TEMPLATES, get_template
 from services.client_service import ClientService
 from services.comparison_service import ComparisonService
 from services.export_service import ExportService
-
+from dataclasses import dataclass, field as dataclass_field
+from typing import Dict, List, Any, Optional, Tuple
+from datetime import datetime
 from services.supabase_db_service import SupabaseDatabaseService
 from services.supabase_storage_service import SupabaseStorageService
 from services.version_service import VersionService
 
+@dataclass
+class MergeConflict:
+    """
+    Represents a conflict when merging entity values from multiple sources.
+    
+    Example:
+        File 1 (ACORD): insured_name = "ABC Corp" (confidence: 0.98)
+        File 2 (License): insured_name = "ABC Corporation" (confidence: 0.65)
+        → Conflict detected, need to resolve
+    """
+    field_id: str                           # Field that has conflict (e.g., "insured_name")
+    values: List[Dict[str, Any]]           # Conflicting values with metadata
+    selected_value: Optional[Any] = None   # Value chosen after resolution
+    resolution_strategy: Optional[str] = None  # How conflict was resolved
+    confidence: float = 0.0                # Confidence in resolution
+    
+    def __repr__(self) -> str:
+        return f"MergeConflict(field={self.field_id}, values={len(self.values)}, selected={self.selected_value})"
 class SubmissionService:
     """
     Service for managing submission workflow.
@@ -484,6 +504,99 @@ class SubmissionService:
                     return json.load(f)
             except Exception:
                 return None
+        return None
+
+
+    def _detect_merge_conflicts(
+        self,
+        field_id: str,
+        existing_values: List[Dict[str, Any]],
+        incoming_values: List[Dict[str, Any]]
+    ) -> Optional[MergeConflict]:
+        """
+        Detect if merging incoming values with existing values creates a conflict.
+        
+        A conflict exists when:
+        - Same field has different values from different sources
+        - Values are not exact duplicates
+        - Both have reasonable confidence (> 0.5)
+        
+        Args:
+            field_id: The field being merged (e.g., "insured_name")
+            existing_values: Values already in merged data
+            incoming_values: Values from new file being merged
+            
+        Returns:
+            MergeConflict if conflict detected, None otherwise
+            
+        Example:
+            >>> existing = [{"value": "ABC Corp", "confidence": 0.98, "source": "file1"}]
+            >>> incoming = [{"value": "ABC Corporation", "confidence": 0.65, "source": "file2"}]
+            >>> conflict = service._detect_merge_conflicts("insured_name", existing, incoming)
+            >>> conflict.field_id
+            'insured_name'
+            >>> len(conflict.values)
+            2
+        """
+        # No conflict if either list is empty
+        if not existing_values or not incoming_values:
+            return None
+        
+        # Extract just the values for comparison
+        existing_vals = [
+            v.get("value") if isinstance(v, dict) else v 
+            for v in existing_values
+        ]
+        incoming_vals = [
+            v.get("value") if isinstance(v, dict) else v 
+            for v in incoming_values
+        ]
+        
+        # Normalize for comparison (case-insensitive, whitespace collapsed)
+        def normalize(val):
+            if val is None:
+                return ""
+            s = str(val).strip().lower()
+            return " ".join(s.split())  # Collapse whitespace
+        
+        existing_normalized = {normalize(v) for v in existing_vals}
+        incoming_normalized = {normalize(v) for v in incoming_vals}
+        
+        # Check if there are any non-overlapping values
+        if existing_normalized.isdisjoint(incoming_normalized):
+            # Conflict detected - values are different
+            all_values = []
+            
+            # Add existing values with metadata
+            for val in existing_values:
+                if isinstance(val, dict):
+                    all_values.append(val)
+                else:
+                    all_values.append({
+                        "value": val,
+                        "confidence": 0.5,  # Default confidence
+                        "source": "unknown"
+                    })
+            
+            # Add incoming values with metadata
+            for val in incoming_values:
+                if isinstance(val, dict):
+                    all_values.append(val)
+                else:
+                    all_values.append({
+                        "value": val,
+                        "confidence": 0.5,
+                        "source": "unknown"
+                    })
+            
+            # Only report as conflict if we have at least 2 values with reasonable confidence
+            high_conf_values = [v for v in all_values if v.get("confidence", 0) > 0.5]
+            if len(high_conf_values) >= 2:
+                return MergeConflict(
+                    field_id=field_id,
+                    values=all_values,
+                )
+        
         return None
 
     def _merge_input_data(self, inputs: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -1310,3 +1423,21 @@ class SubmissionService:
             "totalFailed": total_failed,
             "timestamp": datetime.utcnow().isoformat(),
         }
+
+
+
+    def _log_conflicts(self, conflicts: List[MergeConflict]) -> None:
+        """
+        Log detected conflicts for monitoring.
+        
+        Args:
+            conflicts: List of conflicts detected during merge
+        """
+        if not conflicts:
+            return
+        
+        print(f"[MERGE] Detected {len(conflicts)} conflicts:")
+        for conflict in conflicts:
+            print(f"  - {conflict.field_id}: {len(conflict.values)} values")
+            for val in conflict.values:
+                print(f"    → {val.get('value')} (conf: {val.get('confidence', 0):.2f})")

@@ -825,6 +825,60 @@ export async function bulkDeleteSubmissions(submissionIds: string[]): Promise<vo
   }
 }
 
+
+/**
+ * Delete an individual input file from a submission package
+ * 
+ * @param submissionId - The submission/package ID
+ * @param inputId - The specific input file ID to delete
+ * @throws Error if deletion fails or file not found
+ */
+export async function deleteInput(
+  submissionId: string,
+  inputId: string
+): Promise<void> {
+  try {
+    const response = await api.delete(
+      `/submissions/${submissionId}/inputs/${inputId}`
+    )
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to delete input file')
+    }
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 404) {
+      throw new Error('Input file not found')
+    }
+    handleApiError(error)
+  }
+}
+
+/**
+ * Delete an individual output file from a submission package
+ * 
+ * @param submissionId - The submission/package ID
+ * @param outputId - The specific output file ID to delete
+ * @throws Error if deletion fails or file not found
+ */
+export async function deleteOutput(
+  submissionId: string,
+  outputId: string
+): Promise<void> {
+  try {
+    const response = await api.delete(
+      `/submissions/${submissionId}/outputs/${outputId}`
+    )
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to delete output file')
+    }
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 404) {
+      throw new Error('Output file not found')
+    }
+    handleApiError(error)
+  }
+}
+
+
 export async function deleteSubmission(id: string): Promise<void> {
   try {
     await api.delete(`/submissions/${id}`)

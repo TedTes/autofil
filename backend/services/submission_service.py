@@ -27,7 +27,6 @@ from lib.submission_templates import TEMPLATES, get_template
 from services.client_service import ClientService
 from services.comparison_service import ComparisonService
 from services.export_service import ExportService
-from services.llm_service import LLMService
 
 from services.supabase_db_service import SupabaseDatabaseService
 from services.supabase_storage_service import SupabaseStorageService
@@ -58,7 +57,6 @@ class SubmissionService:
             classifier_names=['mime', 'keyword', 'table'],
             strategy='highest_confidence'
         )
-        self.llm = LLMService()
         self.remote_storage = SupabaseStorageService()
         if not getattr(self.remote_storage, "enabled", False):
             raise RuntimeError("Supabase storage must be configured for file storage.")
@@ -490,61 +488,22 @@ class SubmissionService:
 
     def _merge_input_data(self, inputs: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
-        Canonical merge across multiple input files.
-
-        Pipeline:
-        - Load each input's data
-        - Dedupe + clean (MFC-aware, drop noise)
-        - Send minimized payload to LLM for semantic merge
-        - If LLM fails, fall back to deterministic deep merge.
+        Deterministically merge multiple extracted inputs into one canonical payload.
         """
         if not inputs:
             return {}
 
-        # Build per-input payloads for the LLM
-        llm_inputs: List[Dict[str, Any]] = []
+        merged: Dict[str, Any] = {}
         for entry in inputs:
             data = self._load_input_data(entry)
             if not data:
                 continue
-
-            # Per-file dedupe + cleaning
             deduped = self._dedupe_entity_values(copy.deepcopy(data))
             cleaned = self._clean_entities(deduped)
+            merged = self._deep_merge_dict(merged, cleaned)
 
-            llm_inputs.append({
-                "input_id": entry.get("input_id"),
-                "filename": entry.get("filename"),
-                # give the LLM just the minimized view
-                "entities": cleaned.get("entities", {}),
-                "canonical": cleaned.get("canonical", {}),
-                "metadata": cleaned.get("metadata", {}),
-            })
-
-        # Try LLM-based merge first
-        merged: Dict[str, Any] = {}
-        try:
-            template_type = None
-            if inputs and isinstance(inputs[0], dict):
-                # if template is stored on the entry level in the future
-                template_type = inputs[0].get("template_type")
-
-            merged = self._merge_entities_with_llm(llm_inputs, template_type=template_type)
-        except Exception as exc:
-            print("⚠️ LLM merge failed, falling back to deep merge:", exc)
-
-        # If LLM gave nothing usable, fall back to old deep-merge behavior
-        if not merged:
-            merged = {}
-            for entry in inputs:
-                data = self._load_input_data(entry)
-                if data:
-                    merged = self._deep_merge_dict(merged, data)
-
-        # Always run dedupe + cleaning on the final merged structure
         merged = self._dedupe_entity_values(merged)
         merged = self._clean_entities(merged)
-
         return merged
 
 
@@ -710,84 +669,6 @@ class SubmissionService:
             else:
                 base[key] = copy.deepcopy(value)
         return base
-    def _merge_entities_with_llm(
-        self,
-        inputs_payload: List[Dict[str, Any]],
-        template_type: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """
-        Use an LLM to merge multiple clean per-file entities into a single canonical
-        data dict shaped like the extractor output.
-        """
-        if not getattr(self, "llm", None) or not inputs_payload:
-            return {}
-
-        system_prompt = """
-        You are an assistant that merges insurance extraction data into a single
-        canonical JSON for downstream ACORD filling.
-
-        - Input: multiple JSON objects, each representing extracted entities from one file.
-        - Output: a single JSON object with the SAME SHAPE as the input objects:
-        {
-            "entities": {
-                "<FieldId>": [
-                    {
-                        "value": <value>,
-                        "confidence": <0.0-1.0>,
-                        "source": {
-                            "input_id": "<original_input_id>",
-                            "filename": "<filename>"
-                        },
-                        "tags": [...optional...]
-                    },
-                    ...
-                ],
-                ...
-            },
-            "metadata": {
-                "schema_version": "1.0",
-                "form_type_detected": "ACORD_126"
-                // copy or reconcile basic metadata across inputs
-            }
-        }
-
-        Rules:
-        - Use the Master Field Catalog semantics implied by field IDs. If cardinality is one,
-        choose the single best value across files (highest confidence, latest date if conflicts).
-        - If cardinality allows many, keep a merged list without duplicates.
-        - Drop noise values like "N/A", "NA", empty strings, or obviously invalid placeholders.
-        - Prefer values with higher confidence.
-        - When conflicts cannot be resolved, choose the most recent-looking date or leave
-        a single best guess and do NOT invent new fields.
-        - Do not change field IDs.
-        - Return ONLY valid JSON, no comments or extra text. If you are unsure, still return the best JSON you can; do not emit plain text explanations.
-        """
-
-        user_payload = {
-            "template_type": template_type,
-            "inputs": inputs_payload,
-        }
-
-        try:
-            
-            merged = self.llm.json_qa(
-                system_prompt=system_prompt.strip(),
-                user_prompt=json.dumps(user_payload, default=str),
-            )
-
-            print("this is merged")
-            print(merged)
-            print("LLM merge result keys:", merged.keys() if isinstance(merged, dict) else type(merged))
-
-            if not isinstance(merged, dict):
-                return {}
-            return merged
-        except Exception as exc:
-            print("⚠️ LLM merge failed, falling back to deep merge:", exc)
-            return {}
-
-
-
     def _upload_to_remote(
         self,
         *,

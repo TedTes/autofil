@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Client, ClientSubmissionPackage,OutputTemplate, TemplateSelection, GenerateOutputsResponse } from '@/types'
-import {generateOutputs as generateOutputsAPI, getClientById, getClientSubmissions, createClientSubmission, uploadPdf, getMergedData,calculateTemplateReadiness} from '@/lib'
+import {deleteInput, deleteOutput, deleteSubmission, generateOutputs as generateOutputsAPI, getClientById, getClientSubmissions, createClientSubmission, uploadPdf, getMergedData,calculateTemplateReadiness} from '@/lib'
 import useToast from '@/hooks/useToast' 
 import type { MergedData,UploadedRow } from '@/types'
 
@@ -366,7 +366,6 @@ useEffect(() => {
       return next
     })
     
-    // NEW: Also clean up output selections
     setSelectedOutputsByPackage(prev => {
       const validIds = new Set(packages.map(pkg => pkg.submission_id))
       const next: Record<string, string[]> = {}
@@ -495,6 +494,110 @@ const currentPackage = packages.find(pkg => pkg.submission_id === activePackageI
       toast.error(`Failed to upload ${failureCount} ${filesWord}`)
     }
   }
+
+  /**
+ * Delete an individual input file from a submission
+ */
+const deleteInputFile = async (submissionId: string, inputId: string) => {
+  try {
+    setWorkflowError(null)
+    
+    // Call API to delete the input
+    await deleteInput(submissionId, inputId)
+    
+    // Clear selection for this input if it was selected
+    setSelectedInputsByPackage(prev => {
+      const current = prev[submissionId] || []
+      const updated = current.filter(id => id !== inputId)
+      return { ...prev, [submissionId]: updated }
+    })
+    
+    // Refresh client data to update UI
+    await loadClientData({ silent: true })
+    
+    // Show success message
+    toast.success('File deleted successfully')
+    
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : 'Failed to delete file'
+    setWorkflowError(errorMsg)
+    toast.error(errorMsg)
+    throw err
+  }
+}
+
+/**
+ * Delete an individual output file from a submission
+ */
+const deleteOutputFile = async (submissionId: string, outputId: string) => {
+  try {
+    setWorkflowError(null)
+    
+    // Call API to delete the output
+    await deleteOutput(submissionId, outputId)
+    
+    // Clear selection for this output if it was selected
+    setSelectedOutputsByPackage(prev => {
+      const current = prev[submissionId] || []
+      const updated = current.filter(id => id !== outputId)
+      return { ...prev, [submissionId]: updated }
+    })
+    
+    // Refresh client data to update UI
+    await loadClientData({ silent: true })
+    
+    // Show success message
+    toast.success('Output deleted successfully')
+    
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : 'Failed to delete output'
+    setWorkflowError(errorMsg)
+    toast.error(errorMsg)
+    throw err
+  }
+}
+
+/**
+ * Delete an entire submission and all its files
+ */
+const deleteSubmissionPackage = async (submissionId: string) => {
+  try {
+    setWorkflowError(null)
+    
+    // Call API to delete the submission
+    await deleteSubmission(submissionId)
+    
+    // Clear any selections for this submission
+    setSelectedInputsByPackage(prev => {
+      const next = { ...prev }
+      delete next[submissionId]
+      return next
+    })
+    
+    setSelectedOutputsByPackage(prev => {
+      const next = { ...prev }
+      delete next[submissionId]
+      return next
+    })
+    
+    // If this was the active package, clear it
+    if (activePackageId === submissionId) {
+      setActivePackageId(null)
+    }
+    
+    // Refresh client data to update UI
+    await loadClientData({ silent: true })
+    
+    // Show success message
+    toast.success('Submission deleted successfully')
+    
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : 'Failed to delete submission'
+    setWorkflowError(errorMsg)
+    toast.error(errorMsg)
+    throw err
+  }
+}
   
 
 
@@ -573,5 +676,9 @@ const currentPackage = packages.find(pkg => pkg.submission_id === activePackageI
   getTemplateAvailability,
   generateOutputsFromTemplates,
   setTemplates,
+
+  deleteInputFile,
+    deleteOutputFile,
+    deleteSubmissionPackage,
   }
 }

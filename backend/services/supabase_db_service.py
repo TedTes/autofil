@@ -33,6 +33,23 @@ class SupabaseDatabaseService:
                 self.enabled = False
                 self._client = None
 
+    def _reset_client(self) -> bool:
+        if not (self.url and self.key and Client and create_client):
+            return False
+        try:
+            self._client = create_client(self.url, self.key)
+            self.enabled = True
+            return True
+        except Exception as exc:
+            print(f"[supabase-db] Failed to reinitialize client: {exc}")
+            self.enabled = False
+            self._client = None
+            return False
+
+    def _should_retry(self, exc: Exception) -> bool:
+        msg = str(exc).lower()
+        return "server disconnected" in msg or "connection terminated" in msg
+
     # ------------------------------------------------------------------ helpers
     def _execute(self, request):
         response = request.execute()
@@ -53,28 +70,38 @@ class SupabaseDatabaseService:
             "metadata": metadata,
             "updated_at": metadata.get("updated_at") or datetime.utcnow().isoformat(),
         }
-        try:
-            self._client.table("submissions_metadata").upsert(
-                payload,
-                on_conflict="submission_id",
-            ).execute()
-        except Exception as exc:
-            print(f"[supabase-db] Failed to save submission {submission_id}: {exc}")
+        for attempt in range(2):
+            try:
+                self._client.table("submissions_metadata").upsert(
+                    payload,
+                    on_conflict="submission_id",
+                ).execute()
+                return
+            except Exception as exc:
+                print(f"[supabase-db] Failed to save submission {submission_id}: {exc}")
+                if attempt == 0 and self._should_retry(exc) and self._reset_client():
+                    continue
+                break
 
     def get_submission_metadata(self, submission_id: str) -> Optional[Dict[str, Any]]:
-        if not self.enabled or not self._client:
-            return None
-        try:
-            data = self._execute(
-                self._client.table("submissions_metadata")
-                .select("metadata")
-                .eq("submission_id", submission_id)
-                .maybe_single()
-            )
-            if data:
-                return data.get("metadata")
-        except Exception as exc:
-            print(f"[supabase-db] Failed to fetch submission {submission_id}: {exc}")
+        for attempt in range(2):
+            if not self.enabled or not self._client:
+                return None
+            try:
+                data = self._execute(
+                    self._client.table("submissions_metadata")
+                    .select("metadata")
+                    .eq("submission_id", submission_id)
+                    .maybe_single()
+                )
+                if data:
+                    return data.get("metadata")
+                return None
+            except Exception as exc:
+                print(f"[supabase-db] Failed to fetch submission {submission_id}: {exc}")
+                if attempt == 0 and self._should_retry(exc) and self._reset_client():
+                    continue
+                break
         return None
 
     def delete_submission_metadata(self, submission_id: str) -> None:
@@ -86,23 +113,27 @@ class SupabaseDatabaseService:
             print(f"[supabase-db] Failed to delete submission {submission_id}: {exc}")
 
     def list_submissions_metadata(self) -> List[Dict[str, Any]]:
-        if not self.enabled or not self._client:
-            return []
-        try:
-            rows = self._execute(
-                self._client.table("submissions_metadata")
-                .select("metadata")
-            )
-            if not rows:
+        for attempt in range(2):
+            if not self.enabled or not self._client:
                 return []
-            return [
-                meta for meta in
-                (row.get("metadata") for row in rows)
-                if meta and (meta.get("file_count") or 0) > 0
-            ]
-        except Exception as exc:
-            print(f"[supabase-db] Failed to list submissions: {exc}")
-            return []
+            try:
+                rows = self._execute(
+                    self._client.table("submissions_metadata")
+                    .select("metadata")
+                )
+                if not rows:
+                    return []
+                return [
+                    meta for meta in
+                    (row.get("metadata") for row in rows)
+                    if meta and (meta.get("file_count") or 0) > 0
+                ]
+            except Exception as exc:
+                print(f"[supabase-db] Failed to list submissions: {exc}")
+                if attempt == 0 and self._should_retry(exc) and self._reset_client():
+                    continue
+                break
+        return []
 
     # -------------------------------------------------------------------- clients
     def save_client_metadata(self, metadata: Dict[str, Any]) -> None:
@@ -117,44 +148,58 @@ class SupabaseDatabaseService:
             "metadata": metadata,
             "updated_at": metadata.get("updated_at") or datetime.utcnow().isoformat(),
         }
-        try:
-            self._client.table("clients_metadata").upsert(
-                payload,
-                on_conflict="client_id",
-            ).execute()
-        except Exception as exc:
-            print(f"[supabase-db] Failed to save client {client_id}: {exc}")
+        for attempt in range(2):
+            try:
+                self._client.table("clients_metadata").upsert(
+                    payload,
+                    on_conflict="client_id",
+                ).execute()
+                return
+            except Exception as exc:
+                print(f"[supabase-db] Failed to save client {client_id}: {exc}")
+                if attempt == 0 and self._should_retry(exc) and self._reset_client():
+                    continue
+                break
 
     def get_client_metadata(self, client_id: str) -> Optional[Dict[str, Any]]:
-        if not self.enabled or not self._client:
-            return None
-        try:
-            data = self._execute(
-                self._client.table("clients_metadata")
-                .select("metadata")
-                .eq("client_id", client_id)
-                .single()
-            )
-            if data:
-                return data.get("metadata")
-        except Exception as exc:
-            print(f"[supabase-db] Failed to fetch client {client_id}: {exc}")
+        for attempt in range(2):
+            if not self.enabled or not self._client:
+                return None
+            try:
+                data = self._execute(
+                    self._client.table("clients_metadata")
+                    .select("metadata")
+                    .eq("client_id", client_id)
+                    .single()
+                )
+                if data:
+                    return data.get("metadata")
+                return None
+            except Exception as exc:
+                print(f"[supabase-db] Failed to fetch client {client_id}: {exc}")
+                if attempt == 0 and self._should_retry(exc) and self._reset_client():
+                    continue
+                break
         return None
 
     def list_clients_metadata(self) -> List[Dict[str, Any]]:
-        if not self.enabled or not self._client:
-            return []
-        try:
-            rows = self._execute(
-                self._client.table("clients_metadata")
-                .select("metadata")
-                .order("name")
-            )
-            if not rows:
+        for attempt in range(2):
+            if not self.enabled or not self._client:
                 return []
-            return [row.get("metadata") for row in rows if row.get("metadata")]
-        except Exception as exc:
-            print(f"[supabase-db] Failed to list clients: {exc}")
+            try:
+                rows = self._execute(
+                    self._client.table("clients_metadata")
+                    .select("metadata")
+                    .order("name")
+                )
+                if not rows:
+                    return []
+                return [row.get("metadata") for row in rows if row.get("metadata")]
+            except Exception as exc:
+                print(f"[supabase-db] Failed to list clients: {exc}")
+                if attempt == 0 and self._should_retry(exc) and self._reset_client():
+                    continue
+                break
         return []
 
     def delete_client_metadata(self, client_id: str) -> None:

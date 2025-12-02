@@ -105,6 +105,242 @@ class MergeConflict:
     def __repr__(self) -> str:
         return f"MergeConflict(field={self.field_id}, values={len(self.values)}, selected={self.selected_value})"
 
+
+
+class IntelligentMerger:
+    """
+    Intelligent merger that resolves conflicts using configurable strategies.
+    
+    Handles:
+    - Conflict detection
+    - Confidence-based value selection
+    - Source attribution tracking
+    - Merge metadata generation
+    
+    Example:
+        merger = IntelligentMerger(config=merge_config, service=submission_service)
+        result = merger.merge_entities(existing_entities, incoming_entities, incoming_source_info)
+    """
+    
+    def __init__(self, config: MergeConfig, service: 'SubmissionService'):
+        """
+        Initialize merger with configuration and service reference.
+        
+        Args:
+            config: MergeConfig with strategy and settings
+            service: Reference to SubmissionService (for helper methods)
+        """
+        self.config = config
+        self.service = service
+        self.conflicts_detected: List[MergeConflict] = []
+        self.source_attribution: Dict[str, List[str]] = {}  # field_id -> list of sources
+        
+    def merge_entities(
+        self,
+        existing_entities: Dict[str, List[Dict[str, Any]]],
+        incoming_entities: Dict[str, List[Dict[str, Any]]],
+        incoming_source_info: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Merge incoming entities into existing entities with intelligent conflict resolution.
+        
+        Args:
+            existing_entities: Entities already in merged data (entities dict from CanonicalOutput)
+            incoming_entities: New entities from file being merged
+            incoming_source_info: Metadata about incoming source (filename, type, timestamp)
+            
+        Returns:
+            Dict with:
+                - merged_entities: Updated entities dict
+                - conflicts: List of MergeConflict objects
+                - source_attribution: Dict mapping field_id -> source list
+                - metadata: Merge statistics
+        """
+        merged_entities = copy.deepcopy(existing_entities) if existing_entities else {}
+        self.conflicts_detected = []
+        self.source_attribution = copy.deepcopy(self.source_attribution) if hasattr(self, 'source_attribution') else {}
+        
+        # Process each field in incoming entities
+        for field_id, incoming_values in incoming_entities.items():
+            if not incoming_values:
+                continue
+            
+            # Add source metadata to incoming values
+            incoming_with_source = self._add_source_metadata(
+                incoming_values,
+                incoming_source_info
+            )
+            
+            # Check if field exists in merged data
+            if field_id not in merged_entities or not merged_entities[field_id]:
+                # No conflict - just add new field
+                merged_entities[field_id] = incoming_with_source
+                self._track_source(field_id, incoming_source_info.get("filename", "unknown"))
+                continue
+            
+            existing_values = merged_entities[field_id]
+            
+            # Detect conflicts
+            conflict = self.service._detect_merge_conflicts(
+                field_id,
+                existing_values,
+                incoming_with_source
+            )
+            
+            if conflict:
+                # Conflict detected - resolve it
+                resolved = self._resolve_conflict(conflict)
+                merged_entities[field_id] = resolved["values"]
+                self.conflicts_detected.append(resolved["conflict"])
+                
+                if self.config.log_conflicts:
+                    self.service._log_conflicts([resolved["conflict"]])
+            else:
+                # No conflict - values are similar or compatible
+                # Merge lists (will be deduped later)
+                merged_entities[field_id] = existing_values + incoming_with_source
+                self._track_source(field_id, incoming_source_info.get("filename", "unknown"))
+        
+        # Calculate merge statistics
+        metadata = self._build_merge_metadata(
+            existing_entities,
+            incoming_entities,
+            merged_entities
+        )
+        
+        return {
+            "merged_entities": merged_entities,
+            "conflicts": self.conflicts_detected,
+            "source_attribution": self.source_attribution,
+            "metadata": metadata
+        }
+    
+    def _add_source_metadata(
+        self,
+        values: List[Dict[str, Any]],
+        source_info: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """
+        Add source metadata to each value for tracking.
+        
+        Args:
+            values: List of entity values
+            source_info: Source metadata (filename, type, timestamp)
+            
+        Returns:
+            Values with added source metadata
+        """
+        enriched = []
+        for val in values:
+            if isinstance(val, dict):
+                enriched_val = copy.deepcopy(val)
+                enriched_val["source"] = source_info.get("filename", "unknown")
+                enriched_val["source_type"] = source_info.get("document_type", "UNKNOWN")
+                enriched_val["timestamp"] = source_info.get("timestamp", datetime.utcnow().isoformat())
+                enriched.append(enriched_val)
+            else:
+                # Convert primitive to dict with metadata
+                enriched.append({
+                    "value": val,
+                    "confidence": 0.5,
+                    "source": source_info.get("filename", "unknown"),
+                    "source_type": source_info.get("document_type", "UNKNOWN"),
+                    "timestamp": source_info.get("timestamp", datetime.utcnow().isoformat())
+                })
+        return enriched
+    
+    def _resolve_conflict(self, conflict: MergeConflict) -> Dict[str, Any]:
+        """
+        Resolve a conflict using configured strategy.
+        
+        Args:
+            conflict: MergeConflict to resolve
+            
+        Returns:
+            Dict with resolved values and updated conflict object
+        """
+        if self.config.strategy == MergeStrategy.MANUAL_REVIEW:
+            # Don't auto-resolve - flag for manual review
+            conflict.resolution_strategy = "manual_review"
+            conflict.resolution_reason = "Flagged for manual review per configuration"
+            return {
+                "values": conflict.values,  # Keep all values
+                "conflict": conflict
+            }
+        
+        # Check if all values below confidence threshold
+        max_confidence = max(v.get("confidence", 0) for v in conflict.values)
+        if max_confidence < self.config.min_confidence_threshold:
+            # Low confidence - flag for manual review
+            conflict.resolution_strategy = "manual_review"
+            conflict.resolution_reason = f"All values below confidence threshold ({self.config.min_confidence_threshold})"
+            return {
+                "values": conflict.values,
+                "conflict": conflict
+            }
+        
+        # Select best value using configured strategy
+        selected_value, confidence, reason = self.service._select_best_value(
+            conflict.values,
+            strategy=self.config.strategy
+        )
+        
+        # Update conflict with resolution
+        conflict.selected_value = selected_value
+        conflict.confidence = confidence
+        conflict.resolution_strategy = str(self.config.strategy)
+        conflict.resolution_reason = reason
+        
+        # Return only the selected value (wrapped in list for consistency)
+        selected_entry = next(
+            (v for v in conflict.values if v.get("value") == selected_value),
+            conflict.values[0]  # Fallback to first if not found
+        )
+        
+        return {
+            "values": [selected_entry],
+            "conflict": conflict
+        }
+    
+    def _track_source(self, field_id: str, source: str) -> None:
+        """
+        Track which source contributed to which field.
+        
+        Args:
+            field_id: Field identifier
+            source: Source filename or identifier
+        """
+        if not self.config.track_sources:
+            return
+        
+        if field_id not in self.source_attribution:
+            self.source_attribution[field_id] = []
+        
+        if source not in self.source_attribution[field_id]:
+            self.source_attribution[field_id].append(source)
+    
+    def _build_merge_metadata(
+        self,
+        existing_entities: Dict[str, Any],
+        incoming_entities: Dict[str, Any],
+        merged_entities: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Build metadata about the merge operation.
+        
+        Returns:
+            Dict with merge statistics
+        """
+        return {
+            "strategy_used": str(self.config.strategy),
+            "conflicts_detected": len(self.conflicts_detected),
+            "fields_added": len(set(incoming_entities.keys()) - set(existing_entities.keys())),
+            "fields_updated": len(set(incoming_entities.keys()) & set(existing_entities.keys())),
+            "total_fields": len(merged_entities),
+            "merged_at": datetime.utcnow().isoformat(),
+            "confidence_threshold": self.config.min_confidence_threshold,
+            "similarity_threshold": self.config.similarity_threshold,
+        }
 class SubmissionService:
     """
     Service for managing submission workflow.

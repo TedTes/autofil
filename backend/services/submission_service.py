@@ -34,6 +34,62 @@ from services.supabase_db_service import SupabaseDatabaseService
 from services.supabase_storage_service import SupabaseStorageService
 from services.version_service import VersionService
 
+
+class MergeStrategy(Enum):
+    """
+    Strategy for resolving conflicts when merging entity values.
+    """
+    HIGHEST_CONFIDENCE = "highest_confidence"  # Pick value with highest confidence score
+    MOST_RECENT = "most_recent"                # Pick value from most recently processed file
+    PRIMARY_SOURCE = "primary_source"          # Prioritize specific document types (e.g., ACORD over supplemental)
+    MANUAL_REVIEW = "manual_review"            # Flag for manual review, don't auto-resolve
+    CONSENSUS = "consensus"                     # Require multiple sources to agree
+    
+    def __str__(self):
+        return self.value
+@dataclass
+class MergeConfig:
+    """
+    Configuration for merge behavior.
+    
+    Example:
+        config = MergeConfig(
+            strategy=MergeStrategy.HIGHEST_CONFIDENCE,
+            min_confidence_threshold=0.6,
+            track_sources=True
+    )
+    """
+    # Merge strategy to use
+    strategy: MergeStrategy = MergeStrategy.HIGHEST_CONFIDENCE
+    
+    # Minimum confidence threshold (conflicts below this always flagged for manual review)
+    min_confidence_threshold: float = 0.5
+    
+    # Similarity threshold for considering values "the same" (0-1)
+    similarity_threshold: float = 0.85
+    
+    # Whether to track which source contributed which field
+    track_sources: bool = True
+    
+    # Whether to log conflicts for monitoring
+    log_conflicts: bool = True
+    
+    # Source priority for PRIMARY_SOURCE strategy (higher priority = more trusted)
+    # Example: {"ACORD_126": 3, "LOSS_RUN": 2, "SUPPLEMENTAL": 1}
+    source_priority: Dict[str, int] = dataclass_field(default_factory=dict)
+    
+    # For CONSENSUS strategy: minimum number of sources that must agree
+    consensus_threshold: int = 2
+    
+    def __post_init__(self):
+        """Validate configuration."""
+        if not 0 <= self.min_confidence_threshold <= 1:
+            raise ValueError("min_confidence_threshold must be between 0 and 1")
+        if not 0 <= self.similarity_threshold <= 1:
+            raise ValueError("similarity_threshold must be between 0 and 1")
+        if self.consensus_threshold < 2:
+            raise ValueError("consensus_threshold must be at least 2")
+
 @dataclass
 class MergeConflict:
     """
@@ -48,18 +104,7 @@ class MergeConflict:
     
     def __repr__(self) -> str:
         return f"MergeConflict(field={self.field_id}, values={len(self.values)}, selected={self.selected_value})"
-class MergeStrategy(Enum):
-    """
-    Strategy for resolving conflicts when merging entity values.
-    """
-    HIGHEST_CONFIDENCE = "highest_confidence"  # Pick value with highest confidence score
-    MOST_RECENT = "most_recent"                # Pick value from most recently processed file
-    PRIMARY_SOURCE = "primary_source"          # Prioritize specific document types (e.g., ACORD over supplemental)
-    MANUAL_REVIEW = "manual_review"            # Flag for manual review, don't auto-resolve
-    CONSENSUS = "consensus"                     # Require multiple sources to agree
-    
-    def __str__(self):
-        return self.value
+
 class SubmissionService:
     """
     Service for managing submission workflow.
@@ -1470,7 +1515,7 @@ class SubmissionService:
                 print(f"    → {val.get('value')} (conf: {val.get('confidence', 0):.2f})")
 
 
-   def _select_best_value(
+    def _select_best_value(
         self,
         values: List[Dict[str, Any]],
         strategy: MergeStrategy = MergeStrategy.HIGHEST_CONFIDENCE  # Changed from str to MergeStrategy

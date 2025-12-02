@@ -12,7 +12,7 @@ import tempfile
 import uuid
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
-
+from enum import Enum
 from werkzeug.utils import secure_filename
 
 from extraction.classifiers import classifier_registry
@@ -48,6 +48,18 @@ class MergeConflict:
     
     def __repr__(self) -> str:
         return f"MergeConflict(field={self.field_id}, values={len(self.values)}, selected={self.selected_value})"
+class MergeStrategy(Enum):
+    """
+    Strategy for resolving conflicts when merging entity values.
+    """
+    HIGHEST_CONFIDENCE = "highest_confidence"  # Pick value with highest confidence score
+    MOST_RECENT = "most_recent"                # Pick value from most recently processed file
+    PRIMARY_SOURCE = "primary_source"          # Prioritize specific document types (e.g., ACORD over supplemental)
+    MANUAL_REVIEW = "manual_review"            # Flag for manual review, don't auto-resolve
+    CONSENSUS = "consensus"                     # Require multiple sources to agree
+    
+    def __str__(self):
+        return self.value
 class SubmissionService:
     """
     Service for managing submission workflow.
@@ -77,6 +89,25 @@ class SubmissionService:
         if not getattr(self.remote_storage, "enabled", False):
             raise RuntimeError("Supabase storage must be configured for file storage.")
         self.db = SupabaseDatabaseService()
+
+        self.merge_config = MergeConfig(
+            strategy=MergeStrategy.HIGHEST_CONFIDENCE,
+            min_confidence_threshold=0.5,
+            similarity_threshold=0.85,
+            track_sources=True,
+            log_conflicts=True,
+            source_priority={
+                "ACORD_126": 3,
+                "ACORD_125": 3,
+                "ACORD_130": 3,
+                "ACORD_140": 3,
+                "LOSS_RUN": 2,
+                "SOV": 2,
+                "FINANCIAL_STATEMENT": 2,
+                "SUPPLEMENTAL": 1,
+            },
+            consensus_threshold=2
+        )
         if not self.db.enabled:
             raise RuntimeError("Supabase database must be configured for submission metadata storage.")
     def upload_and_extract(
@@ -1439,38 +1470,26 @@ class SubmissionService:
                 print(f"    → {val.get('value')} (conf: {val.get('confidence', 0):.2f})")
 
 
-    def _select_best_value(
+   def _select_best_value(
         self,
         values: List[Dict[str, Any]],
-        strategy: str = "highest_confidence"
+        strategy: MergeStrategy = MergeStrategy.HIGHEST_CONFIDENCE  # Changed from str to MergeStrategy
     ) -> Tuple[Any, float, str]:
         """
         Select the best value from multiple candidates based on strategy.
         
         Strategies:
-        - "highest_confidence": Pick value with highest confidence score
-        - "most_recent": Pick value from most recently processed file
-        - "first": Pick first value encountered
+        - HIGHEST_CONFIDENCE: Pick value with highest confidence score
+        - MOST_RECENT: Pick value from most recently processed file
+        - PRIMARY_SOURCE: Prioritize by document type
+        - FIRST: Pick first value encountered
         
         Args:
             values: List of value dicts with "value", "confidence", "source" keys
-            strategy: Selection strategy
+            strategy: Selection strategy (MergeStrategy enum)
             
         Returns:
             Tuple of (selected_value, confidence, reason)
-            
-        Example:
-            >>> values = [
-            ...     {"value": "ABC Corp", "confidence": 0.98, "source": "acord", "timestamp": "2024-01-01"},
-            ...     {"value": "ABC Corporation", "confidence": 0.65, "source": "license", "timestamp": "2024-01-02"}
-            ... ]
-            >>> val, conf, reason = service._select_best_value(values, "highest_confidence")
-            >>> val
-            'ABC Corp'
-            >>> conf
-            0.98
-            >>> reason
-            'highest_confidence: 0.98 from acord'
         """
         if not values:
             return None, 0.0, "no_values"
@@ -1479,7 +1498,10 @@ class SubmissionService:
             v = values[0]
             return v.get("value"), v.get("confidence", 0.5), "single_value"
         
-        if strategy == "highest_confidence":
+        # Convert enum to string for comparison
+        strategy_str = strategy.value if isinstance(strategy, MergeStrategy) else strategy
+        
+        if strategy_str == MergeStrategy.HIGHEST_CONFIDENCE.value:
             # Sort by confidence descending
             sorted_values = sorted(
                 values,
@@ -1515,7 +1537,7 @@ class SubmissionService:
             
             return best.get("value"), best.get("confidence", 0.0), reason
         
-        elif strategy == "most_recent":
+        elif strategy_str == MergeStrategy.MOST_RECENT.value:
             # Sort by timestamp descending (most recent first)
             sorted_values = sorted(
                 values,
@@ -1526,7 +1548,22 @@ class SubmissionService:
             reason = f"most_recent: from {best.get('source', 'unknown')} at {best.get('timestamp', 'unknown')}"
             return best.get("value"), best.get("confidence", 0.0), reason
         
-        elif strategy == "first":
+        elif strategy_str == MergeStrategy.PRIMARY_SOURCE.value:
+            # Sort by source priority (from merge_config)
+            def get_priority(v):
+                source_type = v.get("source_type", "UNKNOWN")  # Document type, not filename
+                return self.merge_config.source_priority.get(source_type, 0)
+            
+            sorted_values = sorted(
+                values,
+                key=get_priority,
+                reverse=True
+            )
+            best = sorted_values[0]
+            reason = f"primary_source: from {best.get('source_type', 'unknown')} (priority: {get_priority(best)})"
+            return best.get("value"), best.get("confidence", 0.0), reason
+        
+        elif strategy_str == "first":
             # Just use first value
             best = values[0]
             reason = f"first: from {best.get('source', 'unknown')}"
@@ -1534,7 +1571,7 @@ class SubmissionService:
         
         else:
             # Default to highest confidence
-            return self._select_best_value(values, "highest_confidence")
+            return self._select_best_value(values, MergeStrategy.HIGHEST_CONFIDENCE)
 
 
     def _values_are_similar(self, val1: Any, val2: Any, threshold: float = 0.85) -> bool:

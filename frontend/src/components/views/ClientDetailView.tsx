@@ -5,7 +5,7 @@ import { useClientSubmissions,useTemplateLibrary } from '@/hooks'
 import { fillPdf, downloadPDF} from '@/lib/api-client'
 import {GenerateOutputsModal,UploadOrMergedDataPanel} from "@/components/client"
 import type { ClientSubmissionPackage,UploadedRow  } from '@/types'
-import { DeleteConfirmationModal } from '@/components/DeleteConfirmationModal'
+import { CreateSubmissionModal,DeleteConfirmationModal } from '@/components'
 import {
   ArrowLeft,
   Building2,
@@ -534,14 +534,13 @@ function CompactFolderList({
             )}
 
        
-
-            {(!pkg.inputs || pkg.inputs.length === 0) &&
-              (!pkg.outputs || pkg.outputs.length === 0) && (
-                <div className="p-6 text-center">
-                  <FileText className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                  <p className="text-xs text-gray-500">No files in this package yet</p>
-                </div>
-              )}
+{(!pkg.inputs || pkg.inputs.length === 0) &&
+  (!pkg.outputs || pkg.outputs.length === 0) && (
+    <div className="p-6 text-center">
+      <FileText className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+      <p className="text-xs text-gray-500">No files in this submission yet</p>
+    </div>
+  )}
           </div>
         )}
       </div>
@@ -552,8 +551,8 @@ function CompactFolderList({
     return (
       <div className="p-6 text-center text-sm text-gray-500">
         <FolderOpen className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-        <p className="font-medium">No packages yet</p>
-        <p className="text-xs text-gray-500 mt-1">Create a package to organize your submissions</p>
+        <p className="font-medium">No submissions yet</p>
+        <p className="text-xs text-gray-500 mt-1">Create a submission to organize your files</p>
       </div>
     )
   }
@@ -636,6 +635,9 @@ const [deleteModal, setDeleteModal] = useState<{
 } | null>(null)
 
 const [isDeleting, setIsDeleting] = useState(false)
+
+const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+const [isCreating, setIsCreating] = useState(false)
 
   const handleDeleteInput = async (submissionId: string, inputId: string, event: React.MouseEvent) => {
     event.stopPropagation()
@@ -786,11 +788,27 @@ const [isDeleting, setIsDeleting] = useState(false)
     event.target.value = ''
   }
 
-  const handleCreatePackageClick = async () => {
-    const defaultName = `Package ${packages.length + 1}`
-    const name = window.prompt('Enter folder name', defaultName)
-    if (!name) return
-    await createFolder(name)
+  const handleCreateSubmissionClick = () => {
+    setIsCreateModalOpen(true)
+  }
+  
+  const handleConfirmCreateSubmission = async (name: string) => {
+    setIsCreating(true)
+    try {
+      await createFolder(name)
+      setIsCreateModalOpen(false)
+    } catch (err) {
+      console.error('Failed to create submission:', err)
+      // Modal stays open so user can try again or see the error
+    } finally {
+      setIsCreating(false)
+    }
+  }
+  
+  const handleCloseCreateModal = () => {
+    if (!isCreating) {
+      setIsCreateModalOpen(false)
+    }
   }
 
   const handleViewFile = (submissionId: string, filename?: string, inputId?: string) => {
@@ -959,31 +977,31 @@ const [isDeleting, setIsDeleting] = useState(false)
       {/* Main Content - TWO COLUMN LAYOUT WITH PROPER SCROLLING */}
       <div className="flex-1 min-h-0 overflow-hidden">
         <div className="h-full grid grid-cols-1 lg:grid-cols-3 gap-4 p-4">
-        {/* LEFT PANEL: Packages - SCROLLABLE */}
+        {/* LEFT PANEL: Submissions - SCROLLABLE */}
 <div className="lg:col-span-1 h-full flex flex-col">
   <div className="bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col h-full max-h-[calc(100vh-90px)] overflow-hidden">
     
-    {/* Packages content with "New Package" button at top */}
+    {/* Submissions content with "New Submission" button at top */}
     <div className="flex-1 min-h-0 overflow-y-auto">
       <div className="p-3 space-y-2">
         {/* New Package Button - Dashed style */}
         <button
-          onClick={handleCreatePackageClick}
-          className="w-full py-3 px-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 text-sm text-gray-600 hover:text-blue-600 transition-all flex items-center justify-center gap-2 group"
-        >
-          <FolderPlus className="w-4 h-4 group-hover:scale-110 transition-transform" />
-          <span className="font-medium">New Package</span>
-        </button>
+  onClick={handleCreateSubmissionClick}
+            className="w-full py-3 px-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 text-sm text-gray-600 hover:text-blue-600 transition-all flex items-center justify-center gap-2 group"
+>
+  <FolderPlus className="w-4 h-4 group-hover:scale-110 transition-transform" />
+  <span className="font-medium">New Submission</span>  
+</button>
         {packages.length === 0 ? (
       <div className="text-center py-12">
-        <FolderOpen className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-        <p className="text-sm text-gray-500 mb-1">No packages yet</p>
-        <p className="text-xs text-gray-400">
-          Create a package to organize your submissions
-        </p>
-      </div>
+      <FolderOpen className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+      <p className="text-sm text-gray-500 mb-1">No submissions yet</p>
+      <p className="text-xs text-gray-400">
+        Create a submission to organize your files
+      </p>
+    </div>
     ) : (
-        //  Package List 
+        //  Submission List
         <CompactFolderList
           submissions={packages}
           activeId={activePackageId}
@@ -1084,6 +1102,15 @@ const [isDeleting, setIsDeleting] = useState(false)
         deleteType={deleteModal?.type}
         isDeleting={isDeleting}
       />
+
+<CreateSubmissionModal
+  isOpen={isCreateModalOpen}
+  onClose={handleCloseCreateModal}
+  onConfirm={handleConfirmCreateSubmission}
+  suggestedName={`Submission ${packages.length + 1}`}
+  isCreating={isCreating}
+  existingNames={packages.map(p => p.name)}
+/>
     </div>
   )
 }

@@ -576,6 +576,13 @@ class SubmissionService:
         self._persist_submission_metadata(metadata)
         return True
 
+    def _abs_storage_path(self, path: Optional[str]) -> Optional[str]:
+        if not path:
+            return None
+        if os.path.isabs(path):
+            return path
+        backend_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        return os.path.join(backend_root, path)
 
     def _canonicalize_value_for_hash(self, value: Any):
         if isinstance(value, dict):

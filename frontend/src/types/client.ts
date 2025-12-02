@@ -57,6 +57,7 @@ export interface Client {
   }
 
   export interface SubmissionOutputFile {
+    output_id:string
     filename: string
     path?: string
     url?: string | null

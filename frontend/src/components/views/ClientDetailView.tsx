@@ -5,7 +5,7 @@ import { useClientSubmissions,useTemplateLibrary } from '@/hooks'
 import { fillPdf, downloadPDF} from '@/lib/api-client'
 import {GenerateOutputsModal,UploadOrMergedDataPanel} from "@/components/client"
 import type { ClientSubmissionPackage,UploadedRow  } from '@/types'
-
+import { DeleteConfirmationModal } from '@/components/DeleteConfirmationModal'
 import {
   ArrowLeft,
   Building2,
@@ -626,53 +626,100 @@ export function ClientDetailView({
     deleteOutputFile,
     deleteSubmissionPackage
   } = useClientSubmissions(clientId)
+// Delete confirmation modal state
+const [deleteModal, setDeleteModal] = useState<{
+  isOpen: boolean
+  type: 'input' | 'output' | 'submission' | 'file'
+  submissionId: string
+  itemId: string
+  itemName: string
+} | null>(null)
 
+const [isDeleting, setIsDeleting] = useState(false)
 
-  // Delete handlers
   const handleDeleteInput = async (submissionId: string, inputId: string, event: React.MouseEvent) => {
-    event.stopPropagation() // Prevent triggering parent click handlers
+    event.stopPropagation()
     
-    if (!confirm('Delete this file? This action cannot be undone.')) {
-      return
-    }
+    // Find the input to get its name
+    const pkg = packages.find(p => p.submission_id === submissionId)
+    const input = pkg?.inputs?.find(i => i.input_id === inputId || i.filename === inputId)
     
-    try {
-      await deleteInputFile(submissionId, inputId)
-    } catch (err) {
-      console.error('Failed to delete input:', err)
-    }
+    // Open modal
+    setDeleteModal({
+      isOpen: true,
+      type: 'input',
+      submissionId,
+      itemId: inputId,
+      itemName: input?.filename || 'file',
+    })
   }
 
+ 
   const handleDeleteOutput = async (submissionId: string, outputId: string, event: React.MouseEvent) => {
     event.stopPropagation()
     
-    if (!confirm('Delete this output? This action cannot be undone.')) {
-      return
-    }
+    // Find the output to get its name
+    const pkg = packages.find(p => p.submission_id === submissionId)
+    const output = pkg?.outputs?.find(o => o.output_id === outputId || o.filename === outputId)
+    
+    // Open modal
+    setDeleteModal({
+      isOpen: true,
+      type: 'output',
+      submissionId,
+      itemId: outputId,
+      itemName: output?.filename || 'output',
+    })
+  }
+  const handleConfirmDelete = async () => {
+    if (!deleteModal) return
+    
+    setIsDeleting(true)
     
     try {
-      await deleteOutputFile(submissionId, outputId)
+      switch (deleteModal.type) {
+        case 'input':
+          await deleteInputFile(deleteModal.submissionId, deleteModal.itemId)
+          break
+        case 'output':
+          await deleteOutputFile(deleteModal.submissionId, deleteModal.itemId)
+          break
+        case 'submission':
+          await deleteSubmissionPackage(deleteModal.submissionId)
+          break
+      }
+      
+      // Close modal on success
+      setDeleteModal(null)
     } catch (err) {
-      console.error('Failed to delete output:', err)
+      console.error('Failed to delete:', err)
+      // Keep modal open on error so user can see what happened
+    } finally {
+      setIsDeleting(false)
     }
   }
 
+  const handleCloseDeleteModal = () => {
+    if (!isDeleting) {
+      setDeleteModal(null)
+    }
+  }
+ 
   const handleDeleteSubmission = async (submissionId: string, event: React.MouseEvent) => {
     event.stopPropagation()
     
     const pkg = packages.find(p => p.submission_id === submissionId)
-    const pkgName = pkg?.name || 'this submission'
     
-    if (!confirm(`Delete "${pkgName}" and all its files? This action cannot be undone.`)) {
-      return
-    }
-    
-    try {
-      await deleteSubmissionPackage(submissionId)
-    } catch (err) {
-      console.error('Failed to delete submission:', err)
-    }
+    // Open modal
+    setDeleteModal({
+      isOpen: true,
+      type: 'submission',
+      submissionId,
+      itemId: submissionId,
+      itemName: pkg?.name || 'submission',
+    })
   }
+
   const {
     templates: libraryTemplates,
     loading: templatesLoading,
@@ -1014,6 +1061,29 @@ export function ClientDetailView({
   generationResult={lastGenerationResult}
   error={generateOutputsError}
 />
+
+<DeleteConfirmationModal
+        isOpen={deleteModal?.isOpen || false}
+        onClose={handleCloseDeleteModal}
+        onConfirm={handleConfirmDelete}
+        title={
+          deleteModal?.type === 'submission'
+            ? 'Delete Submission'
+            : deleteModal?.type === 'output'
+            ? 'Delete Output'
+            : 'Delete File'
+        }
+        message={
+          deleteModal?.type === 'submission'
+            ? 'Are you sure you want to delete this submission and all its files?'
+            : deleteModal?.type === 'output'
+            ? 'Are you sure you want to delete this output file?'
+            : 'Are you sure you want to delete this file?'
+        }
+        itemName={deleteModal?.itemName}
+        deleteType={deleteModal?.type}
+        isDeleting={isDeleting}
+      />
     </div>
   )
 }

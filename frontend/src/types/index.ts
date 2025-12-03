@@ -12,3 +12,4 @@ export * from "./workflow";
 export * from "./views";
 export * from "./template"
 export * from "./merged-data"
+export * from "./catalog"

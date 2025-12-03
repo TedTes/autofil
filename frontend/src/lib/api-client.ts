@@ -20,7 +20,8 @@ import type {
   OutputTemplate,
   GenerateOutputsRequest,
   GenerateOutputsResponse,
-  TemplateLibraryResponse
+  TemplateLibraryResponse,
+  FieldCatalog
 } from '@/types'
 import type { MergedData } from '@/types/merged-data'
 
@@ -425,6 +426,23 @@ export async function getMergedData(submissionId: string): Promise<MergedData> {
       throw new Error(response.data.error || 'Failed to load merged data')
     }
     return response.data.data as MergedData
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
+/**
+ * Fetch canonical field catalog (parsed from backend YAML).
+ */
+export async function getFieldCatalog(options?: { refresh?: boolean }): Promise<FieldCatalog> {
+  try {
+    const response = await api.get('/metadata/fields', {
+      params: options?.refresh ? { refresh: '1' } : undefined,
+    })
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to load field catalog')
+    }
+    return response.data.data as FieldCatalog
   } catch (error) {
     handleApiError(error)
   }

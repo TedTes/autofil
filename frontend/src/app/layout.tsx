@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { ToastProvider } from '@/contexts/ToastContext'
+import { FieldCatalogProvider } from '@/contexts/FieldCatalogContext'
 import ToastContainer from '@/components/ToastContainer'
 import BackendStatusBanner from '@/components/BackendStatusBanner'
 
@@ -20,12 +21,14 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <ToastProvider>
-          <div className="min-h-screen">
-            {children}
-          </div>
-          <ToastContainer />
-        </ToastProvider>
+        <FieldCatalogProvider>
+          <ToastProvider>
+            <div className="min-h-screen">
+              {children}
+            </div>
+            <ToastContainer />
+          </ToastProvider>
+        </FieldCatalogProvider>
       </body>
     </html>
   )

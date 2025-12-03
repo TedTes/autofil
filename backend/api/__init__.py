@@ -28,6 +28,7 @@ def create_app():
     from api.health  import health_bp
     from api.folders import folder_bp
     from api.templates import template_bp
+    from api.metadata import metadata_bp
 
 
     app.register_blueprint(submission_bp, url_prefix='/api/submissions')
@@ -38,6 +39,7 @@ def create_app():
     app.register_blueprint(health_bp, url_prefix='/api')
     app.register_blueprint(client_bp, url_prefix='/api/clients')
     app.register_blueprint(template_bp, url_prefix='/api/templates')
+    app.register_blueprint(metadata_bp, url_prefix='/api/metadata')
     
     # Enable CORS for frontend
     CORS(app, resources={

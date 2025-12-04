@@ -750,6 +750,11 @@ class SubmissionService:
                 raise ValueError("Extracted data not found")
 
             template_choice = template_id or metadata.get("template_type")
+            if not template_choice:
+                raise ValueError(
+                    "template_id is required when filling a document. Please select a destination template."
+                )
+            metadata["template_type"] = template_choice
             filler = self._select_filler(template_choice)
             temp_output_dir = tempfile.mkdtemp(prefix=f"filled_{submission_id}_")
             output_path = os.path.join(temp_output_dir, f"{submission_id}_filled.pdf")

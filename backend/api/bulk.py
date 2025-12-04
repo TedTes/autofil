@@ -31,21 +31,30 @@ def bulk_fill():
     try:
         data = request.get_json() or {}
         ids = data.get("submission_ids", [])
+        template_id = data.get("template_id") or data.get("templateId")
         if not isinstance(ids, list) or not ids:
             return jsonify({"error": "submission_ids must be a non-empty array"}), 400
+        if not template_id:
+            return jsonify({"error": "template_id is required for bulk fill operations"}), 400
 
         results, errors = [], []
         for sid in ids:
             try:
-                report = submission_service.fill_pdf(sid)
+                report, output_meta = submission_service.fill_pdf(
+                    sid,
+                    template_id=template_id,
+                )
                 results.append({
                     "submission_id": sid,
                     "fill_report": {
-                        "written": report.get("written"),
-                        "skipped": report.get("skipped"),
-                        "warnings": report.get("notes", []),
+                        "written": report.filled_fields,
+                        "skipped": len(report.unmapped_fields),
+                        "warnings": report.warnings,
+                        "errors": report.errors,
                     },
                     "download_url": f"/api/submissions/{sid}/download",
+                    "template_id": template_id,
+                    "output": output_meta,
                 })
             except Exception as e:
                 errors.append({"submission_id": sid, "error": str(e)})

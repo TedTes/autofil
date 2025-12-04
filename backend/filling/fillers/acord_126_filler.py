@@ -54,6 +54,7 @@ class Acord126Filler(BaseFiller):
         output_path: str,
         template_id: str = "acord_126_2016",
         template_version: str = "latest",
+        template_pdf_override: Optional[str] = None,
     ) -> FillReport:
         """
         Fill an ACORD PDF from canonical extracted data.
@@ -73,6 +74,9 @@ class Acord126Filler(BaseFiller):
                     warnings=[f"No template found for {template_id} ({template_version})"],
                     errors=["Template loading failed"],
                 )
+
+            if template_pdf_override:
+                template.pdf_url = template_pdf_override
 
             # ---- 2. Map canonical data to flat fields ----------------------
             # flat_fields MUST be keyed by canonical names

@@ -217,6 +217,9 @@ def fill_pdf(submission_id):
                 "message": "Outputs generated" if result["totalGenerated"] else "No outputs generated",
             }), 200
 
+        if not template_id:
+            return jsonify({"error": "templateId is required when filling a document"}), 400
+
         report, output_meta = submission_service.fill_pdf(
             submission_id,
             input_ids=input_ids,

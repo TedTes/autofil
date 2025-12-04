@@ -102,59 +102,78 @@ class TemplateLoader:
         """
 
         template_dir = cls.local_template_dir / template_id
-        if not template_dir.exists():
-            print(f"[template_loader] template_dir does not exist: {template_dir}")
-            return None
 
-        # Version folder:
-        if version == "latest":
-            # If template_dir is a file, treat as error and bail
-            if not template_dir.is_dir():
-                print(f"[template_loader] expected directory, got file: {template_dir}")
+        # Support legacy "folder per template" layout first
+        if template_dir.exists() and template_dir.is_dir():
+            if version == "latest":
+                try:
+                    version_dirs = [d for d in template_dir.iterdir() if d.is_dir()]
+                except OSError as e:
+                    print(f"[template_loader] iterdir error on {template_dir}: {e}")
+                    return None
+
+                version_dir = sorted(version_dirs)[-1] if version_dirs else template_dir
+            else:
+                version_dir = template_dir / version
+
+            template_path = cls._find_template_file(version_dir)
+            if not template_path:
+                print(f"[template_loader] missing local template file in {version_dir}")
                 return None
 
             try:
-                version_dirs = [d for d in template_dir.iterdir() if d.is_dir()]
-            except OSError as e:
-                print(f"[template_loader] iterdir error on {template_dir}: {e}")
+                raw = cls._load_template_contents(template_path)
+                pdf_path = cls._resolve_pdf_path(
+                    base_dir=version_dir,
+                    pdf_ref=raw.get("pdf_url"),
+                    default_name="template.pdf",
+                )
+
+                return TemplateConfig(
+                    template_id=raw.get("template_id", template_id),
+                    field_map=raw.get("field_map", {}),
+                    repeaters=raw.get("repeaters", {}),
+                    raw=raw,
+                    pdf_url=pdf_path,
+                    version=raw.get("version", version),
+                )
+            except Exception as e:
+                print(f"[template_loader] local load error: {e}")
                 return None
 
-            if version_dirs:
-                # Versioned layout → pick the newest
-                version_dir = sorted(version_dirs)[-1]
-            else:
-                # No version subfolders → treat template_dir itself as version_dir
-                version_dir = template_dir
-        else:
-            # Explicit version
-            version_dir = template_dir / version
+        return cls._load_flat_file(template_id)
 
-        template_path = cls._find_template_file(version_dir)
-        if not template_path:
-            print(f"[template_loader] missing local template file in {version_dir}")
-            return None
+    @classmethod
+    def _load_flat_file(cls, template_id: str) -> Optional[TemplateConfig]:
+        for ext in (".yaml", ".yml", ".json"):
+            candidate = cls.local_template_dir / f"{template_id}{ext}"
+            if not candidate.exists():
+                continue
 
-        try:
-            raw = cls._load_template_contents(template_path)
-            pdf_url = raw.get("pdf_url")
-            if pdf_url:
-                pdf_path = Path(pdf_url)
-                if not pdf_path.is_absolute():
-                    pdf_path = (version_dir / pdf_path).resolve()
-            else:
-                pdf_path = (version_dir / "template.pdf").resolve()
+            try:
+                raw = cls._load_template_contents(candidate)
+            except Exception as e:
+                print(f"[template_loader] failed to read {candidate}: {e}")
+                return None
+
+            pdf_path = cls._resolve_pdf_path(
+                base_dir=candidate.parent,
+                pdf_ref=raw.get("pdf_url"),
+                default_name="template.pdf",
+                fallback_name=f"{candidate.stem}.pdf",
+            )
 
             return TemplateConfig(
                 template_id=raw.get("template_id", template_id),
                 field_map=raw.get("field_map", {}),
                 repeaters=raw.get("repeaters", {}),
                 raw=raw,
-                pdf_url=str(pdf_path),
-                version=raw.get("version", version),
+                pdf_url=pdf_path,
+                version=raw.get("version", "latest"),
             )
-        except Exception as e:
-            print(f"[template_loader] local load error: {e}")
-            return None
+
+        print(f"[template_loader] template not found for id={template_id}")
+        return None
 
     @classmethod
     def _find_template_file(cls, version_dir: Path) -> Optional[Path]:
@@ -171,3 +190,36 @@ class TemplateLoader:
                 return yaml.safe_load(f) or {}
         with open(path, "r") as f:
             return json.load(f)
+
+    @staticmethod
+    def _resolve_pdf_path(
+        *,
+        base_dir: Path,
+        pdf_ref: Optional[str],
+        default_name: Optional[str] = None,
+        fallback_name: Optional[str] = None,
+    ) -> Optional[str]:
+        """
+        Resolve template pdf reference into an absolute string path.
+        """
+        if pdf_ref:
+            # URLs should be returned as-is
+            if isinstance(pdf_ref, str) and pdf_ref.startswith(("http://", "https://")):
+                return pdf_ref
+            pdf_path = Path(pdf_ref)
+            if not pdf_path.is_absolute():
+                pdf_path = (base_dir / pdf_path).resolve()
+            return str(pdf_path)
+
+        # fallback to default filenames if provided
+        for name in (default_name, fallback_name):
+            if not name:
+                continue
+            candidate = (base_dir / name).resolve()
+            if candidate.exists():
+                return str(candidate)
+            # Even if it doesn't exist yet, still return the location so callers
+            # can place/generated output relative to it.
+            return str(candidate)
+
+        return None

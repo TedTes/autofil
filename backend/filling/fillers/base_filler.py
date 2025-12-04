@@ -50,7 +50,14 @@ class BaseFiller:
     # -------------------------------------------------------------- #
     # Public API
     # -------------------------------------------------------------- #
-    def fill_from_canonical(self, canonical_data: dict, output_path: str, template_id: str):
+    def fill_from_canonical(
+        self,
+        canonical_data: dict,
+        output_path: str,
+        template_id: str,
+        template_version: str = "latest",
+        template_pdf_override: Optional[str] = None,
+    ):
         """
         Child classes must implement this.
         """
@@ -64,6 +71,7 @@ class BaseFiller:
         output_path: str,
         template_id: Optional[str] = None,
         template_version: str = "latest",
+        template_pdf_override: Optional[str] = None,
     ):
         """
         Thin wrapper around fill_from_canonical.
@@ -75,6 +83,7 @@ class BaseFiller:
             output_path=output_path,
             template_id=template_id or "",
             template_version=template_version,
+            template_pdf_override=template_pdf_override,
         )
 
     # -------------------------------------------------------------- #

@@ -1,546 +1,478 @@
-# mfc.yaml
-# Master Field Catalog (MFC) – canonical IDs shared by extractors & fillers.
-# Version: 1.1 (expanded ACORD 126 coverage)
+# mfc.yaml (schema v2)
+# Master Field Catalog with semantic grouping baked in
 
-schema_version: "1.1"
-updated_at: "2025-11-19"
+schema_version: "2.0"
+updated_at: "2025-12-03"
 updated_by: "data-team"
 
-fields:
+semantic_groups:
+  insured:
+    display_name: "Insured Information"
+    description: "Business entity details and contact information"
+    priority: 1
+    icon: "building"
+    fields:
+      InsuredName:
+        id: F001
+        type: string
+        cardinality: one-to-many
+        aliases:
+          - "Named Insured"
+          - "Applicant Name"
+          - "Policyholder"
+          - "Business Name"
+          - "Legal Entity"
+        targets:
+          acord_126_pdf: "NamedInsured_FullName_A"
+      DBA:
+        id: F002
+        type: string
+        cardinality: zero-to-many
+        aliases:
+          - "Doing Business As"
+          - "Trade Name"
+        targets: {}
+      FEIN:
+        id: F003
+        type: string
+        aliases: ["FEIN", "Federal ID", "EIN"]
+        targets: {}
+      MailingAddress:
+        id: F010
+        type: object
+        structure:
+          street: string
+          city: string
+          state: string
+          zip: string
+          country: string
+        aliases: ["Mailing Address"]
+        targets: {}
 
-  # ======================================================================
-  # 1. INSURED / APPLICANT
-  # ======================================================================
-  InsuredName:
-    id: F001
-    type: string
-    cardinality: one-to-many
-    aliases:
-      - "Named Insured"
-      - "Applicant Name"
-      - "Policyholder"
-      - "Business Name"
-      - "Legal Entity"
-    targets:
-      acord_126_pdf: "NamedInsured_FullName_A"
+  policy:
+    display_name: "Policy Information"
+    description: "Policy identifiers, dates, and basic details"
+    priority: 2
+    icon: "file-text"
+    fields:
+      PolicyNumber:
+        id: F020
+        type: string
+        aliases: ["Policy Number", "Policy #", "Quote Number"]
+        targets:
+          acord_126_pdf: "Policy_PolicyNumberIdentifier_A"
+      EffectiveDate:
+        id: F021
+        type: date
+        aliases: ["Effective Date", "Inception Date"]
+        targets:
+          acord_126_pdf: "Policy_EffectiveDate_A"
+      ExpirationDate:
+        id: F022
+        type: date
+        aliases: ["Expiration Date", "Exp Date"]
+        targets: {}
+      LineOfBusiness:
+        id: F023
+        type: string
+        aliases: ["Line of Business", "LOB"]
+        targets:
+          metadata: "line_of_business"
+      Carrier:
+        id: F502
+        type: string
+        aliases: ["Carrier", "Insurance Company"]
+        targets:
+          acord_126_pdf: "Insurer_FullName_A"
+      SubmissionDate:
+        id: F501
+        type: date
+        aliases: ["Submission Date"]
+        targets:
+          metadata: "submission_date"
 
-  DBA:
-    id: F002
-    type: string
-    cardinality: zero-to-many
-    aliases:
-      - "Doing Business As"
-      - "Trade Name"
-    targets: {}
+  locations:
+    display_name: "Locations & Properties"
+    description: "Physical locations and property details"
+    priority: 3
+    icon: "map-pin"
+    fields:
+      Location:
+        id: F011
+        type: object
+        cardinality: one-to-many
+        structure:
+          location_number: string
+          address: string
+          city: string
+          state: string
+          zip: string
+          building_number: string
+          construction: string
+          occupancy: string
+          square_feet: integer
+          year_built: integer
+        targets:
+          acord_125_xml:
+            path: "Location"
+            repeating: true
+      BuildingLimit:
+        id: F110
+        type: money
+        aliases: ["Building Limit"]
+        targets:
+          acord_125_pdf: "BuildingLimit"
+      BPPLimit:
+        id: F111
+        type: money
+        aliases: ["BPP Limit"]
+        targets:
+          acord_125_pdf: "BPPLimit"
+      RoofAge:
+        id: F301
+        type: integer
+        aliases: ["Roof Age"]
+        targets:
+          chubb_supp: "RoofAge"
+      TotalInsuredValue:
+        id: F400
+        type: money
+        aliases: ["Total Insured Value", "TIV"]
+        targets:
+          s_ov_pdf: "TotalTIV"
 
-  FEIN:
-    id: F003
-    type: string
-    aliases:
-      - "FEIN"
-      - "Federal ID"
-      - "EIN"
-    targets: {}
+  operations:
+    display_name: "Operations & Exposures"
+    description: "Business operations, revenue, and employee information"
+    priority: 4
+    icon: "trending-up"
+    fields:
+      Classification:
+        id: F100
+        type: object
+        cardinality: one-to-many
+        structure:
+          class_code: string
+          description: string
+          premium_basis: string
+          exposure: money
+          prem_ops_rate: money
+          products_rate: money
+          prem_ops_premium: money
+          products_premium: money
+        aliases: ["Hazard Classification", "GL Classification"]
+        targets:
+          acord_126_pdf:
+            row_pattern: "GeneralLiability_Hazard_ClassCode_{row}"
+            repeating: true
+      GrossSales:
+        id: F101
+        type: money
+        aliases: ["Gross Sales", "Annual Sales"]
+        targets:
+          acord_126_pdf: "ProductAndCompletedOperations_AnnualGrossSalesAmount_A"
+      Payroll:
+        id: F102
+        type: money
+        aliases: ["Payroll"]
+        targets: {}
+      NumberOfEmployees:
+        id: F103
+        type: integer
+        aliases: ["Number of Employees", "Employee Count"]
+        targets:
+          acord_126_pdf: "Contractors_FullTimeEmployeeCount_A"
+      YearsInBusiness:
+        id: F300
+        type: integer
+        aliases: ["Years in Business"]
+        targets:
+          travelers_supp: "YearsInBusiness"
 
-  # ======================================================================
-  # 2. ADDRESS & LOCATIONS
-  # ======================================================================
-  MailingAddress:
-    id: F010
-    type: object
-    structure:
-      street: string
-      city: string
-      state: string
-      zip: string
-      country: string
-    aliases:
-      - "Mailing Address"
-    targets: {}
+  coverage:
+    display_name: "Coverage & Limits"
+    description: "Coverage types and limit amounts"
+    priority: 5
+    icon: "shield"
+    fields:
+      CoverageOccurrenceIndicator:
+        id: F160
+        type: boolean
+        aliases: ["Occurrence", "Occurrence Basis"]
+        targets:
+          acord_126_pdf: "GeneralLiability_OccurrenceIndicator_A"
+      CoverageClaimsMadeIndicator:
+        id: F161
+        type: boolean
+        aliases: ["Claims-Made"]
+        targets:
+          acord_126_pdf: "GeneralLiability_ClaimsMadeIndicator_A"
+      CoverageOtherIndicator:
+        id: F162
+        type: boolean
+        aliases: ["Other Coverage"]
+        targets:
+          acord_126_pdf: "GeneralLiability_OtherCoverageIndicator_A"
+      CoverageOtherDescription:
+        id: F163
+        type: string
+        aliases: ["Other Coverage Description"]
+        targets:
+          acord_126_pdf: "GeneralLiability_OtherCoverageDescription_A"
+      CoverageOwnersAndContractorsProtective:
+        id: F164
+        type: boolean
+        aliases: ["Owners & Contractors Protective", "OCP"]
+        targets:
+          acord_126_pdf: "GeneralLiability_OwnersAndContractorsProtectiveIndicator_A"
+      GeneralAggregateLimit:
+        id: F170
+        type: money
+        aliases: ["General Aggregate"]
+        targets:
+          acord_126_pdf: "GeneralLiability_GeneralAggregate_LimitAmount_A"
+      ProductsCompletedOpsLimit:
+        id: F171
+        type: money
+        aliases: ["Products & Completed Operations"]
+        targets:
+          acord_126_pdf: "GeneralLiability_ProductsAndCompletedOperations_AggregateLimitAmount_A"
+      PersonalAdvertisingInjuryLimit:
+        id: F172
+        type: money
+        aliases: ["Personal & Advertising Injury"]
+        targets:
+          acord_126_pdf: "GeneralLiability_PersonalAndAdvertisingInjury_LimitAmount_A"
+      EachOccurrenceLimit:
+        id: F173
+        type: money
+        aliases: ["Each Occurrence"]
+        targets:
+          acord_126_pdf: "GeneralLiability_EachOccurrence_LimitAmount_A"
+      FireDamageLimit:
+        id: F174
+        type: money
+        aliases: ["Damage To Premises Rented To You", "Fire Damage"]
+        targets:
+          acord_126_pdf: "GeneralLiability_FireDamageRentedPremises_EachOccurrenceLimitAmount_A"
+      MedicalExpenseLimit:
+        id: F175
+        type: money
+        aliases: ["Medical Expense", "Med Pay"]
+        targets:
+          acord_126_pdf: "GeneralLiability_MedicalExpense_EachPersonLimitAmount_A"
+      EmployeeBenefitsLimit:
+        id: F176
+        type: money
+        aliases: ["Employee Benefits"]
+        targets:
+          acord_126_pdf: "GeneralLiability_EmployeeBenefits_LimitAmount_A"
+      OtherCoverageLimitDescription:
+        id: F177
+        type: string
+        aliases: ["Other Limit Description"]
+        targets:
+          acord_126_pdf: "GeneralLiability_OtherCoverageLimitDescription_A"
+      OtherCoverageLimitAmount:
+        id: F178
+        type: money
+        aliases: ["Other Limit Amount"]
+        targets:
+          acord_126_pdf: "GeneralLiability_OtherCoverageLimitAmount_A"
 
-  Location:
-    id: F011
-    type: object
-    cardinality: one-to-many
-    structure:
-      location_number: string
-      address: string
-      city: string
-      state: string
-      zip: string
-      building_number: string
-      construction: string
-      occupancy: string
-      square_feet: integer
-      year_built: integer
-    targets:
-      acord_125_xml:
-        path: "Location"
-        repeating: true
+  claims_made:
+    display_name: "Claims-Made Details"
+    description: "Claims-made specific dates and coverage details"
+    priority: 6
+    icon: "calendar"
+    fields:
+      ClaimsMadeRetroactiveDate:
+        id: F165
+        type: date
+        aliases: ["Retro Date"]
+        targets:
+          acord_126_pdf: "GeneralLiability_ClaimsMade_ProposedRetroactiveDate_A"
+      ClaimsMadeUninterruptedCoverageEntryDate:
+        id: F166
+        type: date
+        aliases: ["Uninterrupted Coverage Entry Date"]
+        targets:
+          acord_126_pdf: "GeneralLiability_ClaimsMade_UninterruptedCoverageEntryDate_A"
 
-  # ======================================================================
-  # 3. POLICY BASICS
-  # ======================================================================
-  PolicyNumber:
-    id: F020
-    type: string
-    aliases:
-      - "Policy Number"
-      - "Policy #"
-      - "Quote Number"
-    targets:
-      acord_126_pdf: "Policy_PolicyNumberIdentifier_A"
+  deductibles:
+    display_name: "Deductibles"
+    description: "Deductible amounts and applicability"
+    priority: 7
+    icon: "dollar-sign"
+    fields:
+      Deductible:
+        id: F112
+        type: money
+        aliases: ["Property Deductible"]
+        targets:
+          acord_125_pdf: "Deductible"
+      PropertyDamageDeductibleIndicator:
+        id: F180
+        type: boolean
+        aliases: ["Property Damage Deductible Applies"]
+        targets:
+          acord_126_pdf: "GeneralLiability_PropertyDamage_DeductibleIndicator_A"
+      PropertyDamageDeductibleAmount:
+        id: F181
+        type: money
+        aliases: ["Property Damage Deductible"]
+        targets:
+          acord_126_pdf: "GeneralLiability_PropertyDamage_DeductibleAmount_A"
+      BodilyInjuryDeductibleIndicator:
+        id: F182
+        type: boolean
+        aliases: ["Bodily Injury Deductible Applies"]
+        targets:
+          acord_126_pdf: "GeneralLiability_BodilyInjury_DeductibleIndicator_A"
+      BodilyInjuryDeductibleAmount:
+        id: F183
+        type: money
+        aliases: ["Bodily Injury Deductible"]
+        targets:
+          acord_126_pdf: "GeneralLiability_BodilyInjury_DeductibleAmount_A"
+      OtherDeductibleIndicator:
+        id: F184
+        type: boolean
+        aliases: ["Other Deductible Applies"]
+        targets:
+          acord_126_pdf: "GeneralLiability_OtherDeductibleIndicator_A"
+      OtherDeductibleDescription:
+        id: F185
+        type: string
+        aliases: ["Other Deductible Description"]
+        targets:
+          acord_126_pdf: "GeneralLiability_OtherDeductibleDescription_A"
+      OtherDeductibleAmount:
+        id: F186
+        type: money
+        aliases: ["Other Deductible Amount"]
+        targets:
+          acord_126_pdf: "GeneralLiability_OtherDeductibleAmount_A"
+      DeductiblePerClaimIndicator:
+        id: F187
+        type: boolean
+        aliases: ["Per Claim Deductible"]
+        targets:
+          acord_126_pdf: "GeneralLiability_DeductiblePerClaimIndicator_A"
+      DeductiblePerOccurrenceIndicator:
+        id: F188
+        type: boolean
+        aliases: ["Per Occurrence Deductible"]
+        targets:
+          acord_126_pdf: "GeneralLiability_DeductiblePerOccurrenceIndicator_A"
+      EmployeeBenefitsPerClaimDeductible:
+        id: F189
+        type: money
+        aliases: ["Employee Benefits Per Claim Deductible"]
+        targets:
+          acord_126_pdf: "GeneralLiability_EmployeeBenefits_PerClaimDeductibleAmount_A"
 
-  EffectiveDate:
-    id: F021
-    type: date
-    aliases:
-      - "Effective Date"
-      - "Inception Date"
-    targets:
-      acord_126_pdf: "Policy_EffectiveDate_A"
+  premiums:
+    display_name: "Premium Information"
+    description: "Premium breakdowns and totals"
+    priority: 8
+    icon: "credit-card"
+    fields:
+      PremiumPremisesOperations:
+        id: F192
+        type: money
+        aliases: ["Premises / Operations Premium"]
+        targets:
+          acord_126_pdf: "GeneralLiability_PremisesOperations_PremiumAmount_A"
+      PremiumProducts:
+        id: F193
+        type: money
+        aliases: ["Products Premium"]
+        targets:
+          acord_126_pdf: "GeneralLiability_Products_PremiumAmount_A"
+      PremiumOtherCoverage:
+        id: F194
+        type: money
+        aliases: ["Other Coverage Premium"]
+        targets:
+          acord_126_pdf: "GeneralLiability_OtherCoveragePremiumAmount_A"
+      PremiumTotal:
+        id: F195
+        type: money
+        aliases: ["Total Premium"]
+        targets:
+          acord_126_pdf: "GeneralLiabilityLineOfBusiness_TotalPremiumAmount_A"
 
-  ExpirationDate:
-    id: F022
-    type: date
-    aliases:
-      - "Expiration Date"
-      - "Exp Date"
-    targets: {}
+  employee_benefits:
+    display_name: "Employee Benefits Details"
+    description: "Employee benefits coverage specifics"
+    priority: 9
+    icon: "users"
+    fields:
+      EmployeeBenefitsLimit:
+        id: F176
+        type: money
+        aliases: ["Employee Benefits"]
+        targets:
+          acord_126_pdf: "GeneralLiability_EmployeeBenefits_LimitAmount_A"
+      EmployeeBenefitsPerClaimDeductible:
+        id: F189
+        type: money
+        aliases: ["Employee Benefits Per Claim Deductible"]
+        targets:
+          acord_126_pdf: "GeneralLiability_EmployeeBenefits_PerClaimDeductibleAmount_A"
+      EmployeeBenefitsEmployeeCount:
+        id: F190
+        type: integer
+        aliases: ["Employees Covered"]
+        targets:
+          acord_126_pdf: "GeneralLiability_EmployeeBenefits_EmployeeCoveredCount_A"
+      EmployeeBenefitsRetroactiveDate:
+        id: F191
+        type: date
+        aliases: ["Employee Benefits Retro Date"]
+        targets:
+          acord_126_pdf: "GeneralLiability_EmployeeBenefits_RetroactiveDate_A"
 
-  LineOfBusiness:
-    id: F023
-    type: string
-    aliases:
-      - "Line of Business"
-      - "LOB"
-    targets:
-      metadata: "line_of_business"
+  loss_history:
+    display_name: "Loss History"
+    description: "Prior claims and loss information"
+    priority: 10
+    icon: "alert-triangle"
+    fields:
+      PriorLosses:
+        id: F200
+        type: object
+        cardinality: zero-to-many
+        structure:
+          date_of_loss: date
+          type: string
+          amount_paid: money
+          description: string
+        targets:
+          supplemental_pdf: "LossHistoryTable"
 
-  # ======================================================================
-  # 4. GENERAL LIABILITY – CLASSIFICATION & EXPOSURES
-  # ======================================================================
-  Classification:
-    id: F100
-    type: object
-    cardinality: one-to-many
-    structure:
-      class_code: string
-      description: string
-      premium_basis: string
-      exposure: money
-      prem_ops_rate: money
-      products_rate: money
-      prem_ops_premium: money
-      products_premium: money
-    aliases:
-      - "Hazard Classification"
-      - "GL Classification"
-    targets:
-      acord_126_pdf:
-        row_pattern: "GeneralLiability_Hazard_ClassCode_{row}"
-        repeating: true
-
-  GrossSales:
-    id: F101
-    type: money
-    aliases:
-      - "Gross Sales"
-      - "Annual Sales"
-    targets:
-      acord_126_pdf: "ProductAndCompletedOperations_AnnualGrossSalesAmount_A"
-
-  Payroll:
-    id: F102
-    type: money
-    aliases:
-      - "Payroll"
-    targets: {}
-
-  NumberOfEmployees:
-    id: F103
-    type: integer
-    aliases:
-      - "Number of Employees"
-      - "Employee Count"
-    targets:
-      acord_126_pdf: "Contractors_FullTimeEmployeeCount_A"
-
-  # ======================================================================
-  # 5. GL COVERAGE INDICATORS & CLAIMS-MADE DETAILS
-  # ======================================================================
-  CoverageOccurrenceIndicator:
-    id: F160
-    type: boolean
-    aliases:
-      - "Occurrence"
-      - "Occurrence Basis"
-    targets:
-      acord_126_pdf: "GeneralLiability_OccurrenceIndicator_A"
-
-  CoverageClaimsMadeIndicator:
-    id: F161
-    type: boolean
-    aliases:
-      - "Claims-Made"
-    targets:
-      acord_126_pdf: "GeneralLiability_ClaimsMadeIndicator_A"
-
-  CoverageOtherIndicator:
-    id: F162
-    type: boolean
-    aliases:
-      - "Other Coverage"
-    targets:
-      acord_126_pdf: "GeneralLiability_OtherCoverageIndicator_A"
-
-  CoverageOtherDescription:
-    id: F163
-    type: string
-    aliases:
-      - "Other Coverage Description"
-    targets:
-      acord_126_pdf: "GeneralLiability_OtherCoverageDescription_A"
-
-  CoverageOwnersAndContractorsProtective:
-    id: F164
-    type: boolean
-    aliases:
-      - "Owners & Contractors Protective"
-      - "OCP"
-    targets:
-      acord_126_pdf: "GeneralLiability_OwnersAndContractorsProtectiveIndicator_A"
-
-  ClaimsMadeRetroactiveDate:
-    id: F165
-    type: date
-    aliases:
-      - "Retro Date"
-    targets:
-      acord_126_pdf: "GeneralLiability_ClaimsMade_ProposedRetroactiveDate_A"
-
-  ClaimsMadeUninterruptedCoverageEntryDate:
-    id: F166
-    type: date
-    aliases:
-      - "Uninterrupted Coverage Entry Date"
-    targets:
-      acord_126_pdf: "GeneralLiability_ClaimsMade_UninterruptedCoverageEntryDate_A"
-
-  # ======================================================================
-  # 6. GL LIMITS
-  # ======================================================================
-  GeneralAggregateLimit:
-    id: F170
-    type: money
-    aliases:
-      - "General Aggregate"
-    targets:
-      acord_126_pdf: "GeneralLiability_GeneralAggregate_LimitAmount_A"
-
-  ProductsCompletedOpsLimit:
-    id: F171
-    type: money
-    aliases:
-      - "Products & Completed Operations"
-    targets:
-      acord_126_pdf: "GeneralLiability_ProductsAndCompletedOperations_AggregateLimitAmount_A"
-
-  PersonalAdvertisingInjuryLimit:
-    id: F172
-    type: money
-    aliases:
-      - "Personal & Advertising Injury"
-    targets:
-      acord_126_pdf: "GeneralLiability_PersonalAndAdvertisingInjury_LimitAmount_A"
-
-  EachOccurrenceLimit:
-    id: F173
-    type: money
-    aliases:
-      - "Each Occurrence"
-    targets:
-      acord_126_pdf: "GeneralLiability_EachOccurrence_LimitAmount_A"
-
-  FireDamageLimit:
-    id: F174
-    type: money
-    aliases:
-      - "Damage To Premises Rented To You"
-      - "Fire Damage"
-    targets:
-      acord_126_pdf: "GeneralLiability_FireDamageRentedPremises_EachOccurrenceLimitAmount_A"
-
-  MedicalExpenseLimit:
-    id: F175
-    type: money
-    aliases:
-      - "Medical Expense"
-      - "Med Pay"
-    targets:
-      acord_126_pdf: "GeneralLiability_MedicalExpense_EachPersonLimitAmount_A"
-
-  EmployeeBenefitsLimit:
-    id: F176
-    type: money
-    aliases:
-      - "Employee Benefits"
-    targets:
-      acord_126_pdf: "GeneralLiability_EmployeeBenefits_LimitAmount_A"
-
-  OtherCoverageLimitDescription:
-    id: F177
-    type: string
-    aliases:
-      - "Other Limit Description"
-    targets:
-      acord_126_pdf: "GeneralLiability_OtherCoverageLimitDescription_A"
-
-  OtherCoverageLimitAmount:
-    id: F178
-    type: money
-    aliases:
-      - "Other Limit Amount"
-    targets:
-      acord_126_pdf: "GeneralLiability_OtherCoverageLimitAmount_A"
-
-  # ======================================================================
-  # 7. GL DEDUCTIBLES & EMPLOYEE BENEFITS DETAILS
-  # ======================================================================
-  PropertyDamageDeductibleIndicator:
-    id: F180
-    type: boolean
-    aliases:
-      - "Property Damage Deductible Applies"
-    targets:
-      acord_126_pdf: "GeneralLiability_PropertyDamage_DeductibleIndicator_A"
-
-  PropertyDamageDeductibleAmount:
-    id: F181
-    type: money
-    aliases:
-      - "Property Damage Deductible"
-    targets:
-      acord_126_pdf: "GeneralLiability_PropertyDamage_DeductibleAmount_A"
-
-  BodilyInjuryDeductibleIndicator:
-    id: F182
-    type: boolean
-    aliases:
-      - "Bodily Injury Deductible Applies"
-    targets:
-      acord_126_pdf: "GeneralLiability_BodilyInjury_DeductibleIndicator_A"
-
-  BodilyInjuryDeductibleAmount:
-    id: F183
-    type: money
-    aliases:
-      - "Bodily Injury Deductible"
-    targets:
-      acord_126_pdf: "GeneralLiability_BodilyInjury_DeductibleAmount_A"
-
-  OtherDeductibleIndicator:
-    id: F184
-    type: boolean
-    aliases:
-      - "Other Deductible Applies"
-    targets:
-      acord_126_pdf: "GeneralLiability_OtherDeductibleIndicator_A"
-
-  OtherDeductibleDescription:
-    id: F185
-    type: string
-    aliases:
-      - "Other Deductible Description"
-    targets:
-      acord_126_pdf: "GeneralLiability_OtherDeductibleDescription_A"
-
-  OtherDeductibleAmount:
-    id: F186
-    type: money
-    aliases:
-      - "Other Deductible Amount"
-    targets:
-      acord_126_pdf: "GeneralLiability_OtherDeductibleAmount_A"
-
-  DeductiblePerClaimIndicator:
-    id: F187
-    type: boolean
-    aliases:
-      - "Per Claim Deductible"
-    targets:
-      acord_126_pdf: "GeneralLiability_DeductiblePerClaimIndicator_A"
-
-  DeductiblePerOccurrenceIndicator:
-    id: F188
-    type: boolean
-    aliases:
-      - "Per Occurrence Deductible"
-    targets:
-      acord_126_pdf: "GeneralLiability_DeductiblePerOccurrenceIndicator_A"
-
-  EmployeeBenefitsPerClaimDeductible:
-    id: F189
-    type: money
-    aliases:
-      - "Employee Benefits Per Claim Deductible"
-    targets:
-      acord_126_pdf: "GeneralLiability_EmployeeBenefits_PerClaimDeductibleAmount_A"
-
-  EmployeeBenefitsEmployeeCount:
-    id: F190
-    type: integer
-    aliases:
-      - "Employees Covered"
-    targets:
-      acord_126_pdf: "GeneralLiability_EmployeeBenefits_EmployeeCoveredCount_A"
-
-  EmployeeBenefitsRetroactiveDate:
-    id: F191
-    type: date
-    aliases:
-      - "Employee Benefits Retro Date"
-    targets:
-      acord_126_pdf: "GeneralLiability_EmployeeBenefits_RetroactiveDate_A"
-
-  # ======================================================================
-  # 8. PREMIUMS
-  # ======================================================================
-  PremiumPremisesOperations:
-    id: F192
-    type: money
-    aliases:
-      - "Premises / Operations Premium"
-    targets:
-      acord_126_pdf: "GeneralLiability_PremisesOperations_PremiumAmount_A"
-
-  PremiumProducts:
-    id: F193
-    type: money
-    aliases:
-      - "Products Premium"
-    targets:
-      acord_126_pdf: "GeneralLiability_Products_PremiumAmount_A"
-
-  PremiumOtherCoverage:
-    id: F194
-    type: money
-    aliases:
-      - "Other Coverage Premium"
-    targets:
-      acord_126_pdf: "GeneralLiability_OtherCoveragePremiumAmount_A"
-
-  PremiumTotal:
-    id: F195
-    type: money
-    aliases:
-      - "Total Premium"
-    targets:
-      acord_126_pdf: "GeneralLiabilityLineOfBusiness_TotalPremiumAmount_A"
-
-  # ======================================================================
-  # 9. PROPERTY / OTHER FORMS (legacy definitions)
-  # ======================================================================
-  BuildingLimit:
-    id: F110
-    type: money
-    aliases:
-      - "Building Limit"
-    targets:
-      acord_125_pdf: "BuildingLimit"
-
-  BPPLimit:
-    id: F111
-    type: money
-    aliases:
-      - "BPP Limit"
-    targets:
-      acord_125_pdf: "BPPLimit"
-
-  Deductible:
-    id: F112
-    type: money
-    aliases:
-      - "Property Deductible"
-    targets:
-      acord_125_pdf: "Deductible"
-
-  PriorLosses:
-    id: F200
-    type: object
-    cardinality: zero-to-many
-    structure:
-      date_of_loss: date
-      type: string
-      amount_paid: money
-      description: string
-    targets:
-      supplemental_pdf: "LossHistoryTable"
-
-  YearsInBusiness:
-    id: F300
-    type: integer
-    aliases:
-      - "Years in Business"
-    targets:
-      travelers_supp: "YearsInBusiness"
-
-  RoofAge:
-    id: F301
-    type: integer
-    aliases:
-      - "Roof Age"
-    targets:
-      chubb_supp: "RoofAge"
-
-  TotalInsuredValue:
-    id: F400
-    type: money
-    aliases:
-      - "Total Insured Value"
-      - "TIV"
-    targets:
-      s_ov_pdf: "TotalTIV"
-
-  AdditionalInsured:
-    id: F600
-    type: object
-    cardinality: zero-to-many
-    structure:
-      name: string
-      type: string
-      address: string
-    targets:
-      acord_126_xml:
-        path: "AdditionalInsured"
-        repeating: true
-
-  # ======================================================================
-  # 10. PRODUCER / SUBMISSION METADATA
-  # ======================================================================
-  ProducerName:
-    id: F500
-    type: string
-    aliases:
-      - "Producer"
-      - "Agent Name"
-      - "Broker"
-    targets:
-      acord_126_pdf: "Producer_FullName_A"
-
-  SubmissionDate:
-    id: F501
-    type: date
-    aliases:
-      - "Submission Date"
-    targets:
-      metadata: "submission_date"
-
-  Carrier:
-    id: F502
-    type: string
-    aliases:
-      - "Carrier"
-      - "Insurance Company"
-    targets:
-      acord_126_pdf: "Insurer_FullName_A"
+  additional_parties:
+    display_name: "Additional Parties"
+    description: "Additional insureds and producer information"
+    priority: 11
+    icon: "user-plus"
+    fields:
+      AdditionalInsured:
+        id: F600
+        type: object
+        cardinality: zero-to-many
+        structure:
+          name: string
+          type: string
+          address: string
+        targets:
+          acord_126_xml:
+            path: "AdditionalInsured"
+            repeating: true
+      ProducerName:
+        id: F500
+        type: string
+        aliases: ["Producer", "Agent Name", "Broker"]
+        targets:
+          acord_126_pdf: "Producer_FullName_A"

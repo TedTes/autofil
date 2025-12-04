@@ -28,6 +28,7 @@ from utils.versioned_template_loader import (
     TemplateConfig,
 )
 from .extractor_base import BaseExtractor
+from ..utils.semantic_section_builder import SemanticSectionBuilder
 
 
 
@@ -64,6 +65,8 @@ class ACORD125Extractor(BaseExtractor):
             # === 2. OCR Fallback ===
             self._extract_from_ocr(doc, entities, confidence=0.65)
 
+        semantic_sections = SemanticSectionBuilder.build(entities)
+
         # === 3. Build Canonical Output ===
         output = CanonicalOutput(
             job_id=doc.job_id,
@@ -73,7 +76,7 @@ class ACORD125Extractor(BaseExtractor):
                 extraction_method="fillable_pdf" if self.pdf_parser.is_fillable(doc.file_path) else "ocr",
                 extracted_at=datetime.utcnow()
             ),
-            entities=entities,
+            semantic_sections=semantic_sections,
             metadata=Metadata(
                 form_type_detected="ACORD_125",
                 line_of_business="Property",

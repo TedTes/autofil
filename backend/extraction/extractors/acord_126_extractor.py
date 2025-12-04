@@ -3,7 +3,13 @@ from typing import Dict, Any, List, Iterable, Optional
 import re
 from functools import lru_cache
 
-from ..core.schema import CanonicalOutput, EntityValue, SourceRef, Metadata, SourceInfo
+from ..core.schema import (
+    CanonicalOutput,
+    EntityValue,
+    SourceRef,
+    Metadata,
+    SourceInfo,
+)
 from ..core.document import Document
 from ..extractors.extractor_base import BaseExtractor
 from ..parsers.pdf_field_parser import PdfFieldParser
@@ -13,6 +19,7 @@ from utils.versioned_template_loader import (
     TemplateRecognizer,
     TemplateConfig,
 )
+from ..utils.semantic_section_builder import SemanticSectionBuilder
 
 
 class ACORD126Extractor(BaseExtractor):
@@ -47,6 +54,8 @@ class ACORD126Extractor(BaseExtractor):
 
         # (optional) future: OCR/tables to patch Classification if still missing
 
+        semantic_sections = SemanticSectionBuilder.build(entities)
+
         # 3) Build CanonicalOutput
         return CanonicalOutput(
             job_id=doc.job_id,
@@ -56,7 +65,7 @@ class ACORD126Extractor(BaseExtractor):
                 extraction_method="fillable_pdf_alias",
                 extracted_at=datetime.utcnow(),
             ),
-            entities=entities,
+            semantic_sections=semantic_sections,
             metadata=Metadata(
                 form_type_detected=self.FORM_TYPE,
                 line_of_business=self.LOB,

@@ -29,6 +29,42 @@ class FieldCatalogService:
     def _load(self) -> Dict[str, Any]:
         with open(self.template_path, "r", encoding="utf-8") as handle:
             data = yaml.safe_load(handle) or {}
-        if "fields" not in data:
-            data["fields"] = {}
+
+        semantic_groups = data.get("semantic_groups") or {}
+        data["semantic_groups"] = semantic_groups
+        data["fields"] = self._flatten_fields(semantic_groups)
+        data["group_order"] = self._build_group_order(semantic_groups)
         return data
+
+    def _flatten_fields(self, semantic_groups: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+        flat: Dict[str, Dict[str, Any]] = {}
+        for group_key, group in semantic_groups.items():
+            group_fields = group.get("fields") or {}
+            for field_name, meta in group_fields.items():
+                field_meta = meta or {}
+                normalized = dict(field_meta)
+                normalized.setdefault("id", field_meta.get("id", field_name))
+                normalized["semantic_group"] = {
+                    "key": group_key,
+                    "display_name": group.get("display_name"),
+                    "description": group.get("description"),
+                    "priority": group.get("priority"),
+                    "icon": group.get("icon"),
+                }
+                flat[field_name] = normalized
+        return flat
+
+    def _build_group_order(self, semantic_groups: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Flatten the semantic group metadata into a serializable dict the frontend
+        can use for rendering (preserves ordering + display info).
+        """
+        order: Dict[str, Any] = {}
+        for group_key, group in semantic_groups.items():
+            order[group_key] = {
+                "display_name": group.get("display_name"),
+                "description": group.get("description"),
+                "priority": group.get("priority", 0),
+                "icon": group.get("icon"),
+            }
+        return order

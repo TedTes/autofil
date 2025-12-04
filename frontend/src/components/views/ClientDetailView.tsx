@@ -342,10 +342,6 @@ function CompactFolderList({
   onDownloadFile,
   onToggleInput,
   onSelectAllInputs,
-  onToggleOutput,
-  onSelectAllOutputs,
-  onFillPackage,
-  onMergePackage,
   fillingPackageId,
   mergingPackageId,
   fillMessage,
@@ -363,10 +359,6 @@ function CompactFolderList({
   onDownloadFile?: (submissionId: string, filename: string) => void
   onToggleInput?: (submissionId: string, inputId: string) => void
   onSelectAllInputs?: (submissionId: string, inputIds: string[]) => void
-  onToggleOutput?: (submissionId: string, filename: string) => void
-  onSelectAllOutputs?: (submissionId: string, filenames: string[]) => void
-  onFillPackage?: (pkgId: string) => void
-  onMergePackage?: (pkgId: string) => void
   fillingPackageId?: string | null
   mergingPackageId?: string | null
   fillMessage?: string | null
@@ -825,69 +817,12 @@ const [isCreating, setIsCreating] = useState(false)
     }
   }
 
-  const handleMergeOutputsForPackage = async (packageId: string) => {
-    const pkg = packages.find((p) => p.submission_id === packageId)
-    if (!pkg) return
-
-    setMergeState({ loading: true, message: null, error: null, packageId })
-
-    try {
-      const selected = selectedOutputsByPackage[packageId] || []
-      // Implementation depends on  merge API
-      // const result = await mergeOutputs(packageId, { filenames: selected })
-      await refreshClient()
-      setMergeState({
-        loading: false,
-        message: `Merged ${selected.length > 0 ? selected.length : pkg.outputs?.length || 0} file(s)`,
-        error: null,
-        packageId,
-      })
-    } catch (err) {
-      setMergeState({
-        loading: false,
-        message: null,
-        error: err instanceof Error ? err.message : 'Merge failed',
-        packageId,
-      })
-    }
-  }
 
   useEffect(() => {
     setFillState((prev) => ({ ...prev, message: null, error: null }))
     setMergeState((prev) => ({ ...prev, message: null, error: null }))
     setOutputState((prev) => ({ ...prev, message: null, error: null }))
   }, [activePackageId])
-
-  const handleFillPackage = async (packageId: string) => {
-    const pkg = packages.find((p) => p.submission_id === packageId)
-    if (!pkg) return
-
-    setFillState({ loading: true, message: null, error: null, packageId })
-    try {
-      const selected = selectedInputsByPackage[packageId] || []
-      const report = await fillPdf(packageId, {
-        inputIds: selected,
-      })
-      await refreshClient()
-      const filledCount = report.written ?? 0
-      const selectionHint = selected.length
-        ? ` using ${selected.length} input${selected.length === 1 ? '' : 's'}`
-        : ''
-      setFillState({
-        loading: false,
-        message: `Filled ${filledCount} field${filledCount === 1 ? '' : 's'}${selectionHint}`,
-        error: null,
-        packageId,
-      })
-    } catch (err) {
-      setFillState({
-        loading: false,
-        message: null,
-        error: err instanceof Error ? err.message : 'Fill failed',
-        packageId,
-      })
-    }
-  }
 
   if (loading) {
     return (
@@ -1015,11 +950,7 @@ const [isCreating, setIsCreating] = useState(false)
           onViewFile={handleViewFile}
           onDownloadFile={handleDownloadOutput}
           onToggleInput={toggleInputSelection}
-          onSelectAllInputs={selectAllInputs}
-          onToggleOutput={toggleOutputSelection}
-          onSelectAllOutputs={selectAllOutputs}
-          onFillPackage={handleFillPackage}
-          onMergePackage={handleMergeOutputsForPackage}
+          onSelectAllInputs={selectAllInputs}  
           fillingPackageId={fillState.packageId}
           mergingPackageId={mergeState.packageId}
           fillMessage={fillState.message}
@@ -1066,18 +997,16 @@ const [isCreating, setIsCreating] = useState(false)
       </div>
       <GenerateOutputsModal
   isOpen={isGenerateModalOpen}
-  onClose={() => setIsGenerateModalOpen(false)}
+  onClose={() => {
+    setIsGenerateModalOpen(false)
+    refreshClient()
+  }}
   availableTemplates={availableTemplates}
   selectedTemplateIds={selectedTemplateIds}
   onToggleTemplate={toggleTemplateSelection}
   mergedData={mergedData}
-  onGenerate={async () => {
-    await handleGenerateOutputs()
-    // Modal will show success, user closes it
-  }}
-  isGenerating={isGeneratingOutputs}
-  generationResult={lastGenerationResult}
-  error={generateOutputsError}
+  submissionId={activePackageId || ''}
+  inputIds={selectedInputsByPackage[activePackageId || ''] || []}
 />
 
 <DeleteConfirmationModal

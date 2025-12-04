@@ -21,8 +21,11 @@ import type {
   GenerateOutputsRequest,
   GenerateOutputsResponse,
   TemplateLibraryResponse,
+  TemplateFillResult, 
+  MultipleFillResults,
   FieldCatalog
 } from '@/types'
+
 import type { MergedData } from '@/types/merged-data'
 
 
@@ -202,46 +205,234 @@ export async function getSubmission(
   }
 }
 
+
 /**
- * Fill PDF with data.
+ * Fill PDF with extracted data using specified template
+ * 
+ * @param id - Submission ID
+ * @param templateId - Template ID (required)
+ * @param options - Optional parameters
+ * @returns Complete fill report
  */
 export async function fillPdf(
   id: string,
+  templateId: string,
   options?: { inputIds?: string[] }
 ): Promise<FillReport> {
-  const payload =
-    options?.inputIds && options.inputIds.length > 0
-      ? { input_ids: options.inputIds }
-      : {}
-  const response = await api.post<ApiResponse<FillResponse>>(
-    `/submissions/${id}/fill`,
-    payload
-  )
-  if (!response.data.success) {
-    throw new Error(response.data.error || 'Fill failed')
-  }
-  const {
-    coverage,
-    errors,
-    skipped,
-    submission_id,
-    unmapped_fields,
-    warnings,
-    written,
-    output,
-  } = response.data.data!
-  return {
-    submission_id,
-    written,
-    skipped,
-    coverage,
-    unmapped_fields,
-    warnings,
-    errors,
-    output,
+  try {
+    // Validate required templateId
+    if (!templateId) {
+      throw new Error('templateId is required to fill a PDF')
+    }
+
+    // Build payload
+    const payload = {
+      templateId,
+      ...(options?.inputIds && options.inputIds.length > 0
+        ? { input_ids: options.inputIds }
+        : {})
+    }
+
+    // Call API
+    const response = await api.post(
+      `/submissions/${id}/fill`,
+      payload
+    )
+
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Fill failed')
+    }
+
+    const data = response.data.data!
+
+    // Parse response to FillReport format
+    return {
+      submission_id: data.submission_id || id,
+      success: data.success ?? true,
+      filled_fields: data.filled_fields || data.written || 0,
+      total_fields: data.total_fields || 0,
+      coverage: data.coverage || 0,
+      filled_field_details: data.filled_field_details,
+      unmapped_fields: data.unmapped_fields || [],
+      warnings: data.warnings || [],
+      errors: data.errors || [],
+      output: {
+        filename: data.output?.filename || '',
+        url: data.output?.url,
+        template_id: data.output?.template_id || templateId,
+        generated_at: data.output?.generated_at || new Date().toISOString(),
+        storage: data.output?.storage
+      }
+    }
+  } catch (error) {
+    // Enhanced error messages
+    if (error instanceof Error) {
+      if (error.message.includes('templateId')) {
+        throw new Error('Template selection is required')
+      }
+      if (error.message.includes('404')) {
+        throw new Error('Template not found')
+      }
+    }
+    handleApiError(error)
   }
 }
 
+/**
+ * Fill multiple templates sequentially for a single submission
+ * 
+ * Features:
+ * - Processes templates one at a time
+ * - Continues on error (doesn't stop at first failure)
+ * - Returns detailed results for each template
+ * - Provides aggregated metrics
+ * - Supports progress callbacks
+ * 
+ * @param submissionId - Submission identifier
+ * @param templates - Array of template objects with id and name
+ * @param options - Optional parameters
+ * @returns Aggregated results for all templates
+
+ */
+export async function fillMultipleTemplates(
+  submissionId: string,
+  templates: Array<{ id: string; name: string }>,
+  options?: {
+    inputIds?: string[]
+    onProgress?: (
+      currentIndex: number,
+      totalCount: number,
+      currentResult: TemplateFillResult
+    ) => void
+    onTemplateComplete?: (result: TemplateFillResult) => void
+    onTemplateStart?: (templateId: string, templateName: string) => void
+  }
+): Promise<MultipleFillResults> {
+  const results: TemplateFillResult[] = []
+  let totalFilledFields = 0
+  let totalWarnings = 0
+  let totalErrors = 0
+
+  // Process each template sequentially
+  for (let i = 0; i < templates.length; i++) {
+    const template = templates[i]
+    const startTime = new Date().toISOString()
+
+    // Initialize result object
+    const result: TemplateFillResult = {
+      template_id: template.id,
+      template_name: template.name,
+      status: 'in-progress',
+      started_at: startTime
+    }
+
+    // Notify start
+    options?.onTemplateStart?.(template.id, template.name)
+
+    try {
+      // Call fillPdf for this template
+      const report = await fillPdf(submissionId, template.id, {
+        inputIds: options?.inputIds
+      })
+
+      // Update result with success
+      result.status = 'success'
+      result.report = report
+      result.completed_at = new Date().toISOString()
+
+      // Aggregate metrics
+      totalFilledFields += report.filled_fields
+      totalWarnings += report.warnings.length
+      totalErrors += report.errors.length
+
+      // Auto-download if URL available
+      if (report.output.url) {
+        try {
+          await downloadFilledPdf(report.output.url, report.output.filename)
+        } catch (downloadError) {
+          console.warn(`Auto-download failed for ${template.name}:`, downloadError)
+          // Don't fail the entire operation if download fails
+        }
+      }
+
+    } catch (error) {
+      // Handle error but continue with next template
+      result.status = 'error'
+      result.completed_at = new Date().toISOString()
+      
+      if (error instanceof Error) {
+        result.error = error.message
+        
+        // Categorize error type
+        if (error.message.includes('network') || error.message.includes('fetch')) {
+          result.error_type = 'network'
+        } else if (error.message.includes('template') || error.message.includes('404')) {
+          result.error_type = 'validation'
+        } else if (error.message.includes('500') || error.message.includes('server')) {
+          result.error_type = 'server'
+        } else {
+          result.error_type = 'unknown'
+        }
+      } else {
+        result.error = 'An unexpected error occurred'
+        result.error_type = 'unknown'
+      }
+
+      console.error(`Fill failed for template ${template.name}:`, error)
+    }
+
+    // Store result
+    results.push(result)
+
+    // Notify progress
+    options?.onProgress?.(i + 1, templates.length, result)
+    
+    // Notify completion
+    options?.onTemplateComplete?.(result)
+  }
+
+  // Calculate success/failure counts
+  const successful = results.filter(r => r.status === 'success').length
+  const failed = results.filter(r => r.status === 'error').length
+
+  // Return aggregated results
+  return {
+    submission_id: submissionId,
+    total_templates: templates.length,
+    successful,
+    failed,
+    results,
+    total_filled_fields: totalFilledFields,
+    total_warnings: totalWarnings,
+    total_errors: totalErrors
+  }
+}
+
+/**
+ * Helper: Download filled PDF from URL
+ * Used internally by fillMultipleTemplates for auto-download
+ */
+async function downloadFilledPdf(url: string, filename: string): Promise<void> {
+  try {
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error('Download failed')
+    }
+
+    const blob = await response.blob()
+    const downloadUrl = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = downloadUrl
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(downloadUrl)
+  } catch (error) {
+    console.error('PDF download failed:', error)
+    throw error
+  }
+}
 /**
  * Fetch clients with optional submission summaries.
  */
@@ -293,7 +484,6 @@ export interface SubmissionTemplateSummary {
 
 export async function getSubmissionTemplates(): Promise<SubmissionTemplateSummary[]> {
   try {
-    console.log("hey doododood")
     const response = await api.get('/clients/templates')
     console.log(response)
     if (!response.data.success) {
@@ -448,16 +638,7 @@ export async function getFieldCatalog(options?: { refresh?: boolean }): Promise<
   }
 }
 
-/**
- * Fill multiple PDFs.
- */
-export async function fillMultiplePdfs(ids: string[]): Promise<FillReport[]> {
-  const results: FillReport[] = []
-  for (const id of ids) {
-    results.push(await fillPdf(id))
-  }
-  return results
-}
+
 
 /**
  * Download filled PDF.

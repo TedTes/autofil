@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import {
   X,
   FileText,
@@ -8,49 +8,49 @@ import {
   AlertCircle,
   Loader2,
   Download,
-  ExternalLink,
   Check,
 } from 'lucide-react'
 import type { 
   OutputTemplate, 
-  GenerateOutputsResponse, 
-  TemplateGenerationResult ,
   MergedData 
+} from '@/types'
+import type { 
+  TemplateFillResult, 
+  MultipleFillResults 
 } from '@/types'
 
 import { calculateTemplateReadiness } from '@/lib'
+import { fillMultipleTemplates } from '@/lib/api-client'
+import TemplateFillStatusCard from './TemplateFillStatusCard'
 
 interface GenerateOutputsModalProps {
   isOpen: boolean
   onClose: () => void
+  submissionId: string // NEW: Required for API calls
   availableTemplates: OutputTemplate[]
   selectedTemplateIds: string[]
   onToggleTemplate: (templateId: string) => void
   mergedData: MergedData | null
-  onGenerate: () => Promise<void>
-  isGenerating?: boolean
-  generationResult?: GenerateOutputsResponse | null
-  error?: string | null
+  inputIds?: string[] // NEW: Optional input file IDs
 }
 
-/**
- * GenerateOutputsModal
- * 
- * Modal for selecting templates and generating outputs.
- * Flow: Selection → Confirmation → Generation → Success
- */
 export default function GenerateOutputsModal({
   isOpen,
   onClose,
+  submissionId,
   availableTemplates,
   selectedTemplateIds,
   onToggleTemplate,
   mergedData,
-  onGenerate,
-  isGenerating = false,
-  generationResult = null,
-  error = null,
+  inputIds,
 }: GenerateOutputsModalProps) {
+  
+  // Generation state
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [templateResults, setTemplateResults] = useState<TemplateFillResult[]>([])
+  const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null)
+  const [batchResults, setBatchResults] = useState<MultipleFillResults | null>(null)
+  const [error, setError] = useState<string | null>(null)
   
   // Calculate availability for each template
   const templateAvailabilities = useMemo(() => {
@@ -73,163 +73,226 @@ export default function GenerateOutputsModal({
   const unavailableOnly = templateAvailabilities.filter(t => !t.canGenerate)
   const selectedCount = selectedTemplateIds.length
   
+  // Get selected templates
+  const selectedTemplates = availableTemplates
+    .filter(t => selectedTemplateIds.includes(t.id))
+    .map(t => ({ id: t.id, name: t.name }))
+  
+  // Handle generate click
+  const handleGenerate = async () => {
+    if (selectedTemplates.length === 0) return
+    
+    setIsGenerating(true)
+    setError(null)
+    setTemplateResults([])
+    setActiveTemplateId(null)
+    setBatchResults(null)
+    
+    try {
+      // Call sequential fill orchestrator
+      const results = await fillMultipleTemplates(
+        submissionId,
+        selectedTemplates,
+        {
+          inputIds,
+          onTemplateStart: (templateId, templateName) => {
+            setActiveTemplateId(templateId)
+          },
+          onProgress: (current, total, result) => {
+            // Update results array
+            setTemplateResults(prev => {
+              const index = prev.findIndex(r => r.template_id === result.template_id)
+              if (index >= 0) {
+                const updated = [...prev]
+                updated[index] = result
+                return updated
+              }
+              return [...prev, result]
+            })
+          },
+          onTemplateComplete: (result) => {
+            setActiveTemplateId(null)
+          }
+        }
+      )
+      
+      // Store final batch results
+      setBatchResults(results)
+      setIsGenerating(false)
+      
+    } catch (err) {
+      console.error('Generation failed:', err)
+      setError(err instanceof Error ? err.message : 'Failed to generate documents')
+      setIsGenerating(false)
+    }
+  }
+  
+  // Handle download
+  const handleDownload = async (url: string, filename: string) => {
+    try {
+      const response = await fetch(url)
+      if (!response.ok) throw new Error('Download failed')
+      
+      const blob = await response.blob()
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = downloadUrl
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(downloadUrl)
+    } catch (err) {
+      console.error('Download failed:', err)
+    }
+  }
+  
+  // Reset and close
+  const handleClose = () => {
+    if (!isGenerating) {
+      setTemplateResults([])
+      setBatchResults(null)
+      setError(null)
+      setActiveTemplateId(null)
+      onClose()
+    }
+  }
+  
   if (!isOpen) return null
   
-  // Show success state
-  if (generationResult && generationResult.success) {
+  // Show success/results state
+  if (batchResults && !isGenerating) {
     return (
-      <ModalOverlay onClose={onClose}>
-        <ModalContent onClose={onClose}>
-          <SuccessView result={generationResult} onClose={onClose} />
+      <ModalOverlay onClose={handleClose}>
+        <ModalContent onClose={handleClose}>
+          <ResultsView 
+            results={batchResults}
+            templateResults={templateResults}
+            onClose={handleClose}
+            onDownload={handleDownload}
+          />
         </ModalContent>
       </ModalOverlay>
     )
   }
   
-  // Show selection/generation state
+  // Show generation progress
+  if (isGenerating) {
+    return (
+      <ModalOverlay>
+        <ModalContent>
+          <TemplateProgressView
+            templateResults={templateResults}
+            activeTemplateId={activeTemplateId}
+            onDownload={handleDownload}
+          />
+        </ModalContent>
+      </ModalOverlay>
+    )
+  }
+  
+  // Show selection state
   return (
-    <ModalOverlay onClose={isGenerating ? undefined : onClose}>
-      <ModalContent onClose={isGenerating ? undefined : onClose}>
+    <ModalOverlay onClose={handleClose}>
+      <ModalContent onClose={handleClose}>
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-200">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold text-gray-900">
-                {isGenerating ? 'Generating Documents...' : 'Generate Documents'}
+                Generate Documents
               </h2>
               <p className="text-sm text-gray-500 mt-0.5">
-                {isGenerating
-                  ? 'Please wait while we create your filled PDFs'
-                  : `Select templates to fill with your merged data`}
+                Select templates to fill with your merged data
               </p>
             </div>
-            {!isGenerating && (
-              <button
-                onClick={onClose}
-                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            )}
+            <button
+              onClick={handleClose}
+              className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
         </div>
         
         {/* Body */}
         <div className="px-6 py-4 max-h-[65vh] overflow-y-auto">
-          {isGenerating ? (
-            <GeneratingView 
-              templates={availableTemplates.filter(t => selectedTemplateIds.includes(t.id))} 
-            />
-          ) : (
-            <>
-              {/* Available Templates */}
-              {availableOnly.length > 0 && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-gray-900">
-                      Available Templates
-                    </h3>
-                    <p className="text-xs text-gray-500">
-                      {selectedCount} of {availableOnly.length} selected
-                    </p>
-                  </div>
-                  
-                  {availableOnly.map(({ template, completeness, estimatedFields }) => (
-                    <TemplateSelectionCard
-                      key={template.id}
-                      template={template}
-                      completeness={completeness}
-                      estimatedFields={estimatedFields}
-                      isSelected={selectedTemplateIds.includes(template.id)}
-                      onToggle={() => onToggleTemplate(template.id)}
-                    />
-                  ))}
-                </div>
-              )}
+          {/* Error Display */}
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-red-900">Generation Failed</p>
+                <p className="text-sm text-red-700 mt-1">{error}</p>
+              </div>
+            </div>
+          )}
+          
+          {/* Available Templates */}
+          {availableOnly.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-gray-900">
+                  Available Templates
+                </h3>
+                <p className="text-xs text-gray-500">
+                  {selectedCount} of {availableOnly.length} selected
+                </p>
+              </div>
               
-              {/* Unavailable Templates */}
-              {unavailableOnly.length > 0 && (
-                <div className="mt-6 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 text-amber-600" />
-                    <h3 className="text-sm font-semibold text-gray-700">
-                      Insufficient Data
-                    </h3>
-                  </div>
-                  
-                  {unavailableOnly.map(({ template, completeness, estimatedFields, missingRequired }) => (
-                    <TemplateSelectionCard
-                      key={template.id}
-                      template={template}
-                      completeness={completeness}
-                      estimatedFields={estimatedFields}
-                      isSelected={false}
-                      onToggle={() => {}}
-                      disabled
-                      warning={`Missing: ${missingRequired.join(', ')}`}
-                    />
-                  ))}
-                </div>
-              )}
-              
-              {/* Empty State */}
-              {availableOnly.length === 0 && unavailableOnly.length === 0 && (
-                <div className="text-center py-12">
-                  <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                  <p className="text-sm font-medium text-gray-700">No Templates Available</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Upload and extract files to enable document generation
-                  </p>
-                </div>
-              )}
-              
-              {/* Error Display */}
-              {error && (
-                <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
-                  <div className="text-sm text-red-800">
-                    <p className="font-medium">Generation Failed</p>
-                    <p className="text-red-700 mt-0.5">{error}</p>
-                  </div>
-                </div>
-              )}
-              
-              {/* Info Banner */}
-              {selectedCount > 0 && (
-                <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
-                  <FileText className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
-                  <div className="text-xs text-blue-800">
-                    <p className="font-medium">Ready to generate {selectedCount} document{selectedCount !== 1 ? 's' : ''}</p>
-                    <p className="text-blue-700 mt-0.5">
-                      PDFs will be filled with your merged data and saved to the Outputs section.
-                    </p>
-                  </div>
-                </div>
-              )}
-            </>
+              {availableOnly.map(({ template, completeness, estimatedFields }) => (
+                <TemplateSelectionCard
+                  key={template.id}
+                  template={template}
+                  completeness={completeness}
+                  estimatedFields={estimatedFields}
+                  isSelected={selectedTemplateIds.includes(template.id)}
+                  onToggle={() => onToggleTemplate(template.id)}
+                />
+              ))}
+            </div>
+          )}
+          
+          {/* Unavailable Templates */}
+          {unavailableOnly.length > 0 && (
+            <div className="mt-6 space-y-3">
+              <h3 className="text-sm font-semibold text-gray-500">
+                Unavailable Templates
+              </h3>
+              {unavailableOnly.map(({ template, completeness, missingRequired }) => (
+                <TemplateSelectionCard
+                  key={template.id}
+                  template={template}
+                  completeness={completeness}
+                  estimatedFields={0}
+                  isSelected={false}
+                  onToggle={() => {}}
+                  disabled
+                  warning={`Missing: ${missingRequired.join(', ')}`}
+                />
+              ))}
+            </div>
           )}
         </div>
         
         {/* Footer */}
-        {!isGenerating && (
-          <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+          <button
+            onClick={handleClose}
+            className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors"
+          >
+            {selectedCount > 0 ? 'Cancel' : 'Close'}
+          </button>
+          {selectedCount > 0 && (
             <button
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors"
+              onClick={handleGenerate}
+              className="px-6 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm flex items-center gap-2"
             >
-              {selectedCount > 0 ? 'Cancel' : 'Close'}
+              <Download className="w-4 h-4" />
+              Generate {selectedCount} Document{selectedCount !== 1 ? 's' : ''}
             </button>
-            {selectedCount > 0 && (
-              <button
-                onClick={onGenerate}
-                className="px-6 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm flex items-center gap-2"
-              >
-                <Download className="w-4 h-4" />
-                Generate {selectedCount} Document{selectedCount !== 1 ? 's' : ''}
-              </button>
-            )}
-          </div>
-        )}
+          )}
+        </div>
       </ModalContent>
     </ModalOverlay>
   )
@@ -239,6 +302,102 @@ export default function GenerateOutputsModal({
 // SUB-COMPONENTS
 // ============================================================================
 
+function TemplateProgressView({
+  templateResults,
+  activeTemplateId,
+  onDownload,
+}: {
+  templateResults: TemplateFillResult[]
+  activeTemplateId: string | null
+  onDownload: (url: string, filename: string) => void
+}) {
+  return (
+    <>
+      <div className="px-6 py-4 border-b border-gray-200">
+        <h2 className="text-lg font-semibold text-gray-900">
+          Generating Documents...
+        </h2>
+        <p className="text-sm text-gray-500 mt-0.5">
+          Processing {templateResults.length} template{templateResults.length !== 1 ? 's' : ''}
+        </p>
+      </div>
+      
+      <div className="px-6 py-4 max-h-[65vh] overflow-y-auto space-y-3">
+        {templateResults.map(result => (
+          <TemplateFillStatusCard
+            key={result.template_id}
+            result={result}
+            isActive={result.template_id === activeTemplateId}
+            onDownload={onDownload}
+          />
+        ))}
+      </div>
+    </>
+  )
+}
+
+function ResultsView({
+  results,
+  templateResults,
+  onClose,
+  onDownload,
+}: {
+  results: MultipleFillResults
+  templateResults: TemplateFillResult[]
+  onClose: () => void
+  onDownload: (url: string, filename: string) => void
+}) {
+  return (
+    <>
+      <div className="px-6 py-4 border-b border-gray-200">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+              results.failed === 0 ? 'bg-green-100' : 'bg-yellow-100'
+            }`}>
+              <CheckCircle2 className={`w-6 h-6 ${
+                results.failed === 0 ? 'text-green-600' : 'text-yellow-600'
+              }`} />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                {results.failed === 0 ? 'All Documents Generated!' : 'Generation Complete'}
+              </h2>
+              <p className="text-sm text-gray-500">
+                {results.successful} successful, {results.failed} failed
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+      
+      <div className="px-6 py-4 max-h-[65vh] overflow-y-auto space-y-3">
+        {templateResults.map(result => (
+          <TemplateFillStatusCard
+            key={result.template_id}
+            result={result}
+            onDownload={onDownload}
+          />
+        ))}
+      </div>
+      
+      <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
+        <button
+          onClick={onClose}
+          className="px-6 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          Done
+        </button>
+      </div>
+    </>
+  )
+}
 function ModalOverlay({ 
   children, 
   onClose 
@@ -402,132 +561,6 @@ function GeneratingView({ templates }: { templates: OutputTemplate[] }) {
             </div>
           </div>
         ))}
-      </div>
-    </div>
-  )
-}
-
-function SuccessView({ 
-  result, 
-  onClose 
-}: { 
-  result: GenerateOutputsResponse
-  onClose: () => void 
-}) {
-  const successCount = result.results.filter(r => r.success).length
-  const failedCount = result.results.filter(r => !r.success).length
-  
-  return (
-    <>
-      <div className="px-6 py-4 border-b border-gray-200">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-              <CheckCircle2 className="w-6 h-6 text-green-600" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">
-                Documents Generated!
-              </h2>
-              <p className="text-sm text-gray-500">
-                {successCount} of {result.totalRequested} document{result.totalRequested !== 1 ? 's' : ''} created successfully
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-      </div>
-      
-      <div className="px-6 py-4 max-h-[60vh] overflow-y-auto">
-        <div className="space-y-3">
-          {result.results.map(item => (
-            <ResultCard key={item.templateId} result={item} />
-          ))}
-        </div>
-        
-        {failedCount > 0 && (
-          <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3">
-            <p className="text-sm font-medium text-red-800">
-              {failedCount} document{failedCount !== 1 ? 's' : ''} failed to generate
-            </p>
-            <p className="text-xs text-red-700 mt-1">
-              Check the results above for details
-            </p>
-          </div>
-        )}
-      </div>
-      
-      <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
-        <button
-          onClick={onClose}
-          className="px-6 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
-        >
-          Done
-        </button>
-      </div>
-    </>
-  )
-}
-
-function ResultCard({ result }: { result: TemplateGenerationResult }) {
-  return (
-    <div className={`border rounded-lg p-3 ${
-      result.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
-    }`}>
-      <div className="flex items-start justify-between">
-        <div className="flex items-start gap-2 flex-1">
-          {result.success ? (
-            <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
-          ) : (
-            <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
-          )}
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-gray-900">
-              {result.templateName}
-            </p>
-            {result.success ? (
-              <>
-                <p className="text-xs text-gray-600 mt-0.5">
-                  {result.fieldsFilled}/{result.totalFields} fields filled ({result.coverage.toFixed(1)}%)
-                </p>
-                {result.warnings && result.warnings.length > 0 && (
-                  <p className="text-xs text-amber-700 mt-1">
-                    ⚠️ {result.warnings.length} warning{result.warnings.length !== 1 ? 's' : ''}
-                  </p>
-                )}
-              </>
-            ) : (
-              <p className="text-xs text-red-700 mt-0.5">{result.error || 'Unknown error'}</p>
-            )}
-          </div>
-        </div>
-        
-        {result.success && result.fileUrl && (
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <a
-              href={result.fileUrl}
-              download={result.filename}
-              className="p-1.5 text-gray-600 hover:text-gray-900 rounded hover:bg-white transition-colors"
-              title="Download"
-            >
-              <Download className="w-4 h-4" />
-            </a>
-             <a
-              href={result.fileUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="p-1.5 text-gray-600 hover:text-gray-900 rounded hover:bg-white transition-colors"
-              title="Open"
-            >
-              <ExternalLink className="w-4 h-4" />
-            </a>
-          </div>
-        )}
       </div>
     </div>
   )

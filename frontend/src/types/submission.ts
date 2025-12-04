@@ -14,22 +14,6 @@ export interface CardSubmission {
   outputFilename?: string
 }
 
-export interface FillReport {
-  submission_id: string
-  written?:number | 0 
-  skipped? : number | 0 
-  coverage?:number;
-  unmapped_fields?:string[];
-  warnings?:string[];
-  errors?:string[];
-  output?: {
-    filename?: string
-    url?: string
-    template_id?: string
-    generated_at?: string
-  }
-}
-
 
 /**
  * Type definitions for Recent Submissions feature

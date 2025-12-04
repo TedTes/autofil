@@ -9,7 +9,6 @@ import { getSubmission,  downloadBlob,exportSingleSubmission,updateSubmissionDat
 import {transformFormFieldsToApi,fieldsToNestedObject} from "../../lib"
 import {ExportModal} from "../ExportModal";
 import { CleanDataDisplay } from '../extraction/CleanDataDisplay'
-import { FillModal } from '../FillModal'
 import { SovScheduleView, getSovScheduleData } from '../extraction/SovSchedule'
 
 interface FileDetailViewProps {
@@ -113,16 +112,7 @@ export function FileDetailView({
       }
     }
 
-const handleFillComplete = useCallback(async (report: FillReport) => {
-  console.log('Fill completed:', report)
-  setSuccessMessage(`✓ PDF filled successfully! ${report.written} fields written, ${report.skipped} skipped.`)
-  setTimeout(() => setSuccessMessage(null), 5000)
-  try {
-    await fetchSubmission({ silent: true })
-  } catch (err) {
-    console.error('Failed to reload submission after fill:', err)
-  }
-}, [fetchSubmission])
+
    // Provide actions to parent (MainLayout)
    useEffect(() => {
     if (onActionsReady) {
@@ -440,13 +430,7 @@ const handleFillComplete = useCallback(async (report: FillReport) => {
         filename={resolvedFilename}
         onExport={handleExport}
       />
-       <FillModal
-        isOpen={showFillModal}
-        onClose={() => setShowFillModal(false)}
-        submissionId={submissionId}
-        filename={resolvedFilename}
-        onFillComplete={handleFillComplete}
-      />
+
     </div>
   )
 }

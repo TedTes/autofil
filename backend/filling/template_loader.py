@@ -1,10 +1,14 @@
 import json
-from pathlib import Path
-from dataclasses import dataclass
-from typing import Dict, Any, Optional
 import os
+import tempfile
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, Any, Optional
+
 import requests
 import yaml
+
+from services.supabase_storage_service import SupabaseStorageService
 
 
 @dataclass
@@ -36,6 +40,8 @@ class TemplateLoader:
 
     local_template_dir = Path(__file__).resolve().parent.parent / "templates"
     cloud_base_url = os.environ.get("TEMPLATE_CLOUD_BASE_URL")  # optional
+    storage_service = SupabaseStorageService()
+    storage_templates_root = os.getenv("SUPABASE_TEMPLATES_PREFIX", "templates").strip("/")
 
     @classmethod
     def load(cls, template_id: str, version: str = "latest") -> Optional[TemplateConfig]:
@@ -48,14 +54,93 @@ class TemplateLoader:
 
         # Normalize: accept "acord_126_2016.pdf" or "acord_126_2016"
         template_id = Path(template_id).stem
-        # 1. Try cloud storage
+
+        # 1. Try Supabase storage if available
+        config = cls._load_from_storage(template_id, version)
+        if config:
+            return config
+
+        # 2. Try cloud URL override
         if cls.cloud_base_url:
             config = cls._load_from_cloud(template_id, version)
             if config:
                 return config
 
-        # 2. Fallback local
+        # 3. Fallback local
         return cls._load_from_local(template_id, version)
+
+    @classmethod
+    def _load_from_storage(cls, template_id: str, version: str) -> Optional[TemplateConfig]:
+        service = getattr(cls, "storage_service", None)
+        if not service or not getattr(service, "enabled", False):
+            return None
+
+        # Build candidate paths (version-specific first)
+        def build_paths(filename: str):
+            paths = []
+            if version and version != "latest":
+                paths.append(service.build_path(cls.storage_templates_root, template_id, version, filename))
+            paths.append(service.build_path(cls.storage_templates_root, template_id, filename))
+            return paths
+
+        json_text = None
+        raw_data: Dict[str, Any] = {}
+
+        for json_path in build_paths("template.json"):
+            json_text = service.download_text(json_path)
+            if json_text:
+                try:
+                    raw_data = json.loads(json_text)
+                    break
+                except json.JSONDecodeError:
+                    json_text = None
+
+        if not json_text:
+            return None
+
+        # Determine PDF source
+        pdf_bytes = None
+        pdf_storage_path = raw_data.get("pdf_storage_path")
+        pdf_candidates = []
+        if isinstance(pdf_storage_path, str):
+            pdf_candidates.append(pdf_storage_path)
+        pdf_candidates.extend(build_paths("template.pdf"))
+
+        for pdf_path in pdf_candidates:
+            if not pdf_path:
+                continue
+            pdf_bytes = service.download_file(pdf_path)
+            if pdf_bytes:
+                break
+
+        # Fallback to remote URL if provided
+        if not pdf_bytes and raw_data.get("pdf_url"):
+            try:
+                resp = requests.get(raw_data["pdf_url"], timeout=10)
+                if resp.ok:
+                    pdf_bytes = resp.content
+            except Exception:
+                pdf_bytes = None
+
+        pdf_local_path: Optional[Path] = None
+        if pdf_bytes:
+            cache_dir = Path(tempfile.gettempdir()) / "template_cache" / template_id
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            pdf_local_path = cache_dir / "template.pdf"
+            try:
+                with open(pdf_local_path, "wb") as handle:
+                    handle.write(pdf_bytes)
+            except Exception:
+                pdf_local_path = None
+
+        return TemplateConfig(
+            template_id=raw_data.get("template_id", template_id),
+            field_map=raw_data.get("field_map", {}),
+            repeaters=raw_data.get("repeaters", {}),
+            raw=raw_data,
+            pdf_url=str(pdf_local_path) if pdf_local_path else raw_data.get("pdf_url"),
+            version=raw_data.get("version", version),
+        )
 
     # ----------------------------------------------------------------------
     # CLOUD LOADER

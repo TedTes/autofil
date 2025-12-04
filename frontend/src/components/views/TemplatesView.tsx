@@ -54,7 +54,7 @@ export function TemplatesView({ onTemplateClick, onDownloadTemplate }: Templates
       description: tpl.description,
       expectedDocuments: tpl.expected_documents || [],
       suggestedForms: tpl.suggested_forms || [],
-      url: tpl.template_url,
+      url: tpl.templateUrl,
     }))
 
     if (!searchQuery.trim()) {

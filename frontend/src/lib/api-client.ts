@@ -479,13 +479,12 @@ export interface SubmissionTemplateSummary {
   expected_documents: string[]
   suggested_forms: string[]
   expected_fields: string[]
-  template_url?: string | null
+  templateUrl?: string | null
 }
 
 export async function getSubmissionTemplates(): Promise<SubmissionTemplateSummary[]> {
   try {
     const response = await api.get('/clients/templates')
-    console.log(response)
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to load templates')
     }
@@ -1503,6 +1502,7 @@ export async function getTemplateById(templateId: string): Promise<OutputTemplat
     const response = await api.get<{ template: OutputTemplate; timestamp: string }>(
       `/templates/${templateId}`
     )
+
     if (!response.data.template) {
       throw new Error('Template not found')
     }

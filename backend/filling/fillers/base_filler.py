@@ -4,6 +4,8 @@ import re
 from dataclasses import dataclass
 from typing import ClassVar, Dict, List, Optional, Type, Any
 
+from extraction.utils.semantic_section_builder import SemanticSectionBuilder
+
 
 @dataclass
 class FillReport:
@@ -107,7 +109,8 @@ class BaseFiller:
           ...
         }
         """
-        entities = canonical.get("entities", {}) or {}
+        sections = canonical.get("semantic_sections") or canonical.get("semanticSections") or []
+        entities = SemanticSectionBuilder.flatten(sections)
         flat: Dict[str, Any] = {}
 
         # --- 1) Generic scalar mapping: first value of each entity ----------

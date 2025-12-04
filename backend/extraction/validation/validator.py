@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import List, Dict
+from typing import List
 
 from ..core.schema import CanonicalOutput
 from ..extractors.mfc import MFC
+from ..utils.semantic_section_builder import SemanticSectionBuilder
 
 
 class ExtractionValidationError(Exception):
@@ -26,8 +27,9 @@ def validate(output: CanonicalOutput) -> CanonicalOutput:
         if output is None:
             raise ExtractionValidationError("Extractor returned None")
 
-        if not hasattr(output, "entities") or not isinstance(output.entities, dict):
-            raise ExtractionValidationError("output.entities must be a dict")
+        sections = getattr(output, "semantic_sections", None)
+        if sections is None:
+            raise ExtractionValidationError("output.semantic_sections must be provided")
 
         if not hasattr(output, "metadata"):
             raise ExtractionValidationError("output.metadata is missing")
@@ -38,6 +40,8 @@ def validate(output: CanonicalOutput) -> CanonicalOutput:
 
         # ---------- 2. Required fields (soft: warnings, not errors) ----------
         # If form known, check against MFC.required_for(form)
+        entity_map = SemanticSectionBuilder.flatten(sections)
+
         if form:
             try:
                 required: List[str] = MFC.required_for(form)
@@ -47,7 +51,7 @@ def validate(output: CanonicalOutput) -> CanonicalOutput:
             missing: List[str] = []
 
             for fid in required:
-                values = output.entities.get(fid, [])
+                values = entity_map.get(fid, [])
 
                 if fid == "Classification":
                     # At least one row with some real data
@@ -72,7 +76,7 @@ def validate(output: CanonicalOutput) -> CanonicalOutput:
                 )
 
         # ---------- 3. Low-confidence values (always warnings) ----------
-        for fid, vals in (output.entities or {}).items():
+        for fid, vals in entity_map.items():
             low = [
                 v for v in vals
                 if getattr(v, "confidence", 1.0) < 0.70
@@ -84,7 +88,7 @@ def validate(output: CanonicalOutput) -> CanonicalOutput:
 
         # ---------- 4. Truly fatal conditions ----------
         # No entities at all → nothing to work with.
-        if not output.entities:
+        if not entity_map:
             errors.append("No entities extracted")
 
         if errors:

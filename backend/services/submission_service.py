@@ -21,6 +21,7 @@ from extraction.core.document import Document, DocumentType
 from extraction.core.readers.pdf_reader import PdfReader
 from extraction.extractors import extractor_registry
 from extraction.extractors.mfc import MFC
+from extraction.utils.semantic_section_builder import SemanticSectionBuilder
 from filling.fillers import *  # noqa: F401,F403 - ensure fillers register themselves
 from filling.fillers.base_filler import BaseFiller
 from lib.submission_templates import TEMPLATES, get_template
@@ -564,7 +565,6 @@ class SubmissionService:
                 FolderService().add_submission(folder_id, submission_id, filename)
             if progress_callback:
                 progress_callback(submission_id, 100, "ready", "Extraction complete")
-
             return {
                 "submission_id": submission_id,
                 "data": json_data,
@@ -1036,37 +1036,40 @@ class SubmissionService:
     def _dedupe_entity_values(self, data: Dict[str, Any]) -> Dict[str, Any]:
         if not isinstance(data, dict):
             return data
-        entities = data.get("entities")
-        if not isinstance(entities, dict):
+
+        entity_map = self._semantic_sections_to_entity_map(data)
+        if not entity_map:
             return data
-        for key, values in entities.items():
+
+        deduped_map: Dict[str, List[Dict[str, Any]]] = {}
+        for key, values in entity_map.items():
             if not isinstance(values, list):
                 continue
-            seen = set()
-            deduped = []
+
+            seen: set[str] = set()
+            deduped: List[Dict[str, Any]] = []
+
             for entry in values:
-                if isinstance(entry, dict):
-                    normalized = self._normalize_entity_value(entry.get("value"))
-                else:
-                    normalized = self._normalize_entity_value(entry)
+                payload = entry if isinstance(entry, dict) else {"value": entry}
+                normalized = self._normalize_entity_value(payload.get("value"))
                 if normalized in seen:
                     continue
                 seen.add(normalized)
-                deduped.append(entry)
-            def entry_conf(entry: Any) -> float:
-                if isinstance(entry, dict):
-                    try:
-                        return float(entry.get("confidence") or 0)
-                    except Exception:
-                        return 0.0
-                return 0.0
+                deduped.append(payload)
 
-            deduped.sort(key=entry_conf, reverse=True)
+            deduped.sort(
+                key=lambda entry: float(entry.get("confidence") or 0),
+                reverse=True,
+            )
+
             if not self._field_allows_multiple(key) and deduped:
-                entities[key] = [deduped[0]]
-            else:
-                entities[key] = deduped
-        return data
+                deduped_map[key] = [deduped[0]]
+            elif deduped:
+                deduped_map[key] = deduped
+
+        updated = copy.deepcopy(data)
+        updated["semantic_sections"] = self._entity_map_to_semantic_sections(deduped_map)
+        return updated
 
     def _is_noise_value(self, v: Any) -> bool:
         """
@@ -1084,65 +1087,52 @@ class SubmissionService:
 
     def _clean_entities(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Minimize entities for downstream merge/LLM:
+        Minimize semantic sections for downstream merge/LLM:
         - Drop fields not in MFC
         - Drop N/A / empty values
-        - Preserve existing structure: entities[field] = [entries...]
         """
         if not isinstance(data, dict):
             return data
 
-        entities = data.get("entities")
-        if not isinstance(entities, dict):
+        entity_map = self._semantic_sections_to_entity_map(data)
+        if not entity_map:
             return data
 
-        cleaned_entities: Dict[str, List[Any]] = {}
+        cleaned_entities: Dict[str, List[Dict[str, Any]]] = {}
 
-        for field_id, values in entities.items():
-            # Only keep fields known by the Master Field Catalog
+        for field_id, values in entity_map.items():
             field_meta = MFC.field(field_id)
             if not field_meta:
                 continue
 
+            cleaned_list: List[Dict[str, Any]] = []
             if not isinstance(values, list):
                 values = [values]
 
-            cleaned_list = []
             for entry in values:
-                # Handle both dict and raw values (just in case)
-                if isinstance(entry, dict):
-                    value = entry.get("value")
-                    if self._is_noise_value(value):
-                        continue
-                    cleaned_list.append(entry)
-                else:
-                    # primitive value
-                    if self._is_noise_value(entry):
-                        continue
-                    cleaned_list.append(entry)
+                payload = entry if isinstance(entry, dict) else {"value": entry}
+                if self._is_noise_value(payload.get("value")):
+                    continue
+                cleaned_list.append(payload)
 
             if cleaned_list:
                 cleaned_entities[field_id] = cleaned_list
 
         data = copy.deepcopy(data)
-        data["entities"] = cleaned_entities
-
-        # Optional: also build a simple canonical "flattened" view for LLM/UI
-        canonical: Dict[str, Any] = {}
-        for field_id, values in cleaned_entities.items():
-            if not values:
-                continue
-            if self._field_allows_multiple(field_id):
-                canonical[field_id] = [
-                    (v.get("value") if isinstance(v, dict) else v)
-                    for v in values
-                ]
-            else:
-                v0 = values[0]
-                canonical[field_id] = v0.get("value") if isinstance(v0, dict) else v0
-
-        data["canonical"] = canonical
+        data["semantic_sections"] = self._entity_map_to_semantic_sections(cleaned_entities)
         return data
+
+    def _semantic_sections_to_entity_map(self, data: Dict[str, Any]) -> Dict[str, List[Any]]:
+        sections = data.get("semantic_sections") or data.get("semanticSections") or []
+        return SemanticSectionBuilder.flatten(sections)
+
+    def _entity_map_to_semantic_sections(
+        self, entity_map: Dict[str, List[Dict[str, Any]]]
+    ) -> List[Dict[str, Any]]:
+        if not entity_map:
+            return []
+        sections = SemanticSectionBuilder.build(entity_map)
+        return [section.model_dump(mode="json") for section in sections]
 
 
     def _debug_compare_hashes(self, data1: Any, data2: Any) -> bool:
@@ -1160,6 +1150,13 @@ class SubmissionService:
         if not base:
             return copy.deepcopy(incoming)
         for key, value in incoming.items():
+            if key == "semantic_sections":
+                existing_map = self._semantic_sections_to_entity_map({"semantic_sections": base.get(key, [])})
+                incoming_map = self._semantic_sections_to_entity_map({"semantic_sections": value})
+                for field_id, vals in incoming_map.items():
+                    existing_map.setdefault(field_id, []).extend(vals)
+                base[key] = self._entity_map_to_semantic_sections(existing_map)
+                continue
             if key in base and isinstance(base[key], dict) and isinstance(value, dict):
                 self._deep_merge_dict(base[key], value)
             elif key in base and isinstance(base[key], list) and isinstance(value, list):

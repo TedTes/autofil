@@ -23,8 +23,27 @@ class EntityValue(BaseModel):
     """One extracted value (may appear many times for the same field)."""
     value: Any
     confidence: float = Field(ge=0.0, le=1.0)
-    source: SourceRef
-    tags: List[str] = Field(default_factory=list)   # e.g. ["primary", "dba"]
+    # source: SourceRef
+    # tags: List[str] = Field(default_factory=list)   # e.g. ["primary", "dba"]
+
+
+class SemanticField(BaseModel):
+    """Field definition + values grouped under a semantic section."""
+    id: str
+    # label: Optional[str] = None
+    # type: Optional[str] = None
+    # aliases: List[str] = Field(default_factory=list)
+    values: List[EntityValue] = Field(default_factory=list)
+
+
+class SemanticSection(BaseModel):
+    """Logical grouping of related canonical fields."""
+    key: str
+    display_name: Optional[str] = None
+    description: Optional[str] = None
+    priority: int = 0
+    icon: Optional[str] = None
+    fields: List[SemanticField] = Field(default_factory=list)
 
 
 class Metadata(BaseModel):
@@ -46,18 +65,18 @@ class CanonicalOutput(BaseModel):
     """The only output format an extractor may return."""
     job_id: str
     source: SourceInfo
-    entities: Dict[str, List[EntityValue]] = Field(default_factory=dict)
+    semantic_sections: List[SemanticSection] = Field(default_factory=list)
     metadata: Metadata = Field(default_factory=Metadata)
     raw: Optional[Dict[str, Any]] = None
 
-    @validator("entities")
-    def ensure_entityvalue_lists(cls, v):
-        for field, vals in v.items():
-            if vals and not all(isinstance(ev, EntityValue) for ev in vals):
-                raise ValueError(
-                    f"Field '{field}' must contain only EntityValue objects"
-                )
-        return v
+    def to_entity_map(self) -> Dict[str, List[EntityValue]]:
+        """Flatten semantic sections into the legacy entity map shape."""
+        mapping: Dict[str, List[EntityValue]] = {}
+        for section in self.semantic_sections:
+            for field in section.fields:
+                mapping[field.id] = field.values
+        return mapping
+
     def to_dict(self):
         """Make it compatible with all other extractors"""
         return self.model_dump(mode="json")

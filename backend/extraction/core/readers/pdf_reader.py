@@ -67,7 +67,7 @@ class PdfReader(BaseReader):
             if fields:
                 document.structure.has_fillable_fields = True
                 document.metadata['field_count'] = len(fields)
-                document.metadata['field_names'] = list(fields.keys())[:50]  # First 50 field names
+                document.metadata['field_names'] = list(fields.keys())[:50]  # TODO:First 50 field names
             
             # Extract text from all pages
             text_content = []

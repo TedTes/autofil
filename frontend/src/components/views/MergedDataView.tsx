@@ -1,21 +1,7 @@
 'use client'
 
-import React ,{useState} from 'react'
-import {
-  Building2,
-  MapPin,
-  TrendingUp,
-  AlertTriangle,
-  Shield,
-  FileText,
-  Edit2,
-} from 'lucide-react'
-import type {
-  MergedData,
-  Location,
-  LossSummary,
-  LossRecord
-} from '@/types'
+import React from 'react'
+import type { MergedData, SemanticField, SemanticSection } from '@/types'
 
 interface MergedDataViewProps {
   mergedData: MergedData | null
@@ -23,439 +9,29 @@ interface MergedDataViewProps {
   isLoading?: boolean
 }
 
-/**
- * MergedDataView Component
- * 
- * Displays the canonical merged dataset in a clean, sectioned layout.
- * Shows data extracted and normalized from multiple uploaded documents.
- */
-
 export default function MergedDataView({
   mergedData,
-  onEditField,
   isLoading = false,
 }: MergedDataViewProps) {
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  
-  const handleGenerateClick = () => {
-    setIsModalOpen(true)
-  }
-  
-  const handleModalClose = () => {
-    setIsModalOpen(false)
-  }
-  
-
-  
   if (isLoading) {
     return <LoadingSkeleton />
   }
 
-  if (!mergedData) {
+  const sections = mergedData?.semantic_sections ?? []
+  if (sections.length === 0) {
     return <EmptyState />
   }
-  
 
+  const orderedSections = [...sections].sort(
+    (a, b) => (a.priority ?? 0) - (b.priority ?? 0)
+  )
 
   return (
     <div className="h-full flex flex-col bg-gray-50">
-      {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto px-3 sm:px-4 md:px-6 py-4 sm:py-5 md:py-6">
-        <div className="max-w-6xl mx-auto space-y-4 sm:space-y-5 md:space-y-6">
-          {/* Insured Information Section */}
-          <Section
-            title="Insured Information"
-            icon={Building2}
-            qualityScore={mergedData.metadata.dataQuality.insured}
-          >
-            <FieldGrid>
-              <Field
-                label="Business Name"
-                value={mergedData.insured.businessName}
-                onEdit={onEditField ? (v) => onEditField('insured.businessName', v) : undefined}
-              />
-              <Field
-                label="DBA"
-                value={mergedData.insured.dba}
-                onEdit={onEditField ? (v) => onEditField('insured.dba', v) : undefined}
-              />
-              <Field
-                label="Entity Type"
-                value={mergedData.insured.entityType}
-                onEdit={onEditField ? (v) => onEditField('insured.entityType', v) : undefined}
-              />
-              <Field
-                label="Year Established"
-                value={mergedData.insured.yearEstablished}
-                type="number"
-                onEdit={onEditField ? (v) => onEditField('insured.yearEstablished', v) : undefined}
-              />
-              <Field
-                label="Federal ID"
-                value={mergedData.insured.federalId}
-                onEdit={onEditField ? (v) => onEditField('insured.federalId', v) : undefined}
-              />
-              <Field
-                label="Website"
-                value={mergedData.insured.website}
-                onEdit={onEditField ? (v) => onEditField('insured.website', v) : undefined}
-              />
-            </FieldGrid>
-
-            <Subsection title="Mailing Address">
-              <FieldGrid>
-                <Field
-                  label="Street"
-                  value={mergedData.insured.mailingAddress.street}
-                  onEdit={onEditField ? (v) => onEditField('insured.mailingAddress.street', v) : undefined}
-                />
-                <Field
-                  label="City"
-                  value={mergedData.insured.mailingAddress.city}
-                  onEdit={onEditField ? (v) => onEditField('insured.mailingAddress.city', v) : undefined}
-                />
-                <Field
-                  label="State"
-                  value={mergedData.insured.mailingAddress.state}
-                  onEdit={onEditField ? (v) => onEditField('insured.mailingAddress.state', v) : undefined}
-                />
-                <Field
-                  label="ZIP"
-                  value={mergedData.insured.mailingAddress.zip}
-                  onEdit={onEditField ? (v) => onEditField('insured.mailingAddress.zip', v) : undefined}
-                />
-              </FieldGrid>
-            </Subsection>
-
-            <Subsection title="Primary Contact">
-              <FieldGrid>
-                <Field
-                  label="Name"
-                  value={mergedData.insured.primaryContact.name}
-                  onEdit={onEditField ? (v) => onEditField('insured.primaryContact.name', v) : undefined}
-                />
-                <Field
-                  label="Email"
-                  value={mergedData.insured.primaryContact.email}
-                  onEdit={onEditField ? (v) => onEditField('insured.primaryContact.email', v) : undefined}
-                />
-                <Field
-                  label="Phone"
-                  value={mergedData.insured.primaryContact.phone}
-                  onEdit={onEditField ? (v) => onEditField('insured.primaryContact.phone', v) : undefined}
-                />
-              </FieldGrid>
-            </Subsection>
-          </Section>
-
-          {/* Locations Section */}
-          {mergedData.locations && mergedData.locations.length > 0 && (
-            <Section
-              title="Locations"
-              icon={MapPin}
-              qualityScore={mergedData.metadata.dataQuality.locations}
-            >
-              {mergedData.locations.map((location, idx) => (
-                <LocationCard key={idx} location={location} index={idx} />
-              ))}
-            </Section>
-          )}
-
-          {/* Exposures Section */}
-          {mergedData.exposures && (
-            <Section
-              title="Business Exposures"
-              icon={TrendingUp}
-              qualityScore={mergedData.metadata.dataQuality.exposures}
-            >
-              <FieldGrid>
-                <Field label="Annual Revenue" value={mergedData.exposures.annualRevenue} type="currency" />
-                <Field label="Annual Payroll" value={mergedData.exposures.annualPayroll} type="currency" />
-                <Field label="Number of Employees" value={mergedData.exposures.numberOfEmployees} type="number" />
-                <Field label="Years in Business" value={mergedData.exposures.yearsInBusiness} type="number" />
-              </FieldGrid>
-            </Section>
-          )}
-
-          {/* Loss History Section */}
-          {mergedData.lossHistory && mergedData.lossHistory.losses && mergedData.lossHistory.losses.length > 0 && (
-            <Section
-              title="Loss History"
-              icon={AlertTriangle}
-              qualityScore={mergedData.metadata.dataQuality.lossHistory}
-            >
-              <LossSummaryCard summary={mergedData.lossHistory.summary} />
-              <div className="mt-4 space-y-3">
-                {mergedData.lossHistory.losses.map((loss, idx) => (
-                  <LossRecordCard key={idx} loss={loss} />
-                ))}
-              </div>
-            </Section>
-          )}
-
-          {/* Coverage Section */}
-          {mergedData.coverage && (
-            <Section
-              title="Coverage Information"
-              icon={Shield}
-              qualityScore={mergedData.metadata.dataQuality.coverage}
-            >
-              <FieldGrid>
-                <Field label="Current Carrier" value={mergedData.coverage.currentCarrier} />
-                <Field label="Policy Number" value={mergedData.coverage.policyNumber} />
-                <Field label="Effective Date" value={mergedData.coverage.effectiveDate} />
-                <Field label="Expiration Date" value={mergedData.coverage.expirationDate} />
-                <Field label="Premium" value={mergedData.coverage.premium} type="currency" />
-              </FieldGrid>
-            </Section>
-          )}
-
-        
-        </div>
-      </div>
-    
-    </div>
-  )
-}
-
-// ============================================================================
-// HELPER COMPONENTS
-// ============================================================================
-
-function Section({
-  title,
-  icon: Icon,
-  qualityScore,
-  children,
-}: {
-  title: string
-  icon: React.ComponentType<{ className?: string }>
-  qualityScore?: {
-    score: number
-    fieldsPopulated: number
-    fieldsTotal: number
-    missingCriticalFields?: string[]
-  }
-  children: React.ReactNode
-}) {
-  return (
-    <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-      <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Icon className="w-5 h-5 text-gray-600" />
-          <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-        </div>
-        {qualityScore && (
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            <span>
-              {qualityScore.fieldsPopulated}/{qualityScore.fieldsTotal} fields
-            </span>
-            <div
-              className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                qualityScore.score >= 80
-                  ? 'bg-green-100 text-green-700'
-                  : qualityScore.score >= 60
-                  ? 'bg-amber-100 text-amber-700'
-                  : 'bg-red-100 text-red-700'
-              }`}
-            >
-              {qualityScore.score}%
-            </div>
-          </div>
-        )}
-      </div>
-      <div className="p-4">{children}</div>
-    </div>
-  )
-}
-
-function Subsection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="mt-4 pt-4 border-t border-gray-100">
-      <h4 className="text-xs font-semibold text-gray-700 mb-3">{title}</h4>
-      {children}
-    </div>
-  )
-}
-
-function FieldGrid({ children }: { children: React.ReactNode }) {
-  return <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">{children}</div>
-}
-
-function Field({
-  label,
-  value,
-  type = 'text',
-  onEdit,
-}: {
-  label: string
-  value: string | number | boolean | undefined
-  type?: 'text' | 'number' | 'currency' | 'date' | 'email' | 'phone'
-  onEdit?: (value: string | number | boolean) => void
-}) {
-  const formattedValue = formatFieldValue(value, type)
-  const isEmpty = value === undefined || value === null || value === ''
-
-  return (
-    <div className="group">
-      <label className="block text-xs font-medium text-gray-700 mb-1">{label}</label>
-      <div className="relative">
-        <div
-          className={`px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm ${
-            isEmpty ? 'text-gray-400 italic' : 'text-gray-900'
-          }`}
-        >
-          {isEmpty ? 'Not provided' : formattedValue}
-        </div>
-        {onEdit && !isEmpty && (
-          <button
-            onClick={() => {
-              // Edit stub - will be implemented later
-              console.log('Edit field:', label)
-            }}
-            className="absolute right-2 top-2 p-1 text-gray-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"
-            title="Edit field"
-          >
-            <Edit2 className="w-3.5 h-3.5" />
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function LocationCard({
-  location,
-  index,
-  onEditField,
-}: {
-  location: Location
-  index: number
-  onEditField?: (path: string, value: string | number | boolean) => void
-}) {
-  return (
-    <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h4 className="text-sm font-semibold text-gray-900">
-          Location {location.locationNumber || index + 1}
-        </h4>
-        {location.sprinklered && (
-          <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
-            Sprinklered
-          </span>
-        )}
-      </div>
-      <FieldGrid>
-        <Field label="Street" value={location.address.street} />
-        <Field label="City" value={location.address.city} />
-        <Field label="State" value={location.address.state} />
-        <Field label="ZIP" value={location.address.zip} />
-        <Field label="Building Value" value={location.buildingValue} type="currency" />
-        <Field label="Contents Value" value={location.contentValue} type="currency" />
-        <Field label="Occupancy" value={location.occupancy} />
-        <Field label="Construction Type" value={location.constructionType} />
-        <Field label="Year Built" value={location.yearBuilt} type="number" />
-        <Field label="Square Footage" value={location.squareFootage} type="number" />
-      </FieldGrid>
-    </div>
-  )
-}
-
-function LossSummaryCard({ summary }: { summary: LossSummary }) {
-  return (
-    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div>
-          <p className="text-xs text-amber-700 font-medium">Total Claims</p>
-          <p className="text-xl font-bold text-amber-900 mt-1">{summary.totalClaims}</p>
-        </div>
-        <div>
-          <p className="text-xs text-amber-700 font-medium">Total Paid</p>
-          <p className="text-xl font-bold text-amber-900 mt-1">
-            {formatCurrency(summary.totalPaid)}
-          </p>
-        </div>
-        <div>
-          <p className="text-xs text-amber-700 font-medium">Total Incurred</p>
-          <p className="text-xl font-bold text-amber-900 mt-1">
-            {formatCurrency(summary.totalIncurred)}
-          </p>
-        </div>
-        <div>
-          <p className="text-xs text-amber-700 font-medium">Avg Claim Size</p>
-          <p className="text-xl font-bold text-amber-900 mt-1">
-            {formatCurrency(summary.averageClaimSize)}
-          </p>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function LossRecordCard({ loss }: { loss: LossRecord }) {
-  return (
-    <div className="bg-white border border-gray-200 rounded-lg p-3 hover:border-gray-300 transition-colors">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-medium text-gray-900">{loss.lossType}</span>
-            <span
-              className={`px-1.5 py-0.5 text-xs rounded-full ${
-                loss.claimStatus === 'Closed'
-                  ? 'bg-gray-100 text-gray-700'
-                  : loss.claimStatus === 'Open'
-                  ? 'bg-amber-100 text-amber-700'
-                  : 'bg-blue-100 text-blue-700'
-              }`}
-            >
-              {loss.claimStatus}
-            </span>
-          </div>
-          <p className="text-xs text-gray-600 mb-2">{loss.description}</p>
-          <div className="flex items-center gap-4 text-xs text-gray-500">
-            <span>{new Date(loss.date).toLocaleDateString()}</span>
-            {loss.claimNumber && <span>Claim #{loss.claimNumber}</span>}
-          </div>
-        </div>
-        <div className="text-left sm:text-right sm:ml-4 flex-shrink-0">
-          <p className="text-sm font-semibold text-gray-900">
-            {formatCurrency(loss.totalIncurred || loss.paidAmount || 0)}
-          </p>
-          <p className="text-xs text-gray-500 mt-0.5">Incurred</p>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-
-
-function EmptySection({ message }: { message: string }) {
-  return (
-    <div className="text-center py-8">
-      <FileText className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-      <p className="text-sm text-gray-500">{message}</p>
-    </div>
-  )
-}
-
-function LoadingSkeleton() {
-  return (
-    <div className="h-full flex flex-col bg-gray-50 animate-pulse">
-      <div className="flex-shrink-0 bg-white border-b border-gray-200 px-6 py-4">
-        <div className="h-6 bg-gray-200 rounded w-1/3 mb-2" />
-        <div className="h-4 bg-gray-200 rounded w-1/4" />
-      </div>
-      <div className="flex-1 overflow-y-auto px-6 py-6">
-        <div className="max-w-6xl mx-auto space-y-6">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="bg-white rounded-lg border border-gray-200 p-4">
-              <div className="h-5 bg-gray-200 rounded w-1/4 mb-4" />
-              <div className="space-y-3">
-                <div className="h-4 bg-gray-200 rounded w-full" />
-                <div className="h-4 bg-gray-200 rounded w-3/4" />
-              </div>
-            </div>
+      <div className="flex-1 overflow-y-auto px-4 py-6">
+        <div className="max-w-5xl mx-auto space-y-6">
+          {orderedSections.map((section) => (
+            <SemanticSectionCard key={section.key} section={section} />
           ))}
         </div>
       </div>
@@ -463,57 +39,129 @@ function LoadingSkeleton() {
   )
 }
 
-function EmptyState() {
+function SemanticSectionCard({ section }: { section: SemanticSection }) {
+  const visibleFields = (section.fields || []).filter(
+    (field) => field.values && field.values.length > 0
+  )
+  if (visibleFields.length === 0) {
+    return null
+  }
+
   return (
-    <div className="h-full flex items-center justify-center bg-gray-50">
-      <div className="text-center">
-        <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-        <h3 className="text-sm font-medium text-gray-900 mb-1">No merged data available</h3>
-        <p className="text-xs text-gray-500">
-          Upload and extract files to see merged submission data
-        </p>
+    <section className="bg-white shadow-sm border border-gray-200 rounded-2xl p-5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">
+            {section.displayName ?? humanize(section.key)}
+          </h2>
+          {section.description && (
+            <p className="text-sm text-gray-500">{section.description}</p>
+          )}
+        </div>
+        {section.icon && (
+          <span className="text-xs font-medium uppercase tracking-wide text-gray-400">
+            {section.icon}
+          </span>
+        )}
+      </div>
+      <div className="mt-4 space-y-3">
+        {visibleFields.map((field) => (
+          <SemanticFieldRow key={field.id} field={field} />
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function SemanticFieldRow({ field }: { field: SemanticField }) {
+  const primaryValue = field.values?.[0]
+  if (!primaryValue) return null
+
+  return (
+    <div className="border border-gray-100 rounded-xl px-4 py-3 bg-gray-50/60">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-gray-800">
+            {field.label ?? humanize(field.id)}
+          </p>
+          {field.aliases && field.aliases.length > 0 && (
+            <p className="text-xs text-gray-500">
+              Also known as: {field.aliases.join(', ')}
+            </p>
+          )}
+        </div>
+        <div className="text-sm text-gray-900 sm:text-right w-full sm:w-1/2">
+          {renderValue(primaryValue.value)}
+          {primaryValue.confidence !== undefined && (
+            <p className="text-xs text-gray-500 mt-1">
+              Confidence: {Math.round(primaryValue.confidence * 100)}%
+            </p>
+          )}
+        </div>
       </div>
     </div>
   )
 }
 
-// ============================================================================
-// UTILITY FUNCTIONS
-// ============================================================================
-
-function formatFieldValue(
-  value: string | number | boolean | undefined,
-  type: string
-): string {
-  if (value === undefined || value === null) return ''
-
-  switch (type) {
-    case 'currency':
-      return formatCurrency(Number(value))
-    case 'date':
-      return new Date(value as string).toLocaleDateString()
-    case 'phone':
-      return formatPhone(String(value))
-    case 'number':
-      return Number(value).toLocaleString()
-    default:
-      return String(value)
+function renderValue(value: unknown): React.ReactNode {
+  if (value === null || value === undefined || value === '') {
+    return <span className="text-gray-400">—</span>
   }
+  if (typeof value === 'boolean') {
+    return value ? 'Yes' : 'No'
+  }
+  if (Array.isArray(value)) {
+    return value.length ? value.join(', ') : <span className="text-gray-400">—</span>
+  }
+  if (typeof value === 'object') {
+    return (
+      <div className="bg-white border border-gray-100 rounded-lg px-3 py-2 text-left text-xs text-gray-800 space-y-1">
+        {Object.entries(value as Record<string, unknown>).map(([key, val]) => (
+          <div key={key} className="flex justify-between gap-3">
+            <span className="font-medium text-gray-600">{humanize(key)}</span>
+            <span className="text-gray-900">{formatPrimitive(val)}</span>
+          </div>
+        ))}
+      </div>
+    )
+  }
+  return formatPrimitive(value)
 }
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value)
+function formatPrimitive(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '—'
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value.toLocaleString() : String(value)
+  }
+  return String(value)
 }
 
-function formatPhone(value: string): string {
-  const cleaned = value.replace(/\D/g, '')
-  if (cleaned.length === 10) {
-    return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`
-  }
+function humanize(value: string): string {
   return value
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (match) => match.toUpperCase())
+}
+
+function LoadingSkeleton() {
+  return (
+    <div className="h-full flex items-center justify-center">
+      <div className="text-sm text-gray-500 animate-pulse">Loading merged data…</div>
+    </div>
+  )
+}
+
+function EmptyState() {
+  return (
+    <div className="h-full flex items-center justify-center">
+      <div className="text-center space-y-2">
+        <p className="text-base font-medium text-gray-800">No merged data available</p>
+        <p className="text-sm text-gray-500">
+          Upload and process documents to view semantic sections.
+        </p>
+      </div>
+    </div>
+  )
 }

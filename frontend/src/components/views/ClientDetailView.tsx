@@ -338,6 +338,7 @@ function CompactFolderList({
   selectedInputsByPackage,
   selectedOutputsByPackage,
   onToggle,
+  onAddFiles,
   onViewFile,
   onDownloadFile,
   onToggleInput,
@@ -366,14 +367,42 @@ function CompactFolderList({
   onDeleteInput?: (submissionId: string, inputId: string, event: React.MouseEvent) => void
   onDeleteOutput?: (submissionId: string, outputId: string, event: React.MouseEvent) => void
   onDeleteSubmission?: (submissionId: string, event: React.MouseEvent) => void
+  onAddFiles?: (pkg: ClientSubmissionPackage) => void
 }) {
+  const [isSmallScreen, setIsSmallScreen] = useState(false)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    const media = window.matchMedia('(max-width: 1023px)')
+    const applyMatch = (source: MediaQueryList | MediaQueryListEvent) => {
+      setIsSmallScreen(source.matches)
+    }
+    applyMatch(media)
+    const listener = (event: MediaQueryListEvent) => applyMatch(event)
+    media.addEventListener('change', listener)
+    return () => media.removeEventListener('change', listener)
+  }, [])
+
+  useEffect(() => {
+    if (!isSmallScreen) {
+      setExpandedId(activeId ?? null)
+    }
+  }, [activeId, isSmallScreen])
+
+  useEffect(() => {
+    if (isSmallScreen) {
+      setExpandedId(null)
+    }
+  }, [isSmallScreen])
+
   const renderPackageCard = (pkg: ClientSubmissionPackage) => {
-    const isOpen = activeId === pkg.submission_id
-    const badge = statusBadgeFor(pkg.status)
-    const Icon = badge.icon
+    const isActive = activeId === pkg.submission_id
+    const isExpanded = isSmallScreen ? expandedId === pkg.submission_id : isActive
 
     const totalInputs = pkg.inputs?.length || 0
-    const totalOutputs = pkg.outputs?.length || 0
     const selectedInputFilenames = selectedInputsByPackage[pkg.submission_id] || []
     const selectedOutputFilenames = selectedOutputsByPackage[pkg.submission_id] || []
 
@@ -385,7 +414,7 @@ function CompactFolderList({
       <div
         key={pkg.submission_id}
         className={`border rounded-lg overflow-hidden transition-all ${
-          isOpen
+          isActive
             ? 'bg-blue-50 border-blue-200 shadow-sm'
             : 'bg-white border-gray-200 hover:border-gray-300'
         }`}
@@ -393,33 +422,48 @@ function CompactFolderList({
 {/* Package Header - WITH DELETE BUTTON */}
 <div className="flex items-center gap-1">
   <button
-    onClick={() => onToggle?.(pkg)}
+    onClick={() => {
+      if (isSmallScreen) {
+        const wasOpen = expandedId === pkg.submission_id
+        const next = wasOpen ? null : pkg.submission_id
+        setExpandedId(next)
+        if (!wasOpen) {
+          onToggle?.(pkg)
+        }
+      } else {
+        onToggle?.(pkg)
+      }
+    }}
     className="flex-1 px-3 py-2.5 flex items-center gap-2 text-left hover:bg-gray-50 transition-colors"
   >
     <div className="flex-shrink-0">
-      {isOpen ? (
+      {isExpanded ? (
         <ChevronDown className="w-4 h-4 text-gray-600" />
       ) : (
         <ChevronRight className="w-4 h-4 text-gray-600" />
       )}
     </div>
-    <Folder className={`w-4 h-4 flex-shrink-0 ${isOpen ? 'text-blue-600' : 'text-gray-500'}`} />
+    <Folder className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-blue-600' : 'text-gray-500'}`} />
     <div className="flex-1 min-w-0">
-      <p className="text-sm font-medium text-gray-900 truncate">{pkg.name}</p>
+      <p className={`text-sm font-medium truncate ${isActive ? 'text-blue-900' : 'text-gray-900'}`}>
+        {pkg.name}
+      </p>
     </div>
     {/* Stats badges */}
-    <div className="flex items-center gap-1.5">
-      {totalInputs > 0 && (
-        <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
-          {totalInputs} in
+    <div className="flex items-center gap-1.5 text-xs text-gray-600">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          onAddFiles?.(pkg)
+        }}
+        className="flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 font-semibold rounded hover:bg-blue-200 transition-colors"
+      >
+        <Plus className="w-3.5 h-3.5" />
+        <span>
+          {totalInputs} file{totalInputs === 1 ? '' : 's'}
         </span>
-      )}
-      {totalOutputs > 0 && (
-        <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded">
-          {totalOutputs} out
-        </span>
-      )}
-      <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${badge.color}`} />
+      </button>
     </div>
   </button>
   
@@ -434,7 +478,7 @@ function CompactFolderList({
 </div>
 
         {/* Package Content */}
-        {isOpen && (
+        {isExpanded && (
           <div className="border-t border-gray-200 bg-white">
             {/* Messages */}
             {hasMessage && (
@@ -942,11 +986,13 @@ const [isCreating, setIsCreating] = useState(false)
           activeId={activePackageId}
           selectedInputsByPackage={selectedInputsByPackage}
           selectedOutputsByPackage={selectedOutputsByPackage}
-          onToggle={(pkg) =>
-            setActivePackageId((prev) =>
-              prev === pkg.submission_id ? null : pkg.submission_id
-            )
-          }
+          onToggle={(pkg) => {
+            setActivePackageId(pkg.submission_id)
+          }}
+          onAddFiles={(pkg) => {
+            setActivePackageId(pkg.submission_id)
+            triggerFileUpload()
+          }}
           onViewFile={handleViewFile}
           onDownloadFile={handleDownloadOutput}
           onToggleInput={toggleInputSelection}
@@ -966,8 +1012,8 @@ const [isCreating, setIsCreating] = useState(false)
 </div>
 
           {/* RIGHT PANEL: File Upload */}
-          <div className="lg:col-span-2 h-full flex flex-col">
-  <div className="h-full max-h-[calc(100vh-140px)]">
+          <div className="lg:col-span-2 h-full flex flex-col min-h-0">
+  <div className="h-full flex-1 min-h-0">
     <UploadOrMergedDataPanel
       hasExtractedFiles={hasExtractedFiles}
       mergedData={mergedData}

@@ -47,8 +47,8 @@ export default function MergedDataView({
 
   return (
     <div className="h-full flex flex-col bg-gray-50">
-      <div className="flex-1 overflow-y-auto px-4 py-6">
-        <div className="max-w-5xl mx-auto space-y-4">
+      <div className="flex-1 overflow-y-auto px-3 py-4 sm:px-5 sm:py-6 lg:px-6">
+        <div className="max-w-5xl mx-auto space-y-3 sm:space-y-4">
           {orderedSections.map((section) => (
             <SemanticSectionCard
               key={section.key}
@@ -83,7 +83,7 @@ function SemanticSectionCard({ section, isCollapsed, onToggle }: SemanticSection
       {/* Header - Clickable */}
       <button
         onClick={onToggle}
-        className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+        className="w-full px-4 py-3 sm:px-5 sm:py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between hover:bg-gray-50 transition-colors text-left"
       >
         <div className="flex items-center gap-3">
           {isCollapsed ? (
@@ -92,7 +92,7 @@ function SemanticSectionCard({ section, isCollapsed, onToggle }: SemanticSection
             <ChevronDown className="w-5 h-5 text-gray-400 flex-shrink-0" />
           )}
           <div className="text-left">
-            <h2 className="text-lg font-semibold text-gray-900">
+            <h2 className="text-base sm:text-lg font-semibold text-gray-900">
               {section.displayName ?? humanize(section.key)}
             </h2>
             {section.description && !isCollapsed && (
@@ -100,7 +100,7 @@ function SemanticSectionCard({ section, isCollapsed, onToggle }: SemanticSection
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 sm:justify-end">
           <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
             {visibleFields.length} {visibleFields.length === 1 ? 'field' : 'fields'}
           </span>
@@ -109,7 +109,7 @@ function SemanticSectionCard({ section, isCollapsed, onToggle }: SemanticSection
 
       {/* Content - Collapsible */}
       {!isCollapsed && (
-        <div className="px-5 pb-4 space-y-2">
+        <div className="px-4 sm:px-5 pb-4 space-y-3">
           {visibleFields.map((field) => (
             <SemanticFieldRow key={field.id} field={field} />
           ))}
@@ -149,7 +149,7 @@ function SemanticFieldRow({ field }: { field: SemanticField }) {
         {hasMultipleValues && (
           <button
             onClick={() => setShowAllValues(!showAllValues)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 bg-blue-50 px-2 py-1 rounded"
+            className="absolute right-1 sm:right-2 top-1/2 -translate-y-1/2 text-[10px] sm:text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 bg-blue-50 px-1.5 sm:px-2 py-1 rounded"
           >
             <Info className="w-3 h-3" />
             {field.values.length} values

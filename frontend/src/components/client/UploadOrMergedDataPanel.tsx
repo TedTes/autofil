@@ -85,10 +85,10 @@ export default function UploadOrMergedDataPanel({
 
   // Show merged data view with "Add More Files" button
   return (
-    <div className="h-full flex flex-col bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden relative">
+    <div className="h-full flex flex-col min-h-0 bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden relative">
       {/* Header with "Add More Files" button */}
       {/* Merged Data View */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-y-auto min-h-0">
         <MergedDataView
           mergedData={mergedData}
           onEditField={onEditMergedField}

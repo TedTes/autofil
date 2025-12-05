@@ -413,7 +413,7 @@ function CompactFolderList({
     return (
       <div
         key={pkg.submission_id}
-        className={`border rounded-lg overflow-hidden transition-all ${
+        className={`border rounded-lg overflow-hidden transition-all duration-200 ${
           isActive
             ? 'bg-blue-50 border-blue-200 shadow-sm'
             : 'bg-white border-gray-200 hover:border-gray-300'
@@ -490,98 +490,106 @@ function CompactFolderList({
     <Trash2 className="w-4 h-4" />
   </button>
 </div>
-
+<div
+   className={`
+    transition-all duration-400 ease-in-out overflow-hidden
+    ${isExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}
+  `}
+  style={{
+    transitionProperty: 'max-height, opacity',
+    transitionDuration: isExpanded ? '400ms' : '250ms', 
+    transitionTimingFunction: isExpanded 
+      ? 'cubic-bezier(0.4, 0, 0.2, 1)'
+      : 'cubic-bezier(0.4, 0, 1, 1)'  
+  }}
+>
         {/* Package Content */}
-        {isExpanded && (
-          <div className="border-t border-gray-200 bg-white">
-            {/* Messages */}
-            {hasMessage && (
-              <div className="px-3 py-2 bg-blue-50 border-b border-blue-100">
-                <p className="text-xs text-blue-700">{fillMessage || mergeMessage}</p>
-              </div>
-            )}
-
+     
+           <div className="animate-slideDown">
             {/* Inputs Section */}
             {pkg.inputs && pkg.inputs.length > 0 && (
-              <div className="px-3 py-2 border-b border-gray-100">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-xs font-semibold text-gray-700">Inputs</h4>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      const inputIds =
-                        pkg.inputs
-                          ?.map(input => input.input_id || input.input_id || input.filename)
-                          .filter((val): val is string => Boolean(val)) || []
-                      onSelectAllInputs?.(pkg.submission_id, inputIds)
-                    }}
-                    className="text-xs text-blue-600 hover:text-blue-700 font-medium hover:underline"
-                  >
-                    {selectedInputFilenames.length === totalInputs ? 'Deselect All' : 'Select All'}
-                  </button>
-                </div>
+  <div className="px-3 py-3 border-t border-gray-100">
+    {/* Header with title and select all button */}
+    <div className="flex items-center justify-between mb-2">
+      <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+        Input Files ({pkg.inputs.length})
+      </h4>
+      <button
+        onClick={(e) => {
+          e.stopPropagation()
+          const inputIds =
+            pkg.inputs
+              ?.map(input => input.input_id || input.filename)
+              .filter((val): val is string => Boolean(val)) || []
+          onSelectAllInputs?.(pkg.submission_id, inputIds)
+        }}
+        className="text-xs text-blue-600 hover:text-blue-700 font-medium hover:underline"
+      >
+        {selectedInputFilenames.length === totalInputs ? 'Deselect All' : 'Select All'}
+      </button>
+    </div>
 
-                {/* Vertical list of input files */}
-                <div className="space-y-1.5">
-                  {pkg.inputs.map((input) => {
-                    const inputKey = input.input_id || input.input_id || input.filename
-                    const isSelected = inputKey ? selectedInputFilenames.includes(inputKey) : false
-                    return (
-                      <div
-                        key={inputKey || input.filename}
-                        className={`flex items-center gap-2 p-2 rounded-lg border transition-colors ${
-                          isSelected
-                            ? 'bg-blue-50 border-blue-200'
-                            : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-                        }`}
-                      >
-                        <label 
-                          className="flex items-center cursor-pointer"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            disabled={!inputKey}
-                            onChange={() => {
-                              if (!inputKey) return
-                              onToggleInput?.(pkg.submission_id, inputKey)
-                            }}
-                            className="w-3.5 h-3.5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
-                          />
-                        </label>
-                        <div className="flex-shrink-0">{getFileIcon(input.filename)}</div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                          onViewFile?.(pkg.submission_id, input.filename, input.input_id)
-                          }}
-                          className="flex-1 text-left min-w-0 hover:bg-transparent"
-                        >
-                          <p className="text-xs font-medium text-gray-900 truncate">
-                            {input.filename}
-                          </p>
-                          {input.confidence !== undefined && (
-                            <p className="text-xs text-gray-500 mt-0.5">
-                              Confidence: {Math.round(input.confidence * 100)}%
-                            </p>
-                          )}
-                        </button>
-                        {inputKey && (
-        <button
-          onClick={(e) => onDeleteInput?.(pkg.submission_id, inputKey, e)}
-          className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors flex-shrink-0"
-          title="Delete file"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      )}
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
+    {/* Vertical list of input files */}
+    <div className="space-y-1.5">
+      {pkg.inputs.map((input) => {
+        const inputKey = input.input_id || input.filename
+        const isSelected = inputKey ? selectedInputFilenames.includes(inputKey) : false
+        return (
+          <div
+            key={inputKey || input.filename}
+            className={`flex items-center gap-2 p-2 rounded-lg border transition-colors ${
+              isSelected
+                ? 'bg-blue-50 border-blue-200'
+                : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+            }`}
+          >
+            <label 
+              className="flex items-center cursor-pointer"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <input
+                type="checkbox"
+                checked={isSelected}
+                disabled={!inputKey}
+                onChange={() => {
+                  if (!inputKey) return
+                  onToggleInput?.(pkg.submission_id, inputKey)
+                }}
+                className="w-3.5 h-3.5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+              />
+            </label>
+            <div className="flex-shrink-0">{getFileIcon(input.filename)}</div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onViewFile?.(pkg.submission_id, input.filename, input.input_id)
+              }}
+              className="flex-1 text-left min-w-0 hover:bg-transparent"
+            >
+              <p className="text-xs font-medium text-gray-900 truncate">
+                {input.filename}
+              </p>
+              {input.confidence !== undefined && (
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Confidence: {Math.round(input.confidence * 100)}%
+                </p>
+              )}
+            </button>
+            {inputKey && (
+              <button
+                onClick={(e) => onDeleteInput?.(pkg.submission_id, inputKey, e)}
+                className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors flex-shrink-0"
+                title="Delete file"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
             )}
+          </div>
+        )
+      })}
+    </div>
+  </div>
+)}
 
        
 {(!pkg.inputs || pkg.inputs.length === 0) &&
@@ -592,7 +600,8 @@ function CompactFolderList({
     </div>
   )}
           </div>
-        )}
+ 
+      </div>
       </div>
     )
   }

@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react'
 import { Users, Plus, Search, Building2, Calendar, AlertCircle, Loader2, FileStack, ChevronRight } from 'lucide-react'
 import type { Client } from '@/types'
 import { getClients, createClient as createClientApi } from '@/lib/api-client'
+import { CreateSubmissionModal } from '@/components'
 
 interface ClientsViewProps {
   onClientClick?: (clientId: string, clientName: string) => void
@@ -17,6 +18,7 @@ export function ClientsView({ onClientClick, onCreateClient }: ClientsViewProps)
   const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
   const [isCreating, setIsCreating] = useState(false)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
 
   // Load clients on mount
   useEffect(() => {
@@ -51,21 +53,30 @@ export function ClientsView({ onClientClick, onCreateClient }: ClientsViewProps)
     )
   }, [searchQuery, clients])
 
-  const handleCreateClient = async () => {
+  const handleCreateClient = () => {
     if (isCreating) return
-    const name = prompt('Enter client name')
-    if (!name) return
+    setIsCreateModalOpen(true)
+  }
 
+  const handleConfirmCreateClient = async (name: string) => {
+    if (isCreating) return
     try {
       setIsCreating(true)
       const newClient = await createClientApi(name)
       setClients((prev) => [newClient, ...prev])
       setFilteredClients((prev) => [newClient, ...prev])
       onCreateClient?.()
+      setIsCreateModalOpen(false)
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to create client')
     } finally {
       setIsCreating(false)
+    }
+  }
+
+  const handleCloseCreateClientModal = () => {
+    if (!isCreating) {
+      setIsCreateModalOpen(false)
     }
   }
 
@@ -77,7 +88,7 @@ export function ClientsView({ onClientClick, onCreateClient }: ClientsViewProps)
   const hasClients = filteredClients.length > 0
 
   return (
-    <div className="h-full flex flex-col bg-gray-50">
+      <div className="h-full flex flex-col bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-4 py-4 sm:px-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -240,6 +251,21 @@ export function ClientsView({ onClientClick, onCreateClient }: ClientsViewProps)
         </div>
         )}
       </div>
-    </div>
+      <CreateSubmissionModal
+        isOpen={isCreateModalOpen}
+        onClose={handleCloseCreateClientModal}
+        onConfirm={handleConfirmCreateClient}
+        isCreating={isCreating}
+        existingNames={clients.map((client) => client.name)}
+        title="New Client"
+        confirmButtonText="Create Client"
+        inputLabel="Client Name"
+        icon={
+          <div className="p-2 bg-blue-100 rounded-lg">
+            <Users className="w-5 h-5 text-blue-600" />
+          </div>
+        }
+      />
+</div>
   )
 }

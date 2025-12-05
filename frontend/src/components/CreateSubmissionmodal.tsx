@@ -7,7 +7,7 @@
 
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, ReactNode } from 'react'
 import { FolderPlus, X, AlertCircle } from 'lucide-react'
 
 interface CreateSubmissionModalProps {
@@ -17,6 +17,10 @@ interface CreateSubmissionModalProps {
   suggestedName?: string
   isCreating?: boolean
   existingNames?: string[]
+  title?: string
+  confirmButtonText?: string
+  inputLabel?: string
+  icon?: ReactNode
 }
 
 export function CreateSubmissionModal({
@@ -26,6 +30,10 @@ export function CreateSubmissionModal({
   suggestedName = '',
   isCreating = false,
   existingNames = [],
+  title = 'New Submission',
+  confirmButtonText = 'Create Submission',
+  inputLabel = 'Submission Name',
+  icon,
 }: CreateSubmissionModalProps) {
   const [submissionName, setSubmissionName] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -111,6 +119,14 @@ export function CreateSubmissionModal({
 
   if (!isOpen) return null
 
+  const headerIcon =
+    icon ??
+    (
+      <div className="p-2 bg-blue-100 rounded-lg">
+        <FolderPlus className="w-5 h-5 text-blue-600" />
+      </div>
+    )
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
@@ -121,10 +137,8 @@ export function CreateSubmissionModal({
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <FolderPlus className="w-5 h-5 text-blue-600" />
-            </div>
-            <h2 className="text-lg font-semibold text-gray-900">New Submission</h2>
+            {headerIcon}
+            <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
           </div>
           {!isCreating && (
             <button
@@ -141,7 +155,7 @@ export function CreateSubmissionModal({
         <form onSubmit={handleSubmit}>
           <div className="p-6">
             <label htmlFor="submission-name" className="block text-sm font-medium text-gray-700 mb-2">
-              Submission Name
+              {inputLabel}
             </label>
             
             <input
@@ -195,7 +209,7 @@ export function CreateSubmissionModal({
               ) : (
                 <>
                   <FolderPlus className="w-4 h-4" />
-                  <span>Create Submission</span>
+                  <span>{confirmButtonText}</span>
                 </>
               )}
             </button>

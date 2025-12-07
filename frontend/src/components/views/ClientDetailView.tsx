@@ -386,21 +386,32 @@ function CompactFolderList({
     return () => media.removeEventListener('change', listener)
   }, [])
 
-  useEffect(() => {
-    if (!isSmallScreen) {
-      setExpandedId(activeId ?? null)
-    }
-  }, [activeId, isSmallScreen])
-
+  const lastActiveRef = useRef<string | null>(null)
   useEffect(() => {
     if (isSmallScreen) {
       setExpandedId(null)
+      lastActiveRef.current = null
     }
   }, [isSmallScreen])
 
+  useEffect(() => {
+    if (isSmallScreen) {
+      return
+    }
+    if (!activeId) {
+      setExpandedId(null)
+      lastActiveRef.current = null
+      return
+    }
+    if (lastActiveRef.current !== activeId) {
+      setExpandedId(activeId)
+      lastActiveRef.current = activeId
+    }
+  }, [activeId, isSmallScreen])
+
   const renderPackageCard = (pkg: ClientSubmissionPackage) => {
     const isActive = activeId === pkg.submission_id
-    const isExpanded = isSmallScreen ? expandedId === pkg.submission_id : isActive
+    const isExpanded = expandedId === pkg.submission_id
 
     const totalInputs = pkg.inputs?.length || 0
     const selectedInputFilenames = selectedInputsByPackage[pkg.submission_id] || []
@@ -432,7 +443,12 @@ function CompactFolderList({
           onToggle?.(pkg)
         }
       } else {
-        onToggle?.(pkg)
+        const wasOpen = expandedId === pkg.submission_id
+        const next = wasOpen ? null : pkg.submission_id
+        setExpandedId(next)
+        if (!wasOpen) {
+          onToggle?.(pkg)
+        }
       }
     }}
     className="flex items-center gap-2 px-3 py-2.5 text-left hover:bg-gray-50 transition-colors rounded-l-lg"

@@ -36,6 +36,7 @@ export interface Client {
   export interface ClientSubmissionPackage {
     submission_id: string
     client_id: string
+    client_name?: string
     name: string
     status: string
     uploaded_at: string

@@ -10,7 +10,7 @@ import type { SubmissionListItem, SubmissionStats } from '@/types'
 import { listSubmissions, getSubmissionStats } from '@/lib/api-client'
 
 interface SubmissionsViewProps {
-  onSubmissionClick?: (submissionId: string) => void
+  onSubmissionClick?: (submission: SubmissionListItem) => void
 }
 
 export function SubmissionsView({ onSubmissionClick }: SubmissionsViewProps) {
@@ -150,12 +150,19 @@ export function SubmissionsView({ onSubmissionClick }: SubmissionsViewProps) {
             {/* Mobile Card List */}
             <div className="md:hidden divide-y divide-gray-100">
               {filteredSubmissions.map((sub) => (
-                <div key={sub.submission_id} className="p-4 space-y-3">
+                <button
+                  key={sub.submission_id}
+                  onClick={() => onSubmissionClick?.(sub)}
+                  className="w-full text-left p-4 space-y-3 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
                   <div>
                     <p className="text-sm font-semibold text-gray-900 truncate">
-                      {sub.filename || 'Untitled'}
+                      {sub.filename || 'Untitled Submission'}
                     </p>
                     <p className="text-xs text-gray-500 break-all">{sub.submission_id}</p>
+                    {sub.client_name && (
+                      <p className="text-xs text-gray-400 mt-0.5">Client: {sub.client_name}</p>
+                    )}
                   </div>
                   <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
                     <StatusBadge status={sub.status} />
@@ -168,14 +175,11 @@ export function SubmissionsView({ onSubmissionClick }: SubmissionsViewProps) {
                       </>
                     )}
                   </div>
-                  <button
-                    onClick={() => onSubmissionClick?.(sub.submission_id)}
-                    className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50"
-                  >
+                  <div className="flex items-center gap-2 text-xs font-medium text-blue-600">
                     <Eye className="w-4 h-4" />
-                    View Details
-                  </button>
-                </div>
+                    Tap to open submission
+                  </div>
+                </button>
               ))}
             </div>
 
@@ -196,15 +200,31 @@ export function SubmissionsView({ onSubmissionClick }: SubmissionsViewProps) {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Confidence
                     </th>
-                    <th className="px-6 py-3"></th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {filteredSubmissions.map((sub) => (
-                    <tr key={sub.submission_id} className="hover:bg-gray-50">
+                    <tr
+                      key={sub.submission_id}
+                      onClick={() => onSubmissionClick?.(sub)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          onSubmissionClick?.(sub)
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      className="hover:bg-blue-50 focus-within:bg-blue-50 cursor-pointer transition-colors"
+                    >
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{sub.filename || 'Untitled'}</div>
-                        <div className="text-sm text-gray-500">{sub.submission_id}</div>
+                        <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                          <FileStack className="w-4 h-4 text-gray-400" />
+                          <span>{sub.filename || 'Untitled Submission'}</span>
+                        </div>
+                        <div className="text-xs text-gray-500 truncate mt-0.5">
+                          {sub.client_name ? `${sub.client_name} • ` : ''}{sub.submission_id}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <StatusBadge status={sub.status} />
@@ -214,15 +234,6 @@ export function SubmissionsView({ onSubmissionClick }: SubmissionsViewProps) {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {sub.confidence != null ? `${(sub.confidence * 100).toFixed(0)}%` : '—'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button
-                          onClick={() => onSubmissionClick?.(sub.submission_id)}
-                          className="text-blue-600 hover:text-blue-900 inline-flex items-center gap-1"
-                        >
-                          <Eye className="w-4 h-4" />
-                          View
-                        </button>
                       </td>
                     </tr>
                   ))}

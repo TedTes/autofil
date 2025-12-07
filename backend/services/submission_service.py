@@ -638,6 +638,39 @@ class SubmissionService:
             'data': payload_data,
             'input_id': selected_input_id,
         }
+
+    def get_submission_package(self, submission_id: str) -> Optional[Dict[str, Any]]:
+        """Return submission package metadata with inputs/outputs."""
+        metadata = self.get_submission_metadata(submission_id)
+        if not metadata:
+            return None
+
+        inputs = metadata.get('inputs') or []
+        outputs = metadata.get('outputs') or []
+        uploaded_at = metadata.get('uploaded_at') or metadata.get('created_at')
+        updated_at = metadata.get('updated_at') or uploaded_at
+        client_id = metadata.get('client_id')
+        client_name = None
+        if client_id:
+            try:
+                client = self.client_service.get_client(client_id)
+                if client:
+                    client_name = client.get('name')
+            except Exception:
+                client_name = None
+
+        return {
+            'submission_id': submission_id,
+            'client_id': client_id,
+            'client_name': client_name,
+            'name': metadata.get('name') or metadata.get('filename') or f'Submission {submission_id[:8]}',
+            'status': metadata.get('status', 'uploaded'),
+            'uploaded_at': uploaded_at,
+            'updated_at': updated_at,
+            'file_count': metadata.get('file_count') or len(inputs),
+            'inputs': inputs,
+            'outputs': outputs,
+        }
     
     def update_data(
         self,

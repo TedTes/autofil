@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Client, ClientSubmissionPackage,OutputTemplate, TemplateSelection, GenerateOutputsResponse } from '@/types'
-import {deleteInput, deleteOutput, deleteSubmission, generateOutputs as generateOutputsAPI, getClientById, getClientSubmissions, createClientSubmission, uploadPdf, getMergedData,calculateTemplateReadiness} from '@/lib'
+import {deleteInput, deleteOutput, deleteSubmission, generateOutputs as generateOutputsAPI, getClientById, getClientSubmissions, createClientSubmission, uploadPdf, getMergedData,calculateTemplateReadiness, getSubmissionPackage} from '@/lib'
 import useToast from '@/hooks/useToast' 
 import type { MergedData,UploadedRow } from '@/types'
 
@@ -13,13 +13,35 @@ function getFileType(filename: string): UploadedRow['fileType'] {
   return 'other'
 }
 
-export function useClientSubmissions(clientId: string) {
+export function useClientSubmissions(
+  clientId: string,
+  options?: { initialSubmissionId?: string }
+) {
   const [client, setClient] = useState<Client | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const [packages, setPackages] = useState<ClientSubmissionPackage[]>([])
-  const [activePackageId, setActivePackageId] = useState<string | null>(null)
+  const initialSubmissionId = options?.initialSubmissionId ?? null
+  const [activePackageId, setActivePackageId] = useState<string | null>(initialSubmissionId)
+  const initialAppliedRef = useRef(false)
+  const [standalonePackage, setStandalonePackage] = useState<ClientSubmissionPackage | null>(null)
+  const [standaloneLoading, setStandaloneLoading] = useState(false)
+  const [standaloneError, setStandaloneError] = useState<string | null>(null)
+  const resolvedPackages = useMemo(() => {
+    if (standalonePackage) {
+      const exists = packages.some(pkg => pkg.submission_id === standalonePackage.submission_id)
+      if (!exists) {
+        return [...packages, standalonePackage]
+      }
+    }
+    return packages
+  }, [packages, standalonePackage])
+
+  useEffect(() => {
+    initialAppliedRef.current = false
+    setActivePackageId(initialSubmissionId)
+  }, [clientId, initialSubmissionId])
 
   const [uploadedRows, setUploadedRows] = useState<UploadedRow[]>([])
   const [isUploading, setIsUploading] = useState(false)
@@ -214,7 +236,7 @@ useEffect(() => {
  
 
 const activePackage = activePackageId
-    ? packages.find(pkg => pkg.submission_id === activePackageId)
+    ? resolvedPackages.find(pkg => pkg.submission_id === activePackageId)
     : undefined
   const loadMergedData = useCallback(async (packageId: string) => {
     setIsMergedDataLoading(true)
@@ -340,23 +362,72 @@ useEffect(() => {
     void loadClientData()
   }, [loadClientData])
 
-  // keep activePackageId valid
   useEffect(() => {
-    if (packages.length === 0) {
+    let cancelled = false
+    if (!initialSubmissionId) {
+      setStandalonePackage(null)
+      setStandaloneError(null)
+      setStandaloneLoading(false)
+      return
+    }
+
+    const exists = packages.some(pkg => pkg.submission_id === initialSubmissionId)
+    if (exists) {
+      setStandalonePackage(null)
+      setStandaloneError(null)
+      setStandaloneLoading(false)
+      return
+    }
+
+    setStandaloneLoading(true)
+    setStandaloneError(null)
+    setStandalonePackage(null)
+
+    void (async () => {
+      try {
+        const pkg = await getSubmissionPackage(initialSubmissionId)
+        if (!cancelled) {
+          setStandalonePackage(pkg)
+          setStandaloneLoading(false)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setStandaloneError(err instanceof Error ? err.message : 'Failed to load submission')
+          setStandaloneLoading(false)
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [initialSubmissionId, packages])
+
+  // keep activePackageId aligned with available packages and optional initial submission preference
+  useEffect(() => {
+    if (resolvedPackages.length === 0) {
       setActivePackageId(null)
       return
     }
-    setActivePackageId(prev =>
-      prev && packages.some(pkg => pkg.submission_id === prev)
-        ? prev
-        : packages[0].submission_id
-    )
-  }, [packages])
+    setActivePackageId(prev => {
+      const packageIds = new Set(resolvedPackages.map(pkg => pkg.submission_id))
+      if (!initialAppliedRef.current && initialSubmissionId && packageIds.has(initialSubmissionId)) {
+        initialAppliedRef.current = true
+        return initialSubmissionId
+      }
+      if (prev && packageIds.has(prev)) {
+        initialAppliedRef.current = true
+        return prev
+      }
+      initialAppliedRef.current = true
+      return resolvedPackages[0].submission_id
+    })
+  }, [resolvedPackages, initialSubmissionId])
 
   // Clean up invalid selections when packages change
   useEffect(() => {
     setSelectedInputsByPackage(prev => {
-      const validIds = new Set(packages.map(pkg => pkg.submission_id))
+      const validIds = new Set(resolvedPackages.map(pkg => pkg.submission_id))
       const next: Record<string, string[]> = {}
       for (const [pkgId, selections] of Object.entries(prev)) {
         if (validIds.has(pkgId)) {
@@ -367,7 +438,7 @@ useEffect(() => {
     })
     
     setSelectedOutputsByPackage(prev => {
-      const validIds = new Set(packages.map(pkg => pkg.submission_id))
+      const validIds = new Set(resolvedPackages.map(pkg => pkg.submission_id))
       const next: Record<string, string[]> = {}
       for (const [pkgId, selections] of Object.entries(prev)) {
         if (validIds.has(pkgId)) {
@@ -376,7 +447,7 @@ useEffect(() => {
       }
       return next
     })
-  }, [packages])
+  }, [resolvedPackages])
 
 
   // ---- create folder ----
@@ -407,7 +478,7 @@ useEffect(() => {
     setWorkflowError(null)
     setStatusText(null)
 
-const currentPackage = packages.find(pkg => pkg.submission_id === activePackageId)
+  const currentPackage = resolvedPackages.find(pkg => pkg.submission_id === activePackageId)
   const packageName = currentPackage?.name ?? 'selected package'
     let successCount = 0
   let failureCount = 0
@@ -604,25 +675,25 @@ const deleteSubmissionPackage = async (submissionId: string) => {
   // NEW: Enhanced stats calculation
   const stats = {
     // Package counts
-    total: packages.length,
-    totalPackages: packages.length,
-    active: packages.filter(s =>
+    total: resolvedPackages.length,
+    totalPackages: resolvedPackages.length,
+    active: resolvedPackages.filter(s =>
       s.status === 'extracting' || s.status === 'uploaded' || s.status === 'ready'
     ).length,
-    completed: packages.filter(s =>
+    completed: resolvedPackages.filter(s =>
       s.status === 'filled' || s.status === 'extracted'
     ).length,
-    errors: packages.filter(s => s.status === 'error').length,
-    
+    errors: resolvedPackages.filter(s => s.status === 'error').length,
+
     // File counts across all packages
-    totalFiles: packages.reduce((sum, pkg) => sum + (pkg.file_count || 0), 0),
-    extractedFiles: packages.reduce((sum, pkg) => {
+    totalFiles: resolvedPackages.reduce((sum, pkg) => sum + (pkg.file_count || 0), 0),
+    extractedFiles: resolvedPackages.reduce((sum, pkg) => {
       const extractedCount = pkg.inputs?.filter(
         input => input.extraction_status === 'extracted' || input.extraction_status === 'ready'
       ).length || 0
       return sum + extractedCount
     }, 0),
-    outputFiles: packages.reduce((sum, pkg) => sum + (pkg.outputs?.length || 0), 0),
+    outputFiles: resolvedPackages.reduce((sum, pkg) => sum + (pkg.outputs?.length || 0), 0),
   }
   
   return {
@@ -630,7 +701,9 @@ const deleteSubmissionPackage = async (submissionId: string) => {
     loading,
     error,
 
-    packages,
+    packages: resolvedPackages,
+    standaloneLoading,
+    standaloneError,
     activePackageId,
     setActivePackageId,
     activePackage,

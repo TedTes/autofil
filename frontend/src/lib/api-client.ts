@@ -472,6 +472,18 @@ export async function getClientSubmissions(clientId: string): Promise<ClientSubm
   }
 }
 
+export async function getSubmissionPackage(submissionId: string): Promise<ClientSubmissionPackage> {
+  try {
+    const response = await api.get(`/submissions/${submissionId}/package`)
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to load submission package')
+    }
+    return response.data.data as ClientSubmissionPackage
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
 export interface SubmissionTemplateSummary {
   template_id: string
   name: string

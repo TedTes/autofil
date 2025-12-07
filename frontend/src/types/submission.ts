@@ -105,6 +105,7 @@ export interface SubmissionListItem {
   uploaded_at: string
   confidence?: number
   folder_id?: string
+  client_id?: string
   client_name?:string
 }
 

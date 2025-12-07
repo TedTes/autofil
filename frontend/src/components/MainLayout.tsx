@@ -101,6 +101,7 @@ function buildPathFromView(type: ViewType, data?: ViewStateData): string {
       if (!clientId) return '/dashboard/clients'
       const params = new URLSearchParams()
       if (detail?.clientName) params.set('name', detail.clientName)
+      if (detail?.initialSubmissionId) params.set('submission', detail.initialSubmissionId)
       const query = params.toString()
       return `/dashboard/clients/${clientId}${query ? `?${query}` : ''}`
     }
@@ -151,9 +152,10 @@ function mapPathToView(pathname: string, searchParams: URLSearchParams | Readonl
     case 'clients': {
       if (rest[0]) {
         const name = searchParams.get('name') || undefined
+        const initialSubmissionId = searchParams.get('submission') || undefined
         return {
           type: 'client-detail',
-          data: { clientId: rest[0], clientName: name },
+          data: { clientId: rest[0], clientName: name, initialSubmissionId },
           breadcrumbs: ['Dashboard', 'Clients', name || 'Client'],
         }
       }
@@ -757,6 +759,7 @@ const handleMobileSidebarClose = () => {
   <ClientDetailView
     clientId={currentView.data.clientId}
     clientName={('clientName' in currentView.data ? currentView.data.clientName : undefined)}
+    initialSubmissionId={('initialSubmissionId' in currentView.data ? currentView.data.initialSubmissionId : undefined)}
     onNavigateBack={() => navigateTo('clients', undefined, ['Dashboard', 'Clients'])}
     onFileClick={handleFileClick}
   />
@@ -764,8 +767,24 @@ const handleMobileSidebarClose = () => {
 
 {currentView.type === 'submissions' && (
   <SubmissionsView
-    onSubmissionClick={(submissionId) => {
-      navigateTo('file-detail', { submissionId }, ['Dashboard', 'Submissions', 'Detail'])
+    onSubmissionClick={(submission) => {
+      if (submission.client_id) {
+        navigateTo(
+          'client-detail',
+          {
+            clientId: submission.client_id,
+            clientName: submission.client_name || 'Client',
+            initialSubmissionId: submission.submission_id,
+          },
+          ['Dashboard', 'Clients', submission.client_name || 'Client']
+        )
+        return
+      }
+      navigateTo(
+        'file-detail',
+        { submissionId: submission.submission_id },
+        ['Dashboard', 'Submissions', 'Detail']
+      )
     }}
   />
 )}

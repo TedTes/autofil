@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useRef, useState, useEffect,useCallback } from 'react'
+import React, { useRef, useState, useEffect,useCallback, useMemo } from 'react'
 import { useClientSubmissions,useTemplateLibrary } from '@/hooks'
 import { fillPdf, downloadPDF} from '@/lib/api-client'
 import {GenerateOutputsModal,UploadOrMergedDataPanel} from "@/components/client"
@@ -629,6 +629,7 @@ function CompactFolderList({
 interface ClientDetailViewProps {
   clientId: string
   clientName?: string
+  initialSubmissionId?: string
   onNavigateBack?: () => void
   onFileClick?: (submissionId: string, filename?: string, inputId?: string) => void
 }
@@ -636,6 +637,7 @@ interface ClientDetailViewProps {
 export function ClientDetailView({
   clientId,
   clientName,
+  initialSubmissionId,
   onNavigateBack,
   onFileClick,
 }: ClientDetailViewProps) {
@@ -682,8 +684,19 @@ export function ClientDetailView({
     setTemplates,
     deleteInputFile,
     deleteOutputFile,
-    deleteSubmissionPackage
-  } = useClientSubmissions(clientId)
+    deleteSubmissionPackage,
+    standaloneLoading,
+    standaloneError,
+  } = useClientSubmissions(clientId, { initialSubmissionId })
+
+const displayedPackages = useMemo(() => {
+  if (!initialSubmissionId) {
+    return packages
+  }
+  return packages.filter(pkg => pkg.submission_id === initialSubmissionId)
+}, [packages, initialSubmissionId])
+const packagesToRender = initialSubmissionId ? displayedPackages : packages
+const isFocusedSubmissionMissing = Boolean(initialSubmissionId) && displayedPackages.length === 0
 // Delete confirmation modal state
 const [deleteModal, setDeleteModal] = useState<{
   isOpen: boolean
@@ -994,7 +1007,27 @@ const [isCreating, setIsCreating] = useState(false)
   <FolderPlus className="w-4 h-4 group-hover:scale-110 transition-transform" />
   <span className="font-medium">New Submission</span>  
 </button>
-        {packages.length === 0 ? (
+        {packagesToRender.length === 0 ? (
+          initialSubmissionId ? (
+            <div className="text-center py-12">
+              {standaloneLoading ? (
+                <>
+                  <Loader2 className="w-8 h-8 text-blue-500 mx-auto mb-3 animate-spin" />
+                  <p className="text-sm text-gray-500">Loading submission...</p>
+                </>
+              ) : standaloneError ? (
+                <>
+                  <AlertCircle className="w-8 h-8 text-red-500 mx-auto mb-3" />
+                  <p className="text-sm text-red-600">{standaloneError}</p>
+                </>
+              ) : (
+                <>
+                  <FolderOpen className="w-8 h-8 text-gray-300 mx-auto mb-3" />
+                  <p className="text-sm text-gray-500">Submission not available</p>
+                </>
+              )}
+            </div>
+          ) : (
       <div className="text-center py-12">
       <FolderOpen className="w-12 h-12 text-gray-300 mx-auto mb-3" />
       <p className="text-sm text-gray-500 mb-1">No submissions yet</p>
@@ -1002,17 +1035,16 @@ const [isCreating, setIsCreating] = useState(false)
         Create a submission to organize your files
       </p>
     </div>
+          )
     ) : (
         //  Submission List
         <CompactFolderList
-          submissions={packages}
+          submissions={packagesToRender}
           activeId={activePackageId}
           selectedInputsByPackage={selectedInputsByPackage}
           selectedOutputsByPackage={selectedOutputsByPackage}
           onToggle={(pkg) => {
-            setActivePackageId(prev => 
-              prev === pkg.submission_id ? null : pkg.submission_id
-            )
+            setActivePackageId(pkg.submission_id)
           }}
           onAddFiles={(pkg) => {
             setActivePackageId(pkg.submission_id)

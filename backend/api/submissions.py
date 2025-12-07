@@ -133,6 +133,22 @@ def get_submission_merged_data(submission_id: str):
         return jsonify({"error": f"Failed to build merged data: {exc}"}), 500
 
 
+@submission_bp.route("/<submission_id>/package", methods=["GET"])
+def get_submission_package(submission_id: str):
+    """Return submission package metadata (inputs, outputs, status)."""
+    try:
+        package = submission_service.get_submission_package(submission_id)
+        if not package:
+            return jsonify({"error": "Submission not found"}), 404
+        return jsonify({
+            "success": True,
+            "data": package,
+            "message": "Submission package retrieved successfully",
+        }), 200
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
 @submission_bp.route("/<submission_id>", methods=["PUT"])
 def update_submission(submission_id):
     """Update a submission's JSON data (full replacement)."""
@@ -662,6 +678,7 @@ def list_all_submissions():
         submission_list = [
             {
                 "submission_id": s.get("submission_id"),
+                "client_id": s.get("client_id"),
                 "filename": s.get("filename"),
                 "status": s.get("status"),
                 "uploaded_at": s.get("uploaded_at"),

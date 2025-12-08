@@ -1194,7 +1194,7 @@ function FileListView({
 
               <div className="col-span-1">
                 {file.confidence !== undefined ? (
-                  <ConfidenceBadgeCompact confidence={file.confidence} />
+                  <ConfidenceBadgeCompact confidence={file.confidence * 100} />
                 ) : (
                   <span className="text-sm text-gray-400">—</span>
                 )}
@@ -1243,7 +1243,7 @@ function FileListView({
                   
                   <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
                     {file.confidence !== undefined && (
-                      <ConfidenceBadgeCompact confidence={file.confidence} />
+                      <ConfidenceBadgeCompact confidence={file.confidence * 100} />
                     )}
                     <StatusBadge status={file.status} />
                     <span>•</span>
@@ -1330,7 +1330,7 @@ function FileGridView({
               {file.confidence !== undefined && (
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-gray-600">Confidence</span>
-                  <ConfidenceBadgeCompact confidence={file.confidence} />
+                  <ConfidenceBadgeCompact confidence={file.confidence * 100} />
                 </div>
               )}
               <div className="flex items-center justify-between">

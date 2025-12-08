@@ -21,7 +21,19 @@ export function ConfidenceBadge({
   variant = 'default',
   className = '',
 }: ConfidenceBadgeProps) {
-  const level = getConfidenceLevel(confidence)
+  const normalizedConfidence = (() => {
+    if (!Number.isFinite(confidence)) {
+      return 0
+    }
+    const numericValue = Number(confidence)
+    const scaledValue = numericValue <= 1 ? numericValue * 100 : numericValue
+    return Math.min(100, Math.max(0, scaledValue))
+  })()
+  const formattedConfidence =
+    Number.isFinite(normalizedConfidence) && normalizedConfidence % 1 !== 0
+      ? parseFloat(normalizedConfidence.toFixed(2))
+      : normalizedConfidence
+  const level = getConfidenceLevel(normalizedConfidence)
   const colors = getConfidenceColors(level)
   const Icon = getConfidenceIcon(level)
 
@@ -54,7 +66,7 @@ export function ConfidenceBadge({
           className={`inline-flex items-center gap-1 ${colors.text} ${sizes.text} font-medium ${className}`}
         >
           {showIcon && <Icon className={sizes.icon} />}
-          {showPercentage && `${confidence}%`}
+          {showPercentage && `${formattedConfidence}%`}
         </span>
       )
 
@@ -65,7 +77,7 @@ export function ConfidenceBadge({
         >
           {showIcon && <Icon className={sizes.icon} />}
           {showLabel && <span>{level}</span>}
-          {showPercentage && <span>{confidence}%</span>}
+          {showPercentage && <span>{formattedConfidence}%</span>}
         </span>
       )
 
@@ -78,14 +90,14 @@ export function ConfidenceBadge({
                 {showLabel ? level : 'Confidence'}
               </span>
               <span className={`${sizes.text} font-semibold ${colors.text}`}>
-                {confidence}%
+                {formattedConfidence}%
               </span>
             </div>
           )}
           <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
             <div
               className={`h-2 ${colors.barBg} transition-all duration-300`}
-              style={{ width: `${confidence}%` }}
+              style={{ width: `${normalizedConfidence}%` }}
             />
           </div>
         </div>
@@ -96,11 +108,11 @@ export function ConfidenceBadge({
       return (
         <span
           className={`inline-flex items-center gap-1.5 ${sizes.badge} ${colors.bg} ${colors.border} ${colors.text} font-semibold rounded-lg border ${className}`}
-          title={`${level} confidence: ${confidence}%`}
+          title={`${level} confidence: ${formattedConfidence}%`}
         >
           {showIcon && <Icon className={sizes.icon} />}
           {showLabel && <span>{level}</span>}
-          {showPercentage && <span>{confidence}%</span>}
+          {showPercentage && <span>{formattedConfidence}%</span>}
         </span>
       )
   }

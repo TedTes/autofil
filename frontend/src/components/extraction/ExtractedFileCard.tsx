@@ -64,7 +64,7 @@ export function ExtractedFileCard({
                   {file.filename}
                 </h3>
                 {file.confidence !== undefined && (
-                  <ConfidenceBadgeCompact confidence={file.confidence} />
+                  <ConfidenceBadgeCompact confidence={file.confidence * 100} />
                 )}
               </div>
 

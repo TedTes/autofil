@@ -171,7 +171,7 @@ export function SubmissionsView({ onSubmissionClick }: SubmissionsViewProps) {
                     {sub.confidence != null && (
                       <>
                         <span className="text-gray-400">•</span>
-                        <span>{`${(sub.confidence * 100).toFixed(0)}% confidence`}</span>
+                        <span>{`${(sub.confidence * 100).toFixed(2)}% confidence`}</span>
                       </>
                     )}
                   </div>
@@ -233,7 +233,7 @@ export function SubmissionsView({ onSubmissionClick }: SubmissionsViewProps) {
                         {new Date(sub.uploaded_at).toLocaleString()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {sub.confidence != null ? `${(sub.confidence * 100).toFixed(0)}%` : '—'}
+                        {sub.confidence != null ? `${(sub.confidence * 100).toFixed(2)}%` : '—'}
                       </td>
                     </tr>
                   ))}

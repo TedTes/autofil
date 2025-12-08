@@ -5,7 +5,7 @@
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, type ReactElement } from 'react'
 import { ChevronDown, ChevronUp, Edit3 } from 'lucide-react'
 import { ClickableFieldValue } from './InlineFieldEditor'
 
@@ -84,6 +84,11 @@ function formatFieldName(fieldName: string): string {
     .join(' ')
 }
 
+function formatConfidenceDisplay(confidence?: number): string {
+  if (confidence === undefined) return ''
+  return `${((confidence || 0) * 100).toFixed(2)}%`
+}
+
 /**
  * Helper: Flatten nested entities structure
  */
@@ -119,6 +124,125 @@ function flattenEntities(data: Record<string, unknown>): Record<string, unknown>
   return data
 }
 
+type SemanticFieldValue = {
+  value: unknown
+  confidence?: number
+  tags?: string[]
+}
+
+type SemanticField = {
+  id: string
+  label: string
+  type?: string
+  values: SemanticFieldValue[]
+}
+
+type SemanticSection = {
+  key?: string
+  displayName: string
+  description?: string
+  priority?: number
+  icon?: string
+  fields: SemanticField[]
+}
+
+function normalizeValueEntry(valueEntry: unknown): SemanticFieldValue {
+  if (valueEntry && typeof valueEntry === 'object') {
+    const entryObj = valueEntry as Record<string, unknown>
+    return {
+      value: 'value' in entryObj ? entryObj.value : valueEntry,
+      confidence:
+        typeof entryObj.confidence === 'number' ? entryObj.confidence : undefined,
+      tags: Array.isArray(entryObj.tags) ? (entryObj.tags as string[]) : undefined,
+    }
+  }
+
+  return { value: valueEntry }
+}
+
+function normalizeSemanticSections(raw: unknown): SemanticSection[] {
+  const sectionsArray: unknown =
+    (raw && typeof raw === 'object' && 'semantic_sections' in raw)
+      ? (raw as Record<string, unknown>).semantic_sections
+      : raw && typeof raw === 'object' && 'semanticSections' in raw
+      ? (raw as Record<string, unknown>).semanticSections
+      : Array.isArray(raw)
+      ? raw
+      : null
+
+  if (!Array.isArray(sectionsArray)) {
+    return []
+  }
+
+  return sectionsArray
+    .map((sectionRaw) => {
+      if (!sectionRaw || typeof sectionRaw !== 'object') return null
+      const section = sectionRaw as Record<string, unknown> & { fields?: unknown }
+      const rawFields = Array.isArray(section.fields) ? (section.fields as unknown[]) : null
+      const fields = rawFields
+        ? rawFields
+            .map((fieldRaw) => {
+              if (!fieldRaw || typeof fieldRaw !== 'object') return null
+              const field = fieldRaw as Record<string, unknown> & {
+                id?: string
+                label?: string
+                type?: string
+                values?: unknown
+                value?: unknown
+                confidence?: number
+              }
+              const label = field.label || formatFieldName(field.id || '')
+              const id = field.id || label || 'field'
+              const rawValues = Array.isArray(field.values)
+                ? (field.values as unknown[])
+                : null
+              const values = rawValues
+                ? rawValues.map((valueEntry) => normalizeValueEntry(valueEntry))
+                : field.value !== undefined
+                ? [{ value: field.value, confidence: field.confidence }]
+                : []
+              return {
+                id,
+                label,
+                type: field.type,
+                values,
+              } as SemanticField
+            })
+            .filter(Boolean)
+        : []
+
+      const keyString = typeof section.key === 'string' ? section.key : undefined
+      return {
+        key: keyString,
+        displayName: section.displayName || formatFieldName(keyString || 'Section'),
+        description: section.description,
+        priority: section.priority,
+        icon: section.icon,
+        fields,
+      } as SemanticSection
+    })
+    .filter(
+      (section): section is SemanticSection =>
+        Boolean(section && section.fields && section.fields.length)
+    )
+}
+
+function formatValueForDisplay(value: unknown): ReactElement {
+  if (value === null || value === undefined || value === '') {
+    return <span className="text-sm text-gray-400">N/A</span>
+  }
+
+  if (typeof value === 'object') {
+    return (
+      <pre className="text-xs text-gray-800 bg-gray-50 rounded-md p-2 overflow-x-auto whitespace-pre-wrap">
+        {JSON.stringify(value, null, 2)}
+      </pre>
+    )
+  }
+
+  return <span className="text-sm text-gray-900 whitespace-pre-wrap">{String(value)}</span>
+}
+
 export function CleanDataDisplay({
   data,
   fieldConfidence = {},
@@ -126,9 +250,14 @@ export function CleanDataDisplay({
   onFieldChange,
 }: CleanDataDisplayProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
+  const [expandedSemanticSections, setExpandedSemanticSections] = useState<Set<string>>(
+    new Set()
+  )
+
+  const semanticSections = useMemo(() => normalizeSemanticSections(data), [data])
   
   // Flatten the data structure
-  const flatData = flattenEntities(data)
+  const flatData = flattenEntities(data as Record<string, unknown>)
   
   // Group fields by section if they have dot notation (e.g., "applicant.name")
   const groupedData = Object.entries(flatData).reduce((acc, [key, value]) => {
@@ -158,12 +287,19 @@ export function CleanDataDisplay({
     })
   }
   
-  // Auto-expand first section on mount
+  // Auto-expand first section on mount (semantic)
   useEffect(() => {
-    if (sections.length > 0 && expandedSections.size === 0) {
+    if (semanticSections.length > 0 && expandedSemanticSections.size === 0) {
+      setExpandedSemanticSections(new Set([semanticSections[0].displayName || semanticSections[0].key || 'section']))
+    }
+  }, [semanticSections, expandedSemanticSections.size])
+  
+  // Auto-expand first section on mount for flat data
+  useEffect(() => {
+    if (semanticSections.length === 0 && sections.length > 0 && expandedSections.size === 0) {
       setExpandedSections(new Set([sections[0]]))
     }
-  }, [sections.length])
+  }, [sections.length, semanticSections.length, expandedSections.size])
   
   if (Object.keys(flatData).length === 0) {
     return (
@@ -173,8 +309,95 @@ export function CleanDataDisplay({
     )
   }
   
+  if (semanticSections.length > 0) {
+    return (
+      <div className="space-y-4 max-h-[calc(100vh-220px)] overflow-y-auto pr-1">
+        {semanticSections.map((section) => {
+          const sectionKey = section.displayName || section.key || 'section'
+          const isExpanded = expandedSemanticSections.has(sectionKey)
+
+          return (
+            <div
+              key={sectionKey}
+              className="bg-white border border-gray-200 rounded-lg overflow-hidden"
+            >
+              <button
+                onClick={() => {
+                  setExpandedSemanticSections((prev) => {
+                    const next = new Set(prev)
+                    if (next.has(sectionKey)) {
+                      next.delete(sectionKey)
+                    } else {
+                      next.add(sectionKey)
+                    }
+                    return next
+                  })
+                }}
+                className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
+              >
+                <div className="flex flex-col text-left">
+                  <span className="text-sm font-semibold text-gray-900">{sectionKey}</span>
+                  {section.description && (
+                    <span className="text-xs text-gray-500">{section.description}</span>
+                  )}
+                </div>
+                {isExpanded ? (
+                  <ChevronUp className="w-4 h-4 text-gray-400" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                )}
+              </button>
+
+              {isExpanded && (
+                <div className="border-t border-gray-100 divide-y divide-gray-100">
+                  {section.fields.map((field) => {
+                    const confidenceOverride = fieldConfidence[field.id]
+                    const fieldValues = field.values && field.values.length > 0 ? field.values : null
+                    return (
+                      <div key={field.id} className="px-4 py-3">
+                        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                          {field.label}
+                        </div>
+                        {fieldValues ? (
+                          <div className="mt-2 flex flex-col gap-2">
+                            {fieldValues.map((entry, index) => (
+                              <div
+                                key={`${field.id}-${index}`}
+                                className="flex flex-col gap-1 bg-gray-50 rounded-lg p-3 border border-gray-100"
+                              >
+                                {formatValueForDisplay(entry.value)}
+                                {(entry.confidence ?? confidenceOverride) !== undefined &&
+                                  (entry.confidence ?? confidenceOverride)! < 0.8 && (
+                                    <span
+                                      className={`text-xs px-2 py-0.5 rounded-full self-start font-medium ${
+                                        (entry.confidence ?? confidenceOverride)! >= 0.6
+                                          ? 'bg-yellow-100 text-yellow-700'
+                                          : 'bg-red-100 text-red-700'
+                                      }`}
+                                    >
+                                      {formatConfidenceDisplay(entry.confidence ?? confidenceOverride)}
+                                    </span>
+                                  )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="mt-2 text-sm text-gray-400">No data available</div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 max-h-[calc(100vh-220px)] overflow-y-auto pr-1">
       {sections.map((section) => {
         const sectionData = groupedData[section]
         const isExpanded = expandedSections.has(section)
@@ -294,15 +517,13 @@ function FieldRow({
         )}
         
         {/* Confidence Badge */}
-        {confidence !== undefined && confidence < 1 && (
-          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-            confidence >= 0.8 
-              ? 'bg-green-100 text-green-700' 
-              : confidence >= 0.6 
-              ? 'bg-yellow-100 text-yellow-700' 
-              : 'bg-red-100 text-red-700'
-          }`}>
-            {Math.round(confidence * 100)}%
+        {confidence !== undefined && confidence < 0.8 && (
+          <span
+            className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+              confidence >= 0.6 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+            }`}
+          >
+            {formatConfidenceDisplay(confidence)}
           </span>
         )}
       </div>

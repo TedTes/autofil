@@ -7,7 +7,7 @@ Extracts claim data from loss run reports in various formats:
 - Multi-page loss runs with claim details
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 import csv
 import re
 import os
@@ -16,7 +16,8 @@ import yaml
 from datetime import datetime
 from ..interfaces.extractor import IExtractor
 from ..core.document import Document, DocumentType
-from ..models.extraction_result import ExtractionResult
+from ..core.schema import CanonicalOutput, SourceInfo, Metadata
+from ..utils.semantic_section_builder import SemanticSectionBuilder
 from ..parsers import TableParser, OcrFallbackParser
 
 FIELD_CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "templates" / "loss_run_fields.yaml"
@@ -43,54 +44,31 @@ class LossRunExtractor(IExtractor):
         self.ocr_parser = OcrFallbackParser()
         if not self.COLUMN_PATTERNS:
             self.COLUMN_PATTERNS = self._load_field_patterns()
-    def extract(self, document: Document) -> ExtractionResult:
+    def extract(self, document: Document) -> CanonicalOutput:
         """
-        Extract loss run data from document.
-        
-        Args:
-            document: Document object with loss run content
-            
-        Returns:
-            ExtractionResult with extracted claim data
+        Extract loss run data and return canonical output.
         """
-        try:
-            # Verify document type
-            if document.document_type != DocumentType.LOSS_RUN:
-                return ExtractionResult(
-                    success=False,
-                    data={},
-                    errors=[f"Expected LOSS_RUN document, got {document.document_type.value}"]
-                )
-            
-            # Extract from tables (primary method)
-            if document.tables:
-                result = self._extract_from_tables(document)
-                if result.success:
-                    return result
-            
-            # Fallback: Extract from text
-            if document.raw_text:
-                print("akalsjljfsjkadfsjk")
-                
-                result = self._extract_from_text(document)
-                print(document.raw_text)
-                print(result.success)
-                if result.success:
-                    return result
-            
-            return ExtractionResult(
-                success=False,
-                data={},
-                errors=["No extractable loss run data found"]
-            )
+        if document.document_type != DocumentType.LOSS_RUN:
+            raise ValueError(f"Expected LOSS_RUN document, got {document.document_type.value}")
 
-        except Exception as e:
-            print("error from loss of run extractor",str(e))
-            return ExtractionResult(
-                success=False,
-                data={},
-                errors=[f"Extraction failed: {str(e)}"]
-            )
+        extraction: Optional[Tuple[Dict[str, Any], List[str], float]] = None
+
+        if document.tables:
+            extraction = self._extract_from_tables(document)
+
+        if not extraction and document.raw_text:
+            extraction = self._extract_from_text(document)
+
+        if not extraction:
+            raise ValueError("No extractable loss run data found")
+
+        data, warnings, confidence = extraction
+        canonical = self._build_canonical_output(document, data, confidence)
+
+        if warnings:
+            canonical.raw.setdefault("warnings", warnings)
+
+        return canonical
     
     def can_extract(self, document: Document) -> bool:
         """Check if can extract from document."""
@@ -107,7 +85,7 @@ class LossRunExtractor(IExtractor):
         """Get supported document types."""
         return [DocumentType.LOSS_RUN]
     
-    def _extract_from_tables(self, document: Document) -> ExtractionResult:
+    def _extract_from_tables(self, document: Document) -> Optional[Tuple[Dict[str, Any], List[str], float]]:
         """Extract claims from table data."""
         claims = []
         warnings = []
@@ -144,17 +122,8 @@ class LossRunExtractor(IExtractor):
                         'totals': {'paid': 0, 'incurred': 0, 'reserve': 0},
                         'summary': summary,
                     }
-                    return ExtractionResult(
-                        success=True,
-                        data=data,
-                        warnings=warnings,
-                        confidence=0.85,
-                    )
-                return ExtractionResult(
-                    success=False,
-                    data={},
-                    errors=["No valid claims found in tables"]
-                )
+                    return data, warnings, 0.85
+                return None
 
             totals = self._calculate_totals(claims)
             policy_info = self._extract_policy_info(document)
@@ -167,27 +136,17 @@ class LossRunExtractor(IExtractor):
                 'totals': totals,
             }
 
-            return ExtractionResult(
-                success=True,
-                data=data,
-                warnings=warnings,
-                confidence=self._calculate_confidence(claims, warnings)
-            )
+            return data, warnings, self._calculate_confidence(claims, warnings)
         except Exception as e:
             print("error from _extract_from_tables", str(e))
             raise e
     
-    def _extract_from_text(self, document: Document) -> ExtractionResult:
+    def _extract_from_text(self, document: Document) -> Optional[Tuple[Dict[str, Any], List[str], float]]:
         """Extract claims from raw text (fallback method)."""
         text = document.raw_text or ""
         lines = [line for line in text.splitlines() if line.strip()]
         if len(lines) < 2:
-            return ExtractionResult(
-                success=False,
-                data={},
-                errors=["Insufficient structured text to parse"],
-                warnings=["Text-based extraction not possible"]
-            )
+            return None
 
         sample = "\n".join(lines[:10])
         try:
@@ -216,22 +175,12 @@ class LossRunExtractor(IExtractor):
         ]
 
         if len(rows) < 2:
-            return ExtractionResult(
-                success=False,
-                data={},
-                errors=["Structured rows not found in text"],
-                warnings=["Text-based extraction not possible"]
-            )
+            return None
 
         headers = rows[0]
         column_map = self._map_columns(headers)
         if not column_map:
-            return ExtractionResult(
-                success=False,
-                data={},
-                errors=["Could not map text columns to claim fields"],
-                warnings=["Text-based extraction not possible"]
-            )
+            return None
 
         claims = []
         warnings = ["Parsed data from raw text – accuracy may be reduced"]
@@ -249,26 +198,17 @@ class LossRunExtractor(IExtractor):
             summary = self._detect_no_loss_statement(document)
             if summary:
                 warnings.append("Document states that there are no known losses for the policy term.")
-                return ExtractionResult(
-                    success=True,
-                    data={
-                        'document_type': 'loss_run',
-                        'extraction_date': datetime.utcnow().isoformat(),
-                        'policy_information': self._extract_policy_info(document),
-                        'claims': [],
-                        'claim_count': 0,
-                        'totals': {'paid': 0, 'incurred': 0, 'reserve': 0},
-                        'summary': summary,
-                    },
-                    warnings=warnings,
-                    confidence=0.75,
-                )
-            return ExtractionResult(
-                success=False,
-                data={},
-                errors=["No valid claims found in text rows"],
-                warnings=warnings
-            )
+                data = {
+                    'document_type': 'loss_run',
+                    'extraction_date': datetime.utcnow().isoformat(),
+                    'policy_information': self._extract_policy_info(document),
+                    'claims': [],
+                    'claim_count': 0,
+                    'totals': {'paid': 0, 'incurred': 0, 'reserve': 0},
+                    'summary': summary,
+                }
+                return data, warnings, 0.75
+            return None
 
         totals = self._calculate_totals(claims)
         data = {
@@ -279,12 +219,7 @@ class LossRunExtractor(IExtractor):
             'claim_count': len(claims),
             'totals': totals,
         }
-        return ExtractionResult(
-            success=True,
-            data=data,
-            warnings=warnings,
-            confidence=self._calculate_confidence(claims, warnings)
-        )
+        return data, warnings, self._calculate_confidence(claims, warnings)
 
     def _detect_no_loss_statement(self, document: Document) -> Optional[str]:
         """Detect statements indicating no reported losses."""
@@ -533,6 +468,125 @@ class LossRunExtractor(IExtractor):
         confidence -= len(warnings) * 0.05
         
         return max(0.0, min(1.0, confidence))
+
+    def _build_canonical_output(
+        self,
+        document: Document,
+        data: Dict[str, Any],
+        confidence: float,
+    ) -> CanonicalOutput:
+        entity_map = self._build_entity_map(data, confidence)
+        sections = SemanticSectionBuilder.build(entity_map)
+        lob = data.get("policy_information", {}).get("line_of_business") or "General Liability"
+        metadata = Metadata(
+            form_type_detected=document.document_type.value.upper(),
+            line_of_business=lob,
+            schema_version="1.0",
+        )
+        return CanonicalOutput(
+            job_id=document.job_id,
+            source=SourceInfo(
+                file_name=document.file_name,
+                file_type=self._infer_file_type(document),
+                extraction_method=document.document_type.value,
+                extracted_at=datetime.utcnow(),
+            ),
+            semantic_sections=sections,
+            metadata=metadata,
+            raw={**data, "confidence": confidence},
+        )
+
+    def _build_entity_map(
+        self,
+        data: Dict[str, Any],
+        confidence: float,
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        entity_map: Dict[str, List[Dict[str, Any]]] = {}
+        claims = data.get("claims") or []
+
+        prior_losses: List[Dict[str, Any]] = []
+        for claim in claims:
+            if not isinstance(claim, dict):
+                continue
+            loss_value = self._clean_dict(
+                {
+                    "date_of_loss": claim.get("date_of_loss"),
+                    "type": claim.get("status"),
+                    "amount_paid": claim.get("paid"),
+                    "amount_reserved": claim.get("reserve"),
+                    "incurred": claim.get("incurred"),
+                    "description": claim.get("description"),
+                    "claim_number": claim.get("claim_number"),
+                    "policy_number": claim.get("policy_number"),
+                }
+            )
+            if not loss_value:
+                continue
+            prior_losses.append(
+                {
+                    "value": loss_value,
+                    "confidence": confidence,
+                    "tags": ["loss_run", "claim"],
+                    "source": claim.get("_source"),
+                }
+            )
+        if prior_losses:
+            entity_map["PriorLosses"] = prior_losses
+
+        policy_info = data.get("policy_information") or {}
+        policy_number = policy_info.get("policy_number") or self._first_non_empty(claims, "policy_number")
+        if policy_number:
+            entity_map.setdefault("PolicyNumber", []).append(
+                {
+                    "value": policy_number,
+                    "confidence": confidence,
+                    "tags": ["loss_run", "policy"],
+                }
+            )
+
+        carrier = policy_info.get("carrier")
+        if carrier:
+            entity_map.setdefault("Carrier", []).append(
+                {
+                    "value": carrier,
+                    "confidence": confidence,
+                    "tags": ["loss_run", "policy"],
+                }
+            )
+
+        lob = policy_info.get("line_of_business")
+        if lob:
+            entity_map.setdefault("LineOfBusiness", []).append(
+                {
+                    "value": lob,
+                    "confidence": confidence,
+                    "tags": ["loss_run", "policy"],
+                }
+            )
+
+        return entity_map
+
+    @staticmethod
+    def _clean_dict(values: Dict[str, Any]) -> Dict[str, Any]:
+        return {k: v for k, v in values.items() if v not in (None, "", [])}
+
+    @staticmethod
+    def _first_non_empty(items: List[Dict[str, Any]], key: str) -> Optional[Any]:
+        for entry in items:
+            if not isinstance(entry, dict):
+                continue
+            value = entry.get(key)
+            if value not in (None, "", []):
+                return value
+        return None
+
+    @staticmethod
+    def _infer_file_type(document: Document) -> str:
+        if document.file_extension:
+            return document.file_extension.lstrip(".").lower()
+        if document.mime_type and "/" in document.mime_type:
+            return document.mime_type.split("/")[-1]
+        return "pdf"
     
     def __repr__(self) -> str:
         return "LossRunExtractor()"

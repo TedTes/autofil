@@ -9,11 +9,12 @@ Extracts property/location data from Schedule of Values documents:
 - Total insured values
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 from ..interfaces.extractor import IExtractor
 from ..core.document import Document, DocumentType
-from ..models.extraction_result import ExtractionResult
+from ..core.schema import CanonicalOutput, SourceInfo, Metadata
+from ..utils.semantic_section_builder import SemanticSectionBuilder
 from ..parsers import TableParser, ExcelParser
 
 
@@ -114,7 +115,7 @@ class SovExtractor(IExtractor):
         self.table_parser = TableParser(flavor='auto', min_confidence=60.0)
         self.excel_parser = ExcelParser()
     
-    def extract(self, document: Document) -> ExtractionResult:
+    def extract(self, document: Document) -> CanonicalOutput:
         """
         Extract SOV data from document.
         
@@ -124,39 +125,27 @@ class SovExtractor(IExtractor):
         Returns:
             ExtractionResult with extracted property data
         """
-        try:
-            # Verify document type
-            if document.document_type != DocumentType.SOV:
-                return ExtractionResult(
-                    success=False,
-                    data={},
-                    errors=[f"Expected SOV document, got {document.document_type.value}"]
-                )
-            
-            # Extract from tables (PDF)
-            if document.tables:
-                result = self._extract_from_tables(document)
-                if result.success:
-                    return result
-            
-            # Extract from Excel
-            if document.file_extension in ['.xlsx', '.xls', '.csv']:
-                result = self._extract_from_excel(document)
-                if result.success:
-                    return result
-            
-            return ExtractionResult(
-                success=False,
-                data={},
-                errors=["No extractable SOV data found"]
-            )
-            
-        except Exception as e:
-            return ExtractionResult(
-                success=False,
-                data={},
-                errors=[f"Extraction failed: {str(e)}"]
-            )
+        if document.document_type != DocumentType.SOV:
+            raise ValueError(f"Expected SOV document, got {document.document_type.value}")
+
+        extraction: Optional[Tuple[Dict[str, Any], List[str], float]] = None
+
+        if document.tables:
+            extraction = self._extract_from_tables(document)
+
+        if not extraction and document.file_extension in ['.xlsx', '.xls', '.csv']:
+            extraction = self._extract_from_excel(document)
+
+        if not extraction:
+            raise ValueError("No extractable SOV data found")
+
+        data, warnings, confidence = extraction
+        canonical = self._build_canonical_output(document, data, confidence)
+
+        if warnings:
+            canonical.raw.setdefault("warnings", warnings)
+
+        return canonical
     
     def can_extract(self, document: Document) -> bool:
         """Check if can extract from document."""
@@ -169,7 +158,7 @@ class SovExtractor(IExtractor):
         """Get supported document types."""
         return [DocumentType.SOV]
     
-    def _extract_from_tables(self, document: Document) -> ExtractionResult:
+    def _extract_from_tables(self, document: Document) -> Optional[Tuple[Dict[str, Any], List[str], float]]:
         """Extract properties from table data."""
         properties = []
         warnings = []
@@ -196,16 +185,9 @@ class SovExtractor(IExtractor):
                     warnings.append(f"Table {table_idx}, Row {row_idx}: {str(e)}")
         
         if not properties:
-            return ExtractionResult(
-                success=False,
-                data={},
-                errors=["No valid properties found in tables"]
-            )
+            return None
         
-        # Calculate totals
         totals = self._calculate_totals(properties)
-        
-        # Extract schedule info
         schedule_info = self._extract_schedule_info(document)
         
         data = {
@@ -217,14 +199,9 @@ class SovExtractor(IExtractor):
             'totals': totals,
         }
         
-        return ExtractionResult(
-            success=True,
-            data=data,
-            warnings=warnings,
-            confidence=self._calculate_confidence(properties, warnings)
-        )
+        return data, warnings, self._calculate_confidence(properties, warnings)
     
-    def _extract_from_excel(self, document: Document) -> ExtractionResult:
+    def _extract_from_excel(self, document: Document) -> Optional[Tuple[Dict[str, Any], List[str], float]]:
         """Extract properties from Excel file."""
         # Parse Excel file
         excel_result = self.excel_parser.extract_fields(document.file_path)
@@ -242,21 +219,13 @@ class SovExtractor(IExtractor):
         rows = sheet_data.get('rows', [])
         
         if not headers or not rows:
-            return ExtractionResult(
-                success=False,
-                data={},
-                errors=["No data found in Excel sheet"]
-            )
+            return None
         
         # Map columns
         column_map = self._map_columns(headers)
         
         if not column_map:
-            return ExtractionResult(
-                success=False,
-                data={},
-                errors=["Could not map Excel columns to property fields"]
-            )
+            return None
         
         # Extract properties
         properties = []
@@ -275,13 +244,8 @@ class SovExtractor(IExtractor):
                 warnings.append(f"Row {row_idx}: {str(e)}")
         
         if not properties:
-            return ExtractionResult(
-                success=False,
-                data={},
-                errors=["No valid properties found in Excel"]
-            )
+            return None
         
-        # Calculate totals
         totals = self._calculate_totals(properties)
         
         data = {
@@ -293,12 +257,7 @@ class SovExtractor(IExtractor):
             'totals': totals,
         }
         
-        return ExtractionResult(
-            success=True,
-            data=data,
-            warnings=warnings,
-            confidence=self._calculate_confidence(properties, warnings)
-        )
+        return data, warnings, self._calculate_confidence(properties, warnings)
     
     def _map_columns(self, headers: List[str]) -> Dict[str, int]:
         """Map table columns to property fields."""
@@ -471,6 +430,103 @@ class SovExtractor(IExtractor):
             )
         
         return totals
+
+    def _build_canonical_output(
+        self,
+        document: Document,
+        data: Dict[str, Any],
+        confidence: float,
+    ) -> CanonicalOutput:
+        entity_map = self._build_entity_map(data, confidence)
+        sections = SemanticSectionBuilder.build(entity_map)
+        metadata = Metadata(
+            form_type_detected=document.document_type.value.upper(),
+            line_of_business="Property",
+            schema_version="1.0",
+        )
+        return CanonicalOutput(
+            job_id=document.job_id,
+            source=SourceInfo(
+                file_name=document.file_name,
+                file_type=self._infer_file_type(document),
+                extraction_method=document.document_type.value,
+                extracted_at=datetime.utcnow(),
+            ),
+            semantic_sections=sections,
+            metadata=metadata,
+            raw={**data, "confidence": confidence},
+        )
+
+    def _build_entity_map(
+        self,
+        data: Dict[str, Any],
+        confidence: float,
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        entity_map: Dict[str, List[Dict[str, Any]]] = {}
+        properties = data.get("properties") or []
+
+        for idx, item in enumerate(properties):
+            if not isinstance(item, dict):
+                continue
+            location_value = self._clean_dict(
+                {
+                    "location_number": item.get("location_number") or str(idx + 1),
+                    "address": item.get("full_address") or item.get("address"),
+                    "city": item.get("city"),
+                    "state": item.get("state"),
+                    "zip": item.get("zip"),
+                    "square_feet": item.get("square_feet"),
+                    "year_built": item.get("year_built"),
+                    "construction": item.get("construction"),
+                    "occupancy": item.get("occupancy"),
+                    "building_value": item.get("building_value"),
+                    "contents_value": item.get("contents_value"),
+                    "business_income": item.get("business_income"),
+                    "total_value": item.get("total_value"),
+                }
+            )
+            if not location_value:
+                continue
+            entity_map.setdefault("Location", []).append(
+                {
+                    "value": location_value,
+                    "confidence": confidence,
+                    "tags": ["sov", "location"],
+                    "source": item.get("_source"),
+                }
+            )
+
+        totals = data.get("totals") or {}
+        totals_map = {
+            "total_insured_value": "TotalInsuredValue",
+            "total_building_value": "BuildingLimit",
+            "total_contents_value": "BPPLimit",
+        }
+        for raw_key, field_id in totals_map.items():
+            value = totals.get(raw_key)
+            if value in (None, "", []):
+                continue
+            entity_map.setdefault(field_id, []).append(
+                {
+                    "value": value,
+                    "confidence": confidence,
+                    "tags": ["sov", "totals"],
+                }
+            )
+
+        return entity_map
+
+    @staticmethod
+    def _clean_dict(values: Dict[str, Any]) -> Dict[str, Any]:
+        return {k: v for k, v in values.items() if v not in (None, "", [])}
+
+    @staticmethod
+    def _infer_file_type(document: Document) -> str:
+        if document.file_extension:
+            return document.file_extension.lstrip(".").lower()
+        if document.mime_type and "/" in document.mime_type:
+            return document.mime_type.split("/")[-1]
+        return "pdf"
     
     def _extract_schedule_info(self, document: Document) -> Dict[str, Any]:
         """Extract schedule metadata from document."""

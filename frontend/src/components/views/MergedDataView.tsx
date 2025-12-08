@@ -130,46 +130,70 @@ function SemanticFieldRow({ field }: { field: SemanticField }) {
   const hasMultipleValues = field.values.length > 1
 
   return (
-    <div className="space-y-1">
-      {/* Field Label */}
-      <label className="block text-xs font-medium text-gray-700">
-        {field.label ?? humanize(field.id)}
-      </label>
-      
-      {/* Field Value in Text Field */}
-      <div className="relative">
-        <input
-          type="text"
-          readOnly
-          value={formatValueAsString(primaryValue.value, field.type)}
-          className="w-full px-3 py-2 text-sm text-gray-900 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        
-        {/* Multiple Values Indicator */}
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <label className="text-xs font-medium text-gray-700">
+          {field.label ?? humanize(field.id)}
+        </label>
         {hasMultipleValues && (
           <button
             onClick={() => setShowAllValues(!showAllValues)}
-            className="absolute right-1 sm:right-2 top-1/2 -translate-y-1/2 text-[10px] sm:text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 bg-blue-50 px-1.5 sm:px-2 py-1 rounded"
+            className="text-[10px] sm:text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 bg-blue-50 px-1.5 sm:px-2 py-1 rounded"
           >
             <Info className="w-3 h-3" />
-            {field.values.length} values
+            {showAllValues ? 'Hide extras' : `${field.values.length} values`}
           </button>
         )}
       </div>
 
-      {/* Additional Values */}
+      <ValueCard entry={primaryValue} type={field.type} indexLabel="Primary" />
+
       {showAllValues && hasMultipleValues && (
-        <div className="mt-2 space-y-1">
+        <div className="space-y-2">
           {field.values.slice(1).map((value, idx) => (
-            <input
-              key={idx}
-              type="text"
-              readOnly
-              value={formatValueAsString(value.value, field.type)}
-              className="w-full px-3 py-2 text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-md"
+            <ValueCard
+              key={`${field.id}-${idx}`}
+              entry={value}
+              type={field.type}
+              indexLabel={`Value ${idx + 2}`}
             />
           ))}
         </div>
+      )}
+    </div>
+  )
+}
+
+type SemanticFieldValueEntry = NonNullable<SemanticField['values']>[number]
+
+function ValueCard({
+  entry,
+  type,
+  indexLabel,
+}: {
+  entry: SemanticFieldValueEntry
+  type?: string
+  indexLabel?: string
+}) {
+  const confidence = entry.confidence
+  const shouldShowConfidence = confidence !== undefined && confidence < 0.8
+
+  return (
+    <div className="border border-gray-200 rounded-lg bg-white p-3 space-y-2">
+      {indexLabel && (
+        <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+          {indexLabel}
+        </p>
+      )}
+      <StructuredValue value={entry.value} type={type} />
+      {shouldShowConfidence && confidence !== undefined && (
+        <span
+          className={`inline-flex items-center text-[11px] px-2 py-0.5 rounded-full font-medium ${getConfidenceBadgeColor(
+            confidence
+          )}`}
+        >
+          Confidence {formatConfidenceDisplay(confidence)}
+        </span>
       )}
     </div>
   )
@@ -185,66 +209,30 @@ function getConfidenceBadgeColor(confidence: number): string {
   return 'bg-red-100 text-red-700'
 }
 
-function formatValueAsString(value: unknown, type?: string): string {
-  // Null/undefined/empty
-  if (value === null || value === undefined || value === '') {
-    return ''
-  }
-
-  // Boolean
-  if (typeof value === 'boolean') {
-    return value ? 'Yes' : 'No'
-  }
-
-  // Money formatting
-  if (type === 'money' && typeof value === 'number') {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(value)
-  }
-
-  // Date formatting
-  if (type === 'date' && typeof value === 'string') {
-    try {
-      return new Date(value).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      })
-    } catch {
-      return value
-    }
-  }
-
-  // Number formatting
-  if (typeof value === 'number') {
-    return value.toLocaleString('en-US')
-  }
-
-  // Array - join with commas
-  if (Array.isArray(value)) {
-    return value.map(item => formatValueAsString(item, type)).join(', ')
-  }
-
-  // Object - JSON string
-  if (typeof value === 'object' && value !== null) {
-    return JSON.stringify(value, null, 2)
-  }
-
-  // String (default)
-  return String(value)
+function formatConfidenceDisplay(confidence?: number): string {
+  if (confidence === undefined) return ''
+  return `${(confidence * 100).toFixed(1)}%`
 }
 
-function renderValue(value: unknown, type?: string): React.ReactNode {
-  // Null/undefined/empty
+function StructuredValue({ value, type }: { value: unknown; type?: string }) {
+  return (
+    <div className="text-sm text-gray-900">
+      {renderStructuredContent(value, type, 0)}
+    </div>
+  )
+}
+
+function renderStructuredContent(
+  rawValue: unknown,
+  type?: string,
+  depth: number = 0
+): React.ReactNode {
+  const value = parseStructuredValue(rawValue)
+
   if (value === null || value === undefined || value === '') {
     return <span className="text-gray-400 italic">Not provided</span>
   }
 
-  // Boolean
   if (typeof value === 'boolean') {
     return (
       <span className={`font-medium ${value ? 'text-green-600' : 'text-red-600'}`}>
@@ -253,10 +241,9 @@ function renderValue(value: unknown, type?: string): React.ReactNode {
     )
   }
 
-  // Money formatting
   if (type === 'money' && typeof value === 'number') {
     return (
-      <span className="font-semibold text-gray-900">
+      <span className="font-semibold">
         {new Intl.NumberFormat('en-US', {
           style: 'currency',
           currency: 'USD',
@@ -267,73 +254,177 @@ function renderValue(value: unknown, type?: string): React.ReactNode {
     )
   }
 
-  // Date formatting
   if (type === 'date' && typeof value === 'string') {
-    try {
+    const date = new Date(value)
+    if (!Number.isNaN(date.getTime())) {
       return (
         <span className="text-gray-900">
-          {new Date(value).toLocaleDateString('en-US', {
+          {date.toLocaleDateString('en-US', {
             year: 'numeric',
             month: 'short',
             day: 'numeric',
           })}
         </span>
       )
-    } catch {
-      return <span className="text-gray-900">{value}</span>
     }
   }
 
-  // Number formatting
   if (typeof value === 'number') {
-    return (
-      <span className="font-medium text-gray-900">
-        {value.toLocaleString('en-US')}
-      </span>
-    )
+    return <span className="font-medium text-gray-900">{value.toLocaleString('en-US')}</span>
   }
 
-  // Array
   if (Array.isArray(value)) {
     if (value.length === 0) {
-      return <span className="text-gray-400 italic">Empty list</span>
+      return <span className="text-gray-400 italic">No entries</span>
+    }
+
+    const normalized = value.map(parseStructuredValue)
+    const primitivesOnly = normalized.every(
+      (item) => item === null || typeof item !== 'object'
+    )
+    if (primitivesOnly) {
+      return (
+        <ul className="list-disc pl-5 space-y-1">
+          {normalized.map((item, idx) => (
+            <li key={`${depth}-primitive-${idx}`} className="text-sm text-gray-900">
+              {formatPrimitive(item)}
+            </li>
+          ))}
+        </ul>
+      )
+    }
+
+    const table = detectTabularData(normalized)
+    if (table) {
+      return renderObjectTable(table, depth)
+    }
+
+    return (
+      <div className="space-y-2">
+        {normalized.map((item, idx) => (
+          <div
+            key={`${depth}-object-${idx}`}
+            className="border border-gray-200 rounded-lg p-3 bg-gray-50"
+          >
+            {renderStructuredContent(item, undefined, depth + 1)}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  if (typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>).filter(
+      ([, val]) => val !== null && val !== undefined && val !== ''
+    )
+    if (entries.length === 0) {
+      return <span className="text-gray-400 italic">Not provided</span>
     }
     return (
-      <div className="space-y-1">
-        {value.map((item, idx) => (
-          <div key={idx} className="text-sm text-gray-900">
-            <span className="text-gray-500 mr-2">•</span>
-            {renderValue(item, type)}
+      <dl className="space-y-1">
+        {entries.map(([key, val]) => (
+          <div key={`${key}-${depth}`} className="flex flex-col gap-1 border-b border-gray-100 pb-2 last:border-b-0">
+            <dt className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">
+              {humanize(key)}
+            </dt>
+            <dd className="text-sm text-gray-900">
+              {typeof val === 'object'
+                ? renderStructuredContent(val, undefined, depth + 1)
+                : formatPrimitive(val)}
+            </dd>
           </div>
         ))}
-      </div>
+      </dl>
     )
   }
 
-  // Object (complex)
-  if (typeof value === 'object' && value !== null) {
-    return (
-      <div className="bg-white border border-gray-200 rounded-lg p-3 space-y-2 text-xs">
-        {Object.entries(value as Record<string, unknown>).map(([key, val]) => (
-          <div key={key} className="flex justify-between gap-4">
-            <span className="font-medium text-gray-600 min-w-0 truncate">
-              {humanize(key)}:
-            </span>
-            <span className="text-gray-900 text-right flex-shrink-0">
-              {formatPrimitive(val)}
-            </span>
-          </div>
-        ))}
-      </div>
-    )
-  }
-
-  // String (default)
   return <span className="text-gray-900">{String(value)}</span>
 }
 
+type TabularData = {
+  columns: string[]
+  rows: Array<Record<string, unknown>>
+}
+
+function detectTabularData(entries: unknown[]): TabularData | null {
+  const objects = entries.filter(
+    (item): item is Record<string, unknown> =>
+      typeof item === 'object' && item !== null && !Array.isArray(item)
+  )
+  if (objects.length < 2) {
+    return null
+  }
+  const columns = Array.from(
+    new Set(
+      objects.flatMap((obj) =>
+        Object.keys(obj).filter(
+          (key) => !key.startsWith('_') && obj[key] !== null && obj[key] !== undefined && obj[key] !== ''
+        )
+      )
+    )
+  )
+  if (columns.length === 0 || columns.length > 15) {
+    return null
+  }
+  return {
+    columns,
+    rows: objects,
+  }
+}
+
+function renderObjectTable(tabular: TabularData, depth: number): React.ReactNode {
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full text-xs text-left text-gray-700 border border-gray-200 rounded-lg overflow-hidden">
+        <thead className="bg-gray-100 text-gray-600 uppercase tracking-wide">
+          <tr>
+            {tabular.columns.map((col) => (
+              <th key={`${col}-${depth}`} className="px-3 py-2 whitespace-nowrap">
+                {humanize(col)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {tabular.rows.map((row, rowIndex) => (
+            <tr
+              key={`row-${depth}-${rowIndex}`}
+              className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
+            >
+              {tabular.columns.map((col) => (
+                <td key={`${col}-${rowIndex}`} className="px-3 py-2 align-top whitespace-nowrap">
+                  {renderStructuredContent(row[col], undefined, depth + 1)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function parseStructuredValue(value: unknown): unknown {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (
+      (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+      (trimmed.startsWith('[') && trimmed.endsWith(']'))
+    ) {
+      try {
+        return JSON.parse(trimmed)
+      } catch {
+        return value
+      }
+    }
+  }
+  return value
+}
+
 function formatPrimitive(value: unknown): string {
-  if (value === null || value === undefined || value === '') return '—'
+  if (value === null || value === undefined || value === '') {
+    return '—'
+  }
   if (typeof value === 'number') {
     return Number.isFinite(value) ? value.toLocaleString() : String(value)
   }

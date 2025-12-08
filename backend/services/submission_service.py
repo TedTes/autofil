@@ -491,7 +491,9 @@ class SubmissionService:
             if progress_callback:
                 progress_callback(submission_id, 80, "extracting", "Saving extracted data...")
 
-            json_data = self._dedupe_entity_values(extraction_result.to_dict())
+            json_data = self._dedupe_entity_values(
+                extraction_result.to_dict() if hasattr(extraction_result, "to_dict") else extraction_result
+            )
             json_data = self._clean_entities(json_data)
             timestamp = datetime.utcnow().isoformat()
             version_notes = "Re-extraction" if is_existing_submission else "Initial extraction"

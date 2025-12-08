@@ -307,7 +307,8 @@ def preview_input_pdf(submission_id):
         if not metadata:
             return jsonify({"error": "Submission metadata not found"}), 404
 
-        file_bytes = submission_service.get_original_pdf_bytes(submission_id)
+        input_id = request.args.get("input_id")
+        file_bytes = submission_service.get_original_pdf_bytes(submission_id, input_id=input_id)
         if file_bytes:
             response = Response(
                 file_bytes,
@@ -667,7 +668,7 @@ def list_all_submissions():
         offset = int(request.args.get("offset", 0))
         status_filter = request.args.get("status")
 
-        all_subs = submission_service.get_all_submissions()
+        all_subs = submission_service.list_submission_summaries()
  
         if status_filter:
             statuses = [s.strip() for s in status_filter.split(",")]
@@ -685,6 +686,8 @@ def list_all_submissions():
                 "confidence": s.get("confidence"),
                 "folder_id": s.get("folder_id"),
                 "client_name": s.get("client_name"),
+                "input_id": s.get("input_id"),
+                "file_count": s.get("file_count"),
             }
             for s in submissions
         ]

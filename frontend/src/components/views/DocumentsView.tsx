@@ -1172,7 +1172,7 @@ function FileListView({
 
               <div className="col-span-4">
                 <button
-                  onClick={() => onFileClick?.(file.submission_id, file.filename)}
+                  onClick={() => onFileClick?.(file.submission_id, file.filename, file.input_id)}
                   className="flex items-center gap-3 text-left hover:text-blue-600 transition-colors group w-full"
                 >
                   <FileText className="w-5 h-5 text-gray-400 group-hover:text-blue-600 flex-shrink-0" />
@@ -1210,7 +1210,7 @@ function FileListView({
   <button
     onClick={(e) => {
       e.stopPropagation()
-      onFileClick?.(file.submission_id, file.filename)
+    onFileClick?.(file.submission_id, file.filename, file.input_id)
     }}
     className="flex items-center gap-1 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors font-medium"
   >
@@ -1231,7 +1231,7 @@ function FileListView({
                 />
                 
                 <button
-                  onClick={() => onFileClick?.(file.submission_id, file.filename)}
+                  onClick={() => onFileClick?.(file.submission_id, file.filename, file.input_id)}
                   className="flex-1 text-left min-w-0"
                 >
                   <div className="flex items-center gap-2 mb-2">
@@ -1260,7 +1260,7 @@ function FileListView({
                 </button>
 
       <button
-        onClick={() => onFileClick?.(file.submission_id, file.filename)}
+        onClick={() => onFileClick?.(file.submission_id, file.filename, file.input_id)}
         className="mt-2 flex items-center gap-1 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors font-medium"
       >
         <Eye className="w-4 h-4" />
@@ -1309,7 +1309,7 @@ function FileGridView({
 
           {/* Card Body */}
           <button
-            onClick={() => onFileClick?.(file.submission_id, file.filename)}
+            onClick={() => onFileClick?.(file.submission_id, file.filename, file.input_id)}
             className="p-4 text-left hover:bg-gray-50 transition-colors w-full"
           >
             <div className="flex items-start gap-3 mb-3">

@@ -228,19 +228,7 @@ function normalizeSemanticSections(raw: unknown): SemanticSection[] {
 }
 
 function formatValueForDisplay(value: unknown): ReactElement {
-  if (value === null || value === undefined || value === '') {
-    return <span className="text-sm text-gray-400">N/A</span>
-  }
-
-  if (typeof value === 'object') {
-    return (
-      <pre className="text-xs text-gray-800 bg-gray-50 rounded-md p-2 overflow-x-auto whitespace-pre-wrap">
-        {JSON.stringify(value, null, 2)}
-      </pre>
-    )
-  }
-
-  return <span className="text-sm text-gray-900 whitespace-pre-wrap">{String(value)}</span>
+  return <StructuredValue value={value} />
 }
 
 export function CleanDataDisplay({
@@ -249,15 +237,36 @@ export function CleanDataDisplay({
   isEditable = false,
   onFieldChange,
 }: CleanDataDisplayProps) {
+  
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
   const [expandedSemanticSections, setExpandedSemanticSections] = useState<Set<string>>(
     new Set()
   )
 
   const semanticSections = useMemo(() => normalizeSemanticSections(data), [data])
+  const rawData = (data as Record<string, unknown>)?.raw
   
   // Flatten the data structure
   const flatData = flattenEntities(data as Record<string, unknown>)
+  const hiddenKeys = new Set([
+    'raw',
+    'job_id',
+    'jobId',
+    'source',
+    'metadata',
+    'semantic_sections',
+    'semanticSections',
+    'inputs',
+    'outputs',
+    'name',
+    'status',
+    'filename',
+  ])
+  Object.keys(flatData).forEach((key) => {
+    if (hiddenKeys.has(key)) {
+      delete flatData[key]
+    }
+  })
   
   // Group fields by section if they have dot notation (e.g., "applicant.name")
   const groupedData = Object.entries(flatData).reduce((acc, [key, value]) => {
@@ -301,7 +310,7 @@ export function CleanDataDisplay({
     }
   }, [sections.length, semanticSections.length, expandedSections.size])
   
-  if (Object.keys(flatData).length === 0) {
+  if (Object.keys(flatData).length === 0 && semanticSections.length === 0) {
     return (
       <div className="bg-gray-50 rounded-lg p-8 text-center">
         <p className="text-sm text-gray-600">No data extracted</p>
@@ -353,6 +362,7 @@ export function CleanDataDisplay({
                   {section.fields.map((field) => {
                     const confidenceOverride = fieldConfidence[field.id]
                     const fieldValues = field.values && field.values.length > 0 ? field.values : null
+                    const tableData = fieldValues ? buildTabularFromFieldValues(fieldValues) : null
                     return (
                       <div key={field.id} className="px-4 py-3">
                         <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
@@ -360,26 +370,63 @@ export function CleanDataDisplay({
                         </div>
                         {fieldValues ? (
                           <div className="mt-2 flex flex-col gap-2">
-                            {fieldValues.map((entry, index) => (
-                              <div
-                                key={`${field.id}-${index}`}
-                                className="flex flex-col gap-1 bg-gray-50 rounded-lg p-3 border border-gray-100"
-                              >
-                                {formatValueForDisplay(entry.value)}
-                                {(entry.confidence ?? confidenceOverride) !== undefined &&
-                                  (entry.confidence ?? confidenceOverride)! < 0.8 && (
-                                    <span
-                                      className={`text-xs px-2 py-0.5 rounded-full self-start font-medium ${
-                                        (entry.confidence ?? confidenceOverride)! >= 0.6
-                                          ? 'bg-yellow-100 text-yellow-700'
-                                          : 'bg-red-100 text-red-700'
-                                      }`}
-                                    >
-                                      {formatConfidenceDisplay(entry.confidence ?? confidenceOverride)}
-                                    </span>
-                                  )}
+                            {tableData ? (
+                              <div className="flex flex-col gap-2">
+                                {renderObjectTable(tableData, 0)}
+                                {fieldValues.some(
+                                  (entry) =>
+                                    (entry.confidence ?? confidenceOverride) !== undefined &&
+                                    (entry.confidence ?? confidenceOverride)! < 0.8
+                                ) && (
+                                  <div className="flex flex-wrap gap-2">
+                                    {fieldValues.map((entry, index) => {
+                                      const valueConfidence =
+                                        entry.confidence ?? confidenceOverride
+                                      if (
+                                        valueConfidence === undefined ||
+                                        valueConfidence >= 0.8
+                                      ) {
+                                        return null
+                                      }
+                                      return (
+                                        <span
+                                          key={`${field.id}-conf-${index}`}
+                                          className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                            valueConfidence >= 0.6
+                                              ? 'bg-yellow-100 text-yellow-700'
+                                              : 'bg-red-100 text-red-700'
+                                          }`}
+                                        >
+                                          Row {index + 1}:{' '}
+                                          {formatConfidenceDisplay(valueConfidence)}
+                                        </span>
+                                      )
+                                    })}
+                                  </div>
+                                )}
                               </div>
-                            ))}
+                            ) : (
+                              fieldValues.map((entry, index) => (
+                                <div
+                                  key={`${field.id}-${index}`}
+                                  className="flex flex-col gap-1 bg-gray-50 rounded-lg p-3 border border-gray-100"
+                                >
+                                  {formatValueForDisplay(entry.value)}
+                                  {(entry.confidence ?? confidenceOverride) !== undefined &&
+                                    (entry.confidence ?? confidenceOverride)! < 0.8 && (
+                                      <span
+                                        className={`text-xs px-2 py-0.5 rounded-full self-start font-medium ${
+                                          (entry.confidence ?? confidenceOverride)! >= 0.6
+                                            ? 'bg-yellow-100 text-yellow-700'
+                                            : 'bg-red-100 text-red-700'
+                                        }`}
+                                      >
+                                        {formatConfidenceDisplay(entry.confidence ?? confidenceOverride)}
+                                      </span>
+                                    )}
+                                </div>
+                              ))
+                            )}
                           </div>
                         ) : (
                           <div className="mt-2 text-sm text-gray-400">No data available</div>
@@ -398,6 +445,7 @@ export function CleanDataDisplay({
 
   return (
     <div className="space-y-3 max-h-[calc(100vh-220px)] overflow-y-auto pr-1">
+      {rawData ? <RawDataPreview data={rawData} /> : null}
       {sections.map((section) => {
         const sectionData = groupedData[section]
         const isExpanded = expandedSections.has(section)
@@ -440,7 +488,8 @@ export function CleanDataDisplay({
                         key={fieldName}
                         fieldPath={fieldPath}
                         fieldName={fieldName}
-                        value={displayValue}
+                        rawValue={value}
+                        displayValue={displayValue}
                         confidence={confidence}
                         isEditable={isEditable}
                         onFieldChange={onFieldChange}
@@ -470,14 +519,16 @@ export function CleanDataDisplay({
 function FieldRow({
   fieldPath,
   fieldName,
-  value,
+  rawValue,
+  displayValue,
   confidence,
   isEditable,
   onFieldChange,
 }: {
   fieldPath: string
   fieldName: string
-  value: string
+  rawValue: unknown
+  displayValue: string
   confidence?: number
   isEditable: boolean
   onFieldChange?: (fieldPath: string, value: unknown) => void
@@ -507,13 +558,13 @@ function FieldRow({
           <ClickableFieldValue
             fieldPath={fieldPath}
             label={formattedLabel}
-            value={value}
+            value={displayValue}
             fieldType={inferFieldType()}
             onEdit={(newValue) => onFieldChange(fieldPath, newValue)}
             className="text-sm text-gray-900"
           />
         ) : (
-          <span className="text-sm text-gray-900">{value || 'N/A'}</span>
+          <StructuredValue value={rawValue} />
         )}
         
         {/* Confidence Badge */}
@@ -529,4 +580,222 @@ function FieldRow({
       </div>
     </div>
   )
+}
+
+function StructuredValue({ value }: { value: unknown }) {
+  return (
+    <div className="text-sm text-gray-900">
+      {renderStructuredContent(value, 0)}
+    </div>
+  )
+}
+
+function renderStructuredContent(rawValue: unknown, depth: number): ReactElement {
+  const value = parseStructuredString(rawValue)
+
+  if (value === null || value === undefined || value === '') {
+    return <span className="text-sm text-gray-400">N/A</span>
+  }
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return <span className="text-sm text-gray-400">No entries</span>
+    }
+    const hasOnlyPrimitives = value.every(
+      (item) => item === null || item === undefined || typeof item !== 'object'
+    )
+    if (hasOnlyPrimitives) {
+      return (
+        <ul className="list-disc pl-5 space-y-0.5">
+          {value.map((item, index) => (
+            <li key={`primitive-${depth}-${index}`} className="text-sm text-gray-900">
+              {formatPrimitive(item)}
+            </li>
+          ))}
+        </ul>
+      )
+    }
+    const tabular = detectTabularData(value)
+    if (tabular) {
+      return renderObjectTable(tabular, depth)
+    }
+    return (
+      <div className="space-y-2">
+        {value.map((item, index) => (
+          <div
+            key={`object-${depth}-${index}`}
+            className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm"
+          >
+            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+              Item {index + 1}
+            </div>
+            {renderStructuredContent(item, depth + 1)}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  if (typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>).filter(
+      ([, val]) => val !== undefined && val !== null && val !== ''
+    )
+    if (entries.length === 0) {
+      return <span className="text-sm text-gray-400">N/A</span>
+    }
+    return (
+      <dl className="space-y-1">
+        {entries.map(([key, val]) => (
+          <div
+            key={`${key}-${depth}`}
+            className="flex flex-col sm:flex-row sm:items-start gap-1 border-b border-gray-100 py-1 last:border-b-0"
+          >
+            <dt className="text-xs font-semibold text-gray-500 uppercase tracking-wide sm:w-40">
+              {formatFieldName(key)}
+            </dt>
+            <dd className="flex-1 text-sm text-gray-900">
+              {typeof val === 'object'
+                ? renderStructuredContent(val, depth + 1)
+                : formatPrimitive(val)}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    )
+  }
+
+  return <span className="text-sm text-gray-900">{formatPrimitive(value)}</span>
+}
+
+function formatPrimitive(value: unknown): string {
+  if (value === null || value === undefined || value === '') {
+    return 'N/A'
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value.toLocaleString() : String(value)
+  }
+  if (typeof value === 'boolean') {
+    return value ? 'Yes' : 'No'
+  }
+  return String(value)
+}
+
+function RawDataPreview({ data }: { data: unknown }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <button
+        onClick={() => setOpen((prev) => !prev)}
+        className="w-full px-4 py-2 flex items-center justify-between text-left hover:bg-gray-50"
+      >
+        <span className="text-sm font-semibold text-gray-900">Raw Extracted Data</span>
+        {open ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+      </button>
+      {open && (
+        <div className="border-t border-gray-100 bg-gray-50 p-3">
+          <pre className="text-xs text-gray-800 overflow-x-auto whitespace-pre-wrap">
+            {JSON.stringify(data, null, 2)}
+          </pre>
+        </div>
+      )}
+    </div>
+  )
+}
+
+type TabularData = {
+  columns: string[]
+  rows: Array<Record<string, unknown>>
+}
+
+function detectTabularData(entries: unknown[]): TabularData | null {
+  const normalized = entries.map((entry) => parseStructuredString(entry))
+  const objects = normalized.filter(
+    (item): item is Record<string, unknown> => typeof item === 'object' && item !== null
+  )
+  if (objects.length === 0) {
+    return null
+  }
+  if (objects.some((obj) => Array.isArray(obj))) {
+    return null
+  }
+  const columns = Array.from(
+    new Set(
+      objects.flatMap((obj) =>
+        Object.keys(obj).filter((key) => !key.startsWith('_') && obj[key] !== null && obj[key] !== undefined && obj[key] !== '')
+      )
+    )
+  )
+  if (columns.length === 0 || columns.length > 12) {
+    return null
+  }
+  return {
+    columns,
+    rows: objects.map((obj) => obj),
+  }
+}
+
+function renderObjectTable(tabular: TabularData, depth: number): ReactElement {
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full text-xs text-left text-gray-700 border border-gray-200 rounded-lg overflow-hidden">
+        <thead className="bg-gray-100 text-gray-600 uppercase tracking-wide">
+          <tr>
+            {tabular.columns.map((col) => (
+              <th key={`${col}-${depth}`} className="px-3 py-2 whitespace-nowrap">
+                {formatFieldName(col)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {tabular.rows.map((row, rowIndex) => (
+            <tr
+              key={`row-${depth}-${rowIndex}`}
+              className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
+            >
+              {tabular.columns.map((col) => (
+                <td key={`${col}-${rowIndex}`} className="px-3 py-2 align-top whitespace-nowrap">
+                  {typeof row[col] === 'object'
+                    ? renderStructuredContent(row[col], depth + 1)
+                    : formatPrimitive(row[col])}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function parseStructuredString(value: unknown): unknown {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (
+      (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+      (trimmed.startsWith('[') && trimmed.endsWith(']'))
+    ) {
+      try {
+        return JSON.parse(trimmed)
+      } catch {
+        return value
+      }
+    }
+  }
+  return value
+}
+
+function buildTabularFromFieldValues(values: SemanticFieldValue[]): TabularData | null {
+  console.log("values")
+  console.log(values)
+  if (values.length === 0) return null
+  const parsed = values.map((entry) => parseStructuredString(entry.value))
+  if (
+    parsed.some(
+      (item) => item === null || typeof item !== 'object' || Array.isArray(item)
+    )
+  ) {
+    return null
+  }
+  return detectTabularData(parsed)
 }

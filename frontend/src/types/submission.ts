@@ -106,7 +106,9 @@ export interface SubmissionListItem {
   confidence?: number
   folder_id?: string
   client_id?: string
-  client_name?:string
+  client_name?: string
+  input_id?: string
+  file_count?: number
 }
 
 export interface SubmissionListResponse {

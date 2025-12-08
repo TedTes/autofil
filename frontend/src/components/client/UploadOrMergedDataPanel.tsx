@@ -65,7 +65,6 @@ export default function UploadOrMergedDataPanel({
   FileUploadDropZoneComponent,
 
 }: UploadOrMergedDataPanelProps) {
-  
   // Show existing dropzone if no extracted files yet
   if (!hasExtractedFiles) {
     return (

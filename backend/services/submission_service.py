@@ -1256,11 +1256,20 @@ class SubmissionService:
             return None
         return self.remote_storage.download_file(path)
 
-    def _get_input_storage(self, metadata: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _get_input_storage(
+        self,
+        metadata: Dict[str, Any],
+        input_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
         storage = metadata.get("upload_storage")
-        if storage:
+        if storage and not input_id:
             return storage
-        for entry in metadata.get("inputs", []):
+        inputs = metadata.get("inputs", [])
+        if input_id:
+            for entry in inputs:
+                if entry.get("input_id") == input_id:
+                    return entry.get("storage")
+        for entry in inputs:
             storage = entry.get("storage")
             if storage:
                 return storage
@@ -1276,11 +1285,11 @@ class SubmissionService:
                 return storage
         return None
 
-    def get_original_pdf_bytes(self, submission_id: str) -> Optional[bytes]:
+    def get_original_pdf_bytes(self, submission_id: str, input_id: Optional[str] = None) -> Optional[bytes]:
         metadata = self.get_submission_metadata(submission_id)
         if not metadata:
             return None
-        storage = self._get_input_storage(metadata)
+        storage = self._get_input_storage(metadata, input_id=input_id)
         return self._download_storage_entry(storage)
 
     def get_filled_pdf_bytes(self, submission_id: str) -> Optional[bytes]:
@@ -1451,15 +1460,25 @@ class SubmissionService:
             client_name = metadata.get("client_name")
             
 
+            inputs_meta = metadata.get("inputs") or []
+            primary_input = inputs_meta[-1] if inputs_meta else None
+
             summaries.append({
                 "submission_id": submission_id,
-                "filename": metadata.get("filename") or metadata.get("name") or "Untitled.pdf",
+                "filename": (
+                    (primary_input or {}).get("filename")
+                    or metadata.get("filename")
+                    or metadata.get("name")
+                    or "Untitled.pdf"
+                ),
+                "input_id": (primary_input or {}).get("input_id"),
                 "status": metadata.get("status") or metadata.get("workflow_status") or "uploaded",
-                "uploaded_at": metadata.get("uploaded_at") or metadata.get("created_at"),
+                "uploaded_at": (primary_input or {}).get("uploaded_at") or metadata.get("uploaded_at") or metadata.get("created_at"),
                 "confidence": metadata.get("confidence"),
                 "folder_id": metadata.get("folder_id"),
                 "client_id": client_id,
                 "client_name": client_name,
+                "file_count": metadata.get("file_count", 0),
             })
         return summaries
 

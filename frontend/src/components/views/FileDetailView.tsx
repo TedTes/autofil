@@ -1,15 +1,47 @@
 'use client'
 
-import { useState, useEffect,useCallback } from 'react'
-import { ArrowLeft, Download, Save, Loader2,Edit,Check, FileSpreadsheet } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react'
+import { ArrowLeft, Download, Save, Loader2, Edit, Check, FileSpreadsheet } from 'lucide-react'
 import { PdfPreview } from '@/components/PdfPreview'
-import { ExtractionDataForm} from '@/components/ExtractionDataForm'
-import {type ExtractedField, type ExtractionData,type FileDetailActions,type FillReport, type SovScheduleData  } from "../../types";
-import { getSubmission,  downloadBlob,exportSingleSubmission,updateSubmissionData } from '@/lib/api-client'
-import {transformFormFieldsToApi,fieldsToNestedObject} from "../../lib"
-import {ExportModal} from "../ExportModal";
+import { ExtractionDataForm } from '@/components/ExtractionDataForm'
+import {
+  type ExtractedField,
+  type ExtractionData,
+  type FileDetailActions,
+} from '../../types'
+import {
+  getSubmission,
+  downloadBlob,
+  exportSingleSubmission,
+  updateSubmissionData,
+} from '@/lib/api-client'
+import { transformFormFieldsToApi, fieldsToNestedObject } from '../../lib'
+import { ExportModal } from '../ExportModal'
 import { CleanDataDisplay } from '../extraction/CleanDataDisplay'
 import { SovScheduleView, getSovScheduleData } from '../extraction/SovSchedule'
+
+type SpecializedViewConfig = {
+  key: string
+  label: string
+  description?: string
+  disableEdit?: boolean
+  render: ReactNode
+}
+
+function resolveSpecializedView(data: Record<string, unknown> | null | undefined): SpecializedViewConfig | null {
+  if (!data) return null
+  const sovSchedule = getSovScheduleData(data)
+  if (sovSchedule) {
+    return {
+      key: 'sovSchedule',
+      label: 'Schedule of Values file',
+      description: 'Schedule of Values detected. Review the extracted property schedule below.',
+      disableEdit: true,
+      render: <SovScheduleView schedule={sovSchedule} />,
+    }
+  }
+  return null
+}
 
 interface FileDetailViewProps {
   submissionId: string
@@ -43,8 +75,11 @@ export function FileDetailView({
   const [showExportModal, setShowExportModal] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
   const resolvedFilename = extractedData?.filename || filename
-  const sovScheduleData = getSovScheduleData(extractedData?.data)
-  const hasSovSchedule = Boolean(sovScheduleData)
+  const specializedView = useMemo(
+    () => resolveSpecializedView(extractedData?.data),
+    [extractedData?.data]
+  )
+  const hasSpecializedView = Boolean(specializedView)
   const isPdfPreview = !!resolvedFilename && resolvedFilename.toLowerCase().endsWith('.pdf')
 
 
@@ -146,7 +181,7 @@ export function FileDetailView({
 
   // Toggle edit mode
   const handleToggleEditMode = () => {
-    if (hasSovSchedule) {
+    if (specializedView?.disableEdit) {
       setIsEditMode(false)
       return
     }
@@ -177,8 +212,13 @@ export function FileDetailView({
     }
   }
 
-  const getInputPreviewUrl = (id: string) => {
-    return `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/submissions/${id}/preview-input`
+  const getInputPreviewUrl = (id: string, inputId?: string) => {
+    const base = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/submissions/${id}/preview-input`
+    if (inputId) {
+      const params = new URLSearchParams({ input_id: inputId })
+      return `${base}?${params.toString()}`
+    }
+    return base
   }
 
  
@@ -251,7 +291,7 @@ export function FileDetailView({
         {isPdfPreview && (
           <div className="h-full overflow-hidden bg-gray-900 border-r border-gray-700">
             <PdfPreview
-              fileUrl={getInputPreviewUrl(submissionId)}
+              fileUrl={getInputPreviewUrl(submissionId, inputId)}
               filename={resolvedFilename}
               onDownload={handleDownloadOriginal}
             />
@@ -268,8 +308,8 @@ export function FileDetailView({
                   Extracted Data
                 </h3>
                 <p className="text-xs text-gray-600">
-                  {hasSovSchedule
-                    ? 'Schedule of Values detected. Review the extracted property schedule below.'
+                  {specializedView?.description
+                    ? specializedView.description
                     : isEditMode
                     ? 'Edit the information below and click Save when done'
                     : 'Review the extracted information or click Edit to make changes'}
@@ -277,7 +317,7 @@ export function FileDetailView({
               </div>
 
               {/* Edit Mode Toggle Button */}
-              {!hasSovSchedule && (
+              {!specializedView?.disableEdit && (
                 <button
                   onClick={handleToggleEditMode}
                   disabled={isSavingChanges}
@@ -303,7 +343,7 @@ export function FileDetailView({
             </div>
 
             {/* Unsaved Changes Indicator */}
-            {!hasSovSchedule && hasUnsavedChanges && (
+            {!specializedView?.disableEdit && hasUnsavedChanges && (
               <div className="mb-4 px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
@@ -327,7 +367,7 @@ export function FileDetailView({
     <div className="mb-4 flex flex-wrap items-center gap-3 text-sm text-gray-600">
       <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-700 rounded-full">
         <FileSpreadsheet className="w-4 h-4" />
-        {hasSovSchedule ? 'Schedule of Values file' : 'Original file'}
+        {specializedView?.label || 'Original file'}
       </div>
       <button
         onClick={handleDownloadOriginal}
@@ -373,8 +413,8 @@ export function FileDetailView({
   )}
 
   {/* Clean Data Display */}
-  {hasSovSchedule && sovScheduleData ? (
-    <SovScheduleView schedule={sovScheduleData} />
+  {hasSpecializedView && specializedView ? (
+    specializedView.render
   ) : extractedData && extractedData.data ? (
     <CleanDataDisplay
       data={extractedData.data}

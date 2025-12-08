@@ -90,6 +90,9 @@ function buildPathFromView(type: ViewType, data?: ViewStateData): string {
       if (detail?.filename) {
         params.set('filename', detail.filename)
       }
+      if (detail?.inputId) {
+        params.set('inputId', detail.inputId)
+      }
       const query = params.toString()
       return `/dashboard/documents/file/${submissionId}${query ? `?${query}` : ''}`
     }
@@ -139,9 +142,10 @@ function mapPathToView(pathname: string, searchParams: URLSearchParams | Readonl
       }
       if (rest[0] === 'file' && rest[1]) {
         const filename = searchParams.get('filename') ?? undefined
+        const inputId = searchParams.get('inputId') ?? undefined
         return {
           type: 'file-detail',
-          data: { submissionId: rest[1], filename },
+          data: { submissionId: rest[1], filename, inputId },
           breadcrumbs: ['Dashboard', 'Documents', filename || 'File'],
         }
       }

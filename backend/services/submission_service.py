@@ -1699,11 +1699,21 @@ class SubmissionService:
                 turnaround_minutes.append(minutes)
 
             client_id = record.get("client_id") or "unknown"
+            client_name = record.get("client_name")
+            client_id_value = record.get("client_id")
+            if not client_name and client_id_value:
+                try:
+                    client = self.client_service.get_client(client_id_value)
+                    if client:
+                        client_name = client.get("name")
+                except Exception:
+                    client_name = None
+
             client_entry = client_counts.setdefault(
                 client_id,
                 {
                     "client_id": record.get("client_id"),
-                    "client_name": record.get("client_name") or "Unknown client",
+                    "client_name": client_name or "Unknown client",
                     "submissions": 0,
                 },
             )

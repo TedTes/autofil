@@ -10,12 +10,12 @@ import {
   FolderOpen,
   AlertTriangle,
   ShieldAlert,
+  ArrowUpRight,
 } from 'lucide-react'
 
 import { getRecentSubmissions, getClients } from '@/lib/api-client'
 import type { RecentSubmission, Client, SubmissionStats, RecentSubmissionFile } from '@/types'
 import RecentSubmissionsCard from './dashboard/RecentSubmissionsCard'
-
 
 type HomeViewProps = {
   totalSubmissions: number
@@ -118,7 +118,7 @@ export function HomeView({
     return items.slice(0, 5)
   }, [recentSubmissions])
 
-  // Stats
+  // Stats calculations
   const statsByStatus = submissionStats?.by_status || {}
   const totalSubmissionsCount = submissionStats?.total_submissions ?? totalSubmissions
   const activeSubmissions = submissionStats
@@ -137,165 +137,236 @@ export function HomeView({
       : 0
 
   return (
-    <div className="space-y-6">
-      {/* Stats Grid */}
+    <div className="space-y-6 py-6">
+      {/* Clean Stats Grid - 4 Column Layout */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          icon={Users}
-          label="Total Clients"
-          value={loadingClients ? '...' : clients.length.toString()}
-          color="blue"
-        />
-        <StatCard
-          icon={FileText}
-          label="Active Submissions"
-          value={activeSubmissions.toString()}
-          color="purple"
-        />
-        <StatCard
-          icon={CheckCircle2}
-          label="Completed"
-          value={completedSubmissions.toString()}
-          color="green"
-        />
-        <StatCard
-          icon={TrendingUp}
-          label="Success Rate"
-          value={`${successRate}%`}
-          color="orange"
-        />
-      </div>
-
-      {/* Quick Access */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-        <h3 className="text-md font-semibold text-gray-500 mb-4">Quick Access</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <button
-            onClick={onNavigateToClients}
-            className="flex items-center gap-3 px-4 py-3 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-all group"
-          >
-            <Users className="w-5 h-5 text-gray-600 group-hover:text-blue-600" />
-            <div className="text-left">
-              <div className="text-sm font-semibold text-gray-900">Clients</div>
-              <div className="text-xs text-gray-500">Manage clients & upload</div>
-            </div>
-          </button>
-
-          <button
-            onClick={onNavigateToDocuments}
-            className="flex items-center gap-3 px-4 py-3 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-all group"
-          >
-            <FolderOpen className="w-5 h-5 text-gray-600 group-hover:text-blue-600" />
-            <div className="text-left">
-              <div className="text-sm font-semibold text-gray-900">Documents</div>
-              <div className="text-xs text-gray-500">Browse all documents</div>
-            </div>
-          </button>
-
-          <button
-            onClick={onNavigateToDocuments}
-            className="flex items-center gap-3 px-4 py-3 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-all group"
-          >
-            <Clock className="w-5 h-5 text-gray-600 group-hover:text-blue-600" />
-            <div className="text-left">
-              <div className="text-sm font-semibold text-gray-900">Recent</div>
-              <div className="text-xs text-gray-500">View recent activity</div>
-            </div>
-          </button>
-        </div>
-      </div>
-
-      {/* Pending review */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center">
-              <AlertTriangle className="w-5 h-5 text-red-600" />
+        {/* Success Rate */}
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
+              <TrendingUp className="w-4 h-4 text-blue-600" />
             </div>
             <div>
-              <h3 className="text-md font-semibold text-gray-500">Pending Review</h3>
-              <p className="text-xs text-gray-500">Files needing attention</p>
+              <div className="text-2xl font-bold text-gray-900">{successRate}%</div>
+              <p className="text-xs text-gray-600">Success Rate</p>
             </div>
           </div>
-          <button
-            onClick={onNavigateToDocuments}
-            className="text-sm font-medium text-indigo-600 hover:text-indigo-500"
-          >
-            View documents
-          </button>
         </div>
-        {pendingIssues.length ? (
-          <ul className="divide-y divide-gray-200">
-            {pendingIssues.map((issue) => (
-              <li key={issue.key} className="py-3">
+
+        {/* Total Clients */}
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-9 h-9 bg-purple-50 rounded-lg flex items-center justify-center flex-shrink-0">
+              <Users className="w-4 h-4 text-purple-600" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-gray-900">
+                {loadingClients ? '...' : clients.length}
+              </div>
+              <p className="text-xs text-gray-600">Total Clients</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Completed */}
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-9 h-9 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
+              <CheckCircle2 className="w-4 h-4 text-green-600" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-gray-900">{completedSubmissions}</div>
+              <p className="text-xs text-gray-600">Completed</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Active Submissions */}
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-9 h-9 bg-orange-50 rounded-lg flex items-center justify-center flex-shrink-0">
+              <FileText className="w-4 h-4 text-orange-600" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-gray-900">{activeSubmissions}</div>
+              <p className="text-xs text-gray-600">Active</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Action Center & Issues - Two Column Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Quick Actions - Redesigned */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+          <div className="flex items-center gap-2 mb-5">
+            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
+              <TrendingUp className="w-4 h-4 text-white" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900">Quick Actions</h3>
+          </div>
+          
+          <div className="space-y-3">
+            <button
+              onClick={onNavigateToClients}
+              className="w-full group relative overflow-hidden bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 rounded-xl p-4 transition-all duration-200 border border-blue-100 hover:border-blue-200 hover:shadow-md"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+                  <Users className="w-6 h-6 text-blue-600" />
+                </div>
+                <div className="flex-1 text-left">
+                  <div className="text-sm font-semibold text-gray-900 mb-0.5">Manage Clients</div>
+                  <div className="text-xs text-gray-600">Add new or upload files</div>
+                </div>
+                <ArrowUpRight className="w-5 h-5 text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all" />
+              </div>
+            </button>
+
+            <button
+              onClick={onNavigateToDocuments}
+              className="w-full group relative overflow-hidden bg-gradient-to-r from-purple-50 to-pink-50 hover:from-purple-100 hover:to-pink-100 rounded-xl p-4 transition-all duration-200 border border-purple-100 hover:border-purple-200 hover:shadow-md"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+                  <FolderOpen className="w-6 h-6 text-purple-600" />
+                </div>
+                <div className="flex-1 text-left">
+                  <div className="text-sm font-semibold text-gray-900 mb-0.5">Browse Documents</div>
+                  <div className="text-xs text-gray-600">Search all files & outputs</div>
+                </div>
+                <ArrowUpRight className="w-5 h-5 text-gray-400 group-hover:text-purple-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all" />
+              </div>
+            </button>
+
+            <button
+              onClick={onNavigateToDocuments}
+              className="w-full group relative overflow-hidden bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 rounded-xl p-4 transition-all duration-200 border border-green-100 hover:border-green-200 hover:shadow-md"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+                  <Clock className="w-6 h-6 text-green-600" />
+                </div>
+                <div className="flex-1 text-left">
+                  <div className="text-sm font-semibold text-gray-900 mb-0.5">Recent Activity</div>
+                  <div className="text-xs text-gray-600">View latest submissions</div>
+                </div>
+                <ArrowUpRight className="w-5 h-5 text-gray-400 group-hover:text-green-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all" />
+              </div>
+            </button>
+          </div>
+        </div>
+
+        {/* Pending Review - Enhanced */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-2">
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                pendingIssues.length > 0 
+                  ? 'bg-gradient-to-br from-orange-500 to-red-600' 
+                  : 'bg-gradient-to-br from-green-500 to-emerald-600'
+              }`}>
+                {pendingIssues.length > 0 ? (
+                  <AlertTriangle className="w-4 h-4 text-white" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4 text-white" />
+                )}
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Review Queue</h3>
+                {pendingIssues.length > 0 && (
+                  <p className="text-xs text-gray-500">{pendingIssues.length} item{pendingIssues.length !== 1 ? 's' : ''} need attention</p>
+                )}
+              </div>
+            </div>
+            {pendingIssues.length > 0 && (
+              <button
+                onClick={onNavigateToDocuments}
+                className="text-xs font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-1 group"
+              >
+                View all
+                <ArrowUpRight className="w-3 h-3 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+              </button>
+            )}
+          </div>
+
+          {pendingIssues.length > 0 ? (
+            <div className="space-y-2 max-h-[280px] overflow-y-auto pr-2 custom-scrollbar">
+              {pendingIssues.map((issue) => (
                 <button
+                  key={issue.key}
                   type="button"
                   onClick={() => onGoToFile?.(issue.submissionId)}
-                  className="w-full text-left flex items-start justify-between gap-4"
+                  className="w-full text-left p-3 rounded-lg border border-gray-200 hover:border-orange-200 hover:bg-orange-50/50 transition-all group"
                 >
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">{issue.filename}</p>
-                    <p className="text-xs text-gray-500">
-                      {issue.reason}
-                      {typeof issue.confidence === 'number' ? ` · Confidence ${Math.round(issue.confidence * 100)}%` : ''}
-                    </p>
-                    {issue.lastActivity && (
-                      <p className="text-xs text-gray-400 mt-1">Last activity: {issue.lastActivity}</p>
-                    )}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{issue.filename}</p>
+                        {issue.status === 'error' ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700 whitespace-nowrap">
+                            Error
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700 whitespace-nowrap">
+                            Warning
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-600">
+                        {issue.reason}
+                        {typeof issue.confidence === 'number'
+                          ? ` (${(issue.confidence * 100).toFixed(0)}%)`
+                          : ''}
+                      </p>
+                    </div>
+                    <div className="flex-shrink-0 mt-1">
+                      {issue.status === 'error' ? (
+                        <ShieldAlert className="w-5 h-5 text-red-500" />
+                      ) : (
+                        <AlertTriangle className="w-5 h-5 text-orange-500" />
+                      )}
+                    </div>
                   </div>
-                  <span
-                    className={`text-xs font-medium px-2.5 py-1 rounded-full ${
-                      issue.status === 'error'
-                        ? 'bg-red-100 text-red-700'
-                        : 'bg-amber-100 text-amber-700'
-                    }`}
-                  >
-                    {issue.status === 'error' ? 'Error' : 'Review'}
-                  </span>
                 </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <div className="h-32 flex items-center justify-center border border-dashed border-gray-200 rounded-lg">
-            <div className="text-center">
-              <ShieldAlert className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-              <p className="text-sm text-gray-500">No files need review right now</p>
+              ))}
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <CheckCircle2 className="w-8 h-8 text-green-600" />
+              </div>
+              <p className="text-sm font-medium text-gray-900 mb-1">All clear!</p>
+              <p className="text-xs text-gray-500">No issues requiring attention</p>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
-  )
-}
 
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  color,
-}: {
-  icon: React.ComponentType<{ className?: string }>
-  label: string
-  value: string
-  color: 'blue' | 'purple' | 'green' | 'orange'
-}) {
-  const colorClasses: Record<typeof color, string> = {
-    blue: 'bg-blue-50 text-blue-600',
-    purple: 'bg-purple-50 text-purple-600',
-    green: 'bg-green-50 text-green-600',
-    orange: 'bg-orange-50 text-orange-600',
-  } as const
+      {/* Recent Submissions - Full Width */}
+      <RecentSubmissionsCard
+        limit={5}
+        onSubmissionClick={handleRecentSubmissionClick}
+        onViewAll={onNavigateToDocuments}
+      />
 
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex items-center gap-4">
-      <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${colorClasses[color]}`}>
-        <Icon className="w-6 h-6" />
-      </div>
-      <div>
-        <div className="text-sm text-gray-500">{label}</div>
-        <div className="text-2xl font-semibold text-gray-900">{value}</div>
-      </div>
+      {/* Custom scrollbar styles for review queue */}
+      <style jsx>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: #f1f1f1;
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: #cbd5e1;
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #94a3b8;
+        }
+      `}</style>
     </div>
   )
 }

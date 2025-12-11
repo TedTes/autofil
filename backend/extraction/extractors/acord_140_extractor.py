@@ -8,8 +8,13 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 from ..interfaces.extractor import IExtractor
 from ..core.document import Document, DocumentType
+from ..core.schema import Metadata
 from ..models.extraction_result import ExtractionResult
 from ..parsers import PdfFieldParser, TableParser
+from ..utils.canonical_output_builder import (
+    SectionPayload,
+    build_generic_canonical_output,
+)
 from utils.versioned_template_loader import (
     VersionedTemplateLoader,
     TemplateRecognizer,
@@ -66,24 +71,42 @@ class ACORD140Extractor(IExtractor):
             template_config: Optional[TemplateConfig] = None
             raw_fields = {}
             # Extract from fillable fields
+            locations = self._extract_locations_from_tables(document)
             if self.pdf_parser.is_fillable(document.file_path):
                 raw_fields = self.pdf_parser.extract_fields(document.file_path)
                 if raw_fields:
                     template_id = self.template_recognizer.detect(raw_fields.keys())
                     if template_id:
                         template_config = self.template_loader.load(template_id)
-                result = self._extract_from_fillable(raw_fields, template_config)
+                result = self._extract_from_fillable(
+                    document, raw_fields, template_config, locations
+                )
                 if result.success:
-                    locations = self._extract_locations_from_tables(document)
-                    if locations:
-                        result.data["locations"] = locations
                     return result
 
-            locations = self._extract_locations_from_tables(document)
             if locations:
+                canonical = build_generic_canonical_output(
+                    document,
+                    section_payloads=[
+                        SectionPayload(
+                            key="property_section",
+                            display_name="Property Section",
+                            description="Location schedule",
+                            fields={
+                                "locations": locations,
+                                "extractedAt": datetime.utcnow().isoformat(),
+                            },
+                        )
+                    ],
+                    extraction_method="table_parser",
+                    metadata=Metadata(
+                        form_type_detected="ACORD_140", line_of_business="Property"
+                    ),
+                    raw={"locations": locations},
+                )
                 return ExtractionResult(
                     success=True,
-                    data={"locations": locations},
+                    data=canonical.to_dict(),
                     confidence=0.75,
                 )
 
@@ -109,13 +132,36 @@ class ACORD140Extractor(IExtractor):
         return [DocumentType.ACORD_140]
     
     def _extract_from_fillable(
-        self, raw_fields: Dict[str, Any], template_config: Optional[TemplateConfig]
+        self,
+        document: Document,
+        raw_fields: Dict[str, Any],
+        template_config: Optional[TemplateConfig],
+        locations: List[Dict[str, Any]],
     ) -> ExtractionResult:
         """Extract from fillable fields."""
         mapped = self._map_fields(raw_fields, template_config)
+        fields = dict(mapped)
+        if locations:
+            fields["locations"] = locations
+        canonical = build_generic_canonical_output(
+            document,
+            section_payloads=[
+                SectionPayload(
+                    key="property_section",
+                    display_name="Property Section",
+                    description="Building & coverage data",
+                    fields=fields,
+                )
+            ],
+            extraction_method="fillable_pdf",
+            metadata=Metadata(
+                form_type_detected="ACORD_140", line_of_business="Property"
+            ),
+            raw={"mapped_fields": mapped, "raw_fields": raw_fields, "locations": locations},
+        )
         return ExtractionResult(
             success=True,
-            data=mapped,
+            data=canonical.to_dict(),
             confidence=0.8,
         )
     

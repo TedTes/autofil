@@ -11,8 +11,13 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 from ..interfaces.extractor import IExtractor
 from ..core.document import Document, DocumentType
+from ..core.schema import Metadata
 from ..models.extraction_result import ExtractionResult
 from ..parsers import TableParser, ExcelParser
+from ..utils.canonical_output_builder import (
+    SectionPayload,
+    build_generic_canonical_output,
+)
 
 
 class FinancialStatementExtractor(IExtractor):
@@ -234,10 +239,37 @@ class FinancialStatementExtractor(IExtractor):
             'totals': totals,
             'item_count': len(line_items),
         }
+
+        canonical = build_generic_canonical_output(
+            document,
+            section_payloads=[
+                SectionPayload(
+                    key="financial_statement",
+                    display_name="Financial Statement",
+                    description=f"{statement_type.replace('_', ' ').title()} summary",
+                    fields={
+                        "statementType": statement_type,
+                        "statementMetadata": metadata,
+                        "lineItems": categorized,
+                        "totals": totals,
+                        "itemCount": len(line_items),
+                        "extractionDate": data["extraction_date"],
+                    },
+                )
+            ],
+            extraction_method="table_parser",
+            metadata=Metadata(
+                form_type_detected="FINANCIAL_STATEMENT",
+                line_of_business=document.metadata.get("line_of_business")
+                if document.metadata
+                else None,
+            ),
+            raw=data,
+        )
         
         return ExtractionResult(
             success=True,
-            data=data,
+            data=canonical.to_dict(),
             warnings=warnings,
             confidence=self._calculate_confidence(line_items, warnings)
         )
@@ -314,10 +346,36 @@ class FinancialStatementExtractor(IExtractor):
             'totals': totals,
             'item_count': len(line_items),
         }
-        
+
+        canonical = build_generic_canonical_output(
+            document,
+            section_payloads=[
+                SectionPayload(
+                    key="financial_statement",
+                    display_name="Financial Statement",
+                    description=f"{statement_type.replace('_', ' ').title()} summary",
+                    fields={
+                        "statementType": statement_type,
+                        "lineItems": categorized,
+                        "totals": totals,
+                        "itemCount": len(line_items),
+                        "extractionDate": data["extraction_date"],
+                    },
+                )
+            ],
+            extraction_method="excel_parser",
+            metadata=Metadata(
+                form_type_detected="FINANCIAL_STATEMENT",
+                line_of_business=document.metadata.get("line_of_business")
+                if document.metadata
+                else None,
+            ),
+            raw=data,
+        )
+
         return ExtractionResult(
             success=True,
-            data=data,
+            data=canonical.to_dict(),
             warnings=warnings,
             confidence=self._calculate_confidence(line_items, warnings)
         )

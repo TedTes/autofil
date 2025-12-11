@@ -13,8 +13,13 @@ from datetime import datetime
 import re
 from ..interfaces.extractor import IExtractor
 from ..core.document import Document, DocumentType
+from ..core.schema import Metadata
 from ..models.extraction_result import ExtractionResult
 from ..parsers import OcrParser
+from ..utils.canonical_output_builder import (
+    SectionPayload,
+    build_generic_canonical_output,
+)
 
 
 class SupplementalExtractor(IExtractor):
@@ -124,9 +129,35 @@ class SupplementalExtractor(IExtractor):
             if not extracted_data:
                 warnings.append(f"Limited data extracted from {supplemental_type}")
             
+            canonical = build_generic_canonical_output(
+                document,
+                section_payloads=[
+                    SectionPayload(
+                        key="supplemental",
+                        display_name="Supplemental Document",
+                        description=f"Detected type: {supplemental_type}",
+                        fields={
+                            "supplementalType": supplemental_type,
+                            "extractedData": extracted_data,
+                            "rawText": data["raw_text"],
+                            "metadata": data["metadata"],
+                            "extractionDate": data["extraction_date"],
+                        },
+                    )
+                ],
+                extraction_method="supplemental_extractor",
+                metadata=Metadata(
+                    form_type_detected=document.document_type.value.upper(),
+                    line_of_business=document.metadata.get("line_of_business")
+                    if document.metadata
+                    else None,
+                ),
+                raw=data,
+            )
+
             return ExtractionResult(
                 success=True,
-                data=data,
+                data=canonical.to_dict(),
                 warnings=warnings,
                 confidence=self._calculate_confidence(extracted_data, supplemental_type)
             )

@@ -8,8 +8,13 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 from ..interfaces.extractor import IExtractor
 from ..core.document import Document, DocumentType
+from ..core.schema import Metadata
 from ..models.extraction_result import ExtractionResult
 from ..parsers import PdfFieldParser, TableParser
+from ..utils.canonical_output_builder import (
+    SectionPayload,
+    build_generic_canonical_output,
+)
 from utils.versioned_template_loader import (
     VersionedTemplateLoader,
     TemplateRecognizer,
@@ -56,7 +61,9 @@ class ACORD130Extractor(IExtractor):
                     template_id = self.template_recognizer.detect(raw_fields.keys())
                     if template_id:
                         template_config = self.template_loader.load(template_id)
-                result = self._extract_from_fillable(raw_fields, template_config)
+                result = self._extract_from_fillable(
+                    document, raw_fields, template_config
+                )
                 if result.success:
                     return result
             
@@ -87,11 +94,32 @@ class ACORD130Extractor(IExtractor):
         return [DocumentType.ACORD_130]
     
     def _extract_from_fillable(
-        self, raw_fields: Dict[str, Any], template_config: Optional[TemplateConfig]
+        self,
+        document: Document,
+        raw_fields: Dict[str, Any],
+        template_config: Optional[TemplateConfig],
     ) -> ExtractionResult:
         """Extract from fillable fields."""
         mapped = self._map_fields(raw_fields, template_config)
-        return ExtractionResult(success=True, data=mapped, confidence=0.8)
+        canonical = build_generic_canonical_output(
+            document,
+            section_payloads=[
+                SectionPayload(
+                    key="workers_compensation",
+                    display_name="Workers Compensation",
+                    description="Employer & coverage information",
+                    priority=1,
+                    fields=mapped,
+                )
+            ],
+            extraction_method="fillable_pdf",
+            metadata=Metadata(
+                form_type_detected="ACORD_130",
+                line_of_business="Workers Compensation",
+            ),
+            raw={"mapped_fields": mapped, "raw_fields": raw_fields},
+        )
+        return ExtractionResult(success=True, data=canonical.to_dict(), confidence=0.8)
     
     def _extract_from_tables(self, document: Document) -> ExtractionResult:
         """Extract classification codes and payroll from tables."""
@@ -110,17 +138,31 @@ class ACORD130Extractor(IExtractor):
                             'payroll': row[2] if len(row) > 2 else '',
                         })
         
-        data = {
-            'document_type': 'acord_130',
-            'extraction_date': datetime.utcnow().isoformat(),
-            'classifications': classifications,
-        }
-        
-        return ExtractionResult(
-            success=True,
-            data=data,
-            confidence=0.75
+        section_payloads = [
+            SectionPayload(
+                key="workers_compensation",
+                display_name="Workers Compensation",
+                description="Classification schedule",
+                priority=1,
+                fields={
+                    "classifications": classifications,
+                    "extractedAt": datetime.utcnow().isoformat(),
+                },
+            )
+        ]
+
+        canonical = build_generic_canonical_output(
+            document,
+            section_payloads=section_payloads,
+            extraction_method="table_parser",
+            metadata=Metadata(
+                form_type_detected="ACORD_130",
+                line_of_business="Workers Compensation",
+            ),
+            raw={"classifications": classifications},
         )
+
+        return ExtractionResult(success=True, data=canonical.to_dict(), confidence=0.75)
     
     def _map_fields(
         self, raw_fields: Dict[str, Any], template_config: Optional[TemplateConfig]

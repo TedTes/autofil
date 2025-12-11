@@ -9,7 +9,12 @@ from typing import Dict, Any, List
 from datetime import datetime
 from ..interfaces.extractor import IExtractor
 from ..core.document import Document, DocumentType
+from ..core.schema import Metadata
 from ..models.extraction_result import ExtractionResult
+from ..utils.canonical_output_builder import (
+    SectionPayload,
+    build_generic_canonical_output,
+)
 
 
 class GenericExtractor(IExtractor):
@@ -57,9 +62,35 @@ class GenericExtractor(IExtractor):
             if not data['content']['text'] and not data['tables'] and not data['images']:
                 warnings.append("No extractable content found")
             
+            canonical = build_generic_canonical_output(
+                document,
+                section_payloads=[
+                    SectionPayload(
+                        key="generic_document",
+                        display_name="Generic Extraction",
+                        description="Baseline content + metadata",
+                        fields={
+                            "content": data["content"],
+                            "tables": data["tables"],
+                            "images": data["images"],
+                            "metadata": data["metadata"],
+                            "statistics": data["statistics"],
+                            "extractionDate": data["extraction_date"],
+                        },
+                    )
+                ],
+                extraction_method="generic_extractor",
+                metadata=Metadata(
+                    form_type_detected=document.document_type.value.upper()
+                    if document.document_type
+                    else "GENERIC"
+                ),
+                raw=data,
+            )
+
             return ExtractionResult(
                 success=True,
-                data=data,
+                data=canonical.to_dict(),
                 warnings=warnings,
                 confidence=self._calculate_confidence(data)
             )

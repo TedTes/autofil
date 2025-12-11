@@ -856,50 +856,6 @@ function FileDetailActions({
           </>
         )}
       </button>
-      
-      <button
-        onClick={handleExport}
-        disabled={isExporting}
-        className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-          isExporting
-            ? 'text-white bg-green-500 cursor-not-allowed'
-            : 'text-white bg-green-600 hover:bg-green-700'
-        }`}
-      >
-        {isExporting ? (
-          <>
-            <Loader2 className="w-4 h-4 animate-spin" />
-            <span className="hidden sm:inline">Exporting...</span>
-          </>
-        ) : (
-          <>
-            <Download className="w-4 h-4" />
-            <span className="hidden sm:inline">Export</span>
-          </>
-        )}
-      </button>
-      
-      <button
-        onClick={handleFill}
-        disabled={isFilling}
-        className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-          isFilling
-            ? 'text-white bg-purple-500 cursor-not-allowed'
-            : 'text-white bg-purple-600 hover:bg-purple-700'
-        }`}
-      >
-        {isFilling ? (
-          <>
-            <Loader2 className="w-4 h-4 animate-spin" />
-            <span className="hidden sm:inline">Filling...</span>
-          </>
-        ) : (
-          <>
-            <FileText className="w-4 h-4" />
-            <span className="hidden sm:inline">Fill PDF</span>
-          </>
-        )}
-      </button>
     </>
   )
 }

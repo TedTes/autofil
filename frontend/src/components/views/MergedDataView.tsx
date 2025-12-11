@@ -10,7 +10,7 @@ import type { MergedData, SemanticField, SemanticSection } from '@/types'
 
 interface MergedDataViewProps {
   mergedData: MergedData | null
-  onEditField?: (fieldPath: string, value: string | number | boolean) => void
+  onEditField?: (fieldPath: string, value: unknown) => void
   isLoading?: boolean
 }
 

@@ -25,7 +25,7 @@ interface UploadOrMergedDataPanelProps {
   onUploadMore: () => void
   onRemoveRow: (id: string) => void
   onViewFile: (submissionId: string, filename?: string, inputId?: string) => void
-  onEditMergedField?: (fieldPath: string, value: string | number | boolean) => void
+  onEditMergedField?: (fieldPath: string, value: unknown) => void
 
   // Reference to the FileUploadDropZone component
   FileUploadDropZoneComponent: React.ComponentType<{

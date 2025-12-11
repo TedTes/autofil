@@ -821,7 +821,7 @@ const [isCreating, setIsCreating] = useState(false)
       setTemplates(libraryTemplates)
     }
   }, [libraryTemplates, setTemplates])
-  const handleEditMergedField = useCallback((fieldPath: string, value: string | number | boolean) => {
+  const handleEditMergedField = useCallback((fieldPath: string, value: unknown) => {
     console.log('Edit merged field:', fieldPath, value)
   }, [])
   const hasExtractedFiles = activePackage?.inputs?.some(

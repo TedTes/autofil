@@ -345,16 +345,6 @@ export async function fillMultipleTemplates(
       totalWarnings += report.warnings.length
       totalErrors += report.errors.length
 
-      // Auto-download if URL available
-      if (report.output.url) {
-        try {
-          await downloadFilledPdf(report.output.url, report.output.filename)
-        } catch (downloadError) {
-          console.warn(`Auto-download failed for ${template.name}:`, downloadError)
-          // Don't fail the entire operation if download fails
-        }
-      }
-
     } catch (error) {
       // Handle error but continue with next template
       result.status = 'error'
@@ -408,31 +398,6 @@ export async function fillMultipleTemplates(
   }
 }
 
-/**
- * Helper: Download filled PDF from URL
- * Used internally by fillMultipleTemplates for auto-download
- */
-async function downloadFilledPdf(url: string, filename: string): Promise<void> {
-  try {
-    const response = await fetch(url)
-    if (!response.ok) {
-      throw new Error('Download failed')
-    }
-
-    const blob = await response.blob()
-    const downloadUrl = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = downloadUrl
-    link.download = filename
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    window.URL.revokeObjectURL(downloadUrl)
-  } catch (error) {
-    console.error('PDF download failed:', error)
-    throw error
-  }
-}
 /**
  * Fetch clients with optional submission summaries.
  */

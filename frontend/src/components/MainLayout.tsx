@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef, useLayoutEffect } from 'react'
 import React from 'react'
 import {
   Download,
@@ -184,6 +184,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(false)
   const [fileDetailActions, setFileDetailActions] = useState<FileDetailActions | null>(null)
+  const [sidebarTransitionsEnabled, setSidebarTransitionsEnabled] = useState(false)
 
   //state to track closing animation
   const [isMobileClosing, setIsMobileClosing] = useState(false)
@@ -199,6 +200,14 @@ export default function MainLayout({ children }: MainLayoutProps) {
   )
   const autoCollapsedRef = useRef(false)
   const widthCollapsedRef = useRef(false)
+
+  // Measure sidebar state on mount to avoid flicker on laptop-sized screens
+  useLayoutEffect(() => {
+    if (typeof window === 'undefined') return
+    const shouldCollapse = window.innerWidth <= 1300
+    setDesktopSidebarCollapsed(shouldCollapse)
+    widthCollapsedRef.current = shouldCollapse
+  }, [])
 
   useEffect(() => {
     void (async () => {
@@ -224,11 +233,16 @@ export default function MainLayout({ children }: MainLayoutProps) {
   useEffect(() => {
     if (currentView.type === 'file-detail') {
       if (!desktopSidebarCollapsed) {
+        setSidebarTransitionsEnabled(false)
         setDesktopSidebarCollapsed(true)
         autoCollapsedRef.current = true
       }
     } else if (autoCollapsedRef.current) {
-      setDesktopSidebarCollapsed(false)
+      // Only expand back if we're not in a width-forced collapsed state
+      if (!widthCollapsedRef.current) {
+        setSidebarTransitionsEnabled(false)
+        setDesktopSidebarCollapsed(false)
+      }
       autoCollapsedRef.current = false
     }
   }, [currentView.type, desktopSidebarCollapsed])
@@ -238,9 +252,11 @@ export default function MainLayout({ children }: MainLayoutProps) {
       if (typeof window === 'undefined') return
       const shouldCollapse = window.innerWidth <= 1300
       if (shouldCollapse && !desktopSidebarCollapsed) {
+        setSidebarTransitionsEnabled(false)
         setDesktopSidebarCollapsed(true)
         widthCollapsedRef.current = true
       } else if (!shouldCollapse && widthCollapsedRef.current && !autoCollapsedRef.current) {
+        setSidebarTransitionsEnabled(false)
         setDesktopSidebarCollapsed(false)
         widthCollapsedRef.current = false
       }
@@ -315,7 +331,9 @@ const handleMobileSidebarClose = () => {
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
-<aside className={`hidden lg:flex lg:flex-col bg-white border-r border-gray-200 transition-all duration-300 ease-in-out ${
+<aside className={`hidden lg:flex lg:flex-col bg-white border-r border-gray-200 ${
+  sidebarTransitionsEnabled ? 'transition-all duration-300 ease-in-out' : ''
+} ${
   desktopSidebarCollapsed ? 'lg:w-16' : 'lg:w-64'
 } fixed left-0 top-0 bottom-0 z-40`}>
 
@@ -335,7 +353,10 @@ const handleMobileSidebarClose = () => {
     
     {/* Collapse Button */}
     <button
-      onClick={() => setDesktopSidebarCollapsed(prev => !prev)}
+      onClick={() => {
+        setSidebarTransitionsEnabled(true)
+        setDesktopSidebarCollapsed(prev => !prev)
+      }}
       className="hidden lg:block p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
       title={desktopSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
       type="button"
@@ -632,7 +653,9 @@ const handleMobileSidebarClose = () => {
 )}
 
       {/* Main Content */}
-      <div className={`flex-1 flex flex-col min-h-screen transition-all duration-300 ${
+      <div className={`flex-1 flex flex-col min-h-screen ${
+  sidebarTransitionsEnabled ? 'transition-all duration-300' : ''
+} ${
   desktopSidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'
 }`}>
         {/* Header */}
@@ -650,16 +673,6 @@ const handleMobileSidebarClose = () => {
                 >
                   <Menu className="w-5 h-5" />
                 </button>
-                {/* Desktop Sidebar Toggle (shown when collapsed) */}
-                {desktopSidebarCollapsed && (
-                  <button
-                    onClick={() => setDesktopSidebarCollapsed(false)}
-                    className="hidden lg:block p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                    title="Show sidebar"
-                  >
-                    <Menu className="w-5 h-5" />
-                  </button>
-                )}
              {/* Breadcrumbs */}
             
 

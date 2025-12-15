@@ -28,6 +28,7 @@ from lib.submission_templates import TEMPLATES, get_template
 from services.client_service import ClientService
 from services.comparison_service import ComparisonService
 from services.export_service import ExportService
+from filling.fillers.data_export_fillers import _BaseDataExportFiller
 from dataclasses import dataclass, field as dataclass_field
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
@@ -794,7 +795,17 @@ class SubmissionService:
             metadata["template_type"] = template_choice
             filler = self._select_filler(template_choice)
             temp_output_dir = tempfile.mkdtemp(prefix=f"filled_{submission_id}_")
-            output_path = os.path.join(temp_output_dir, f"{submission_id}_filled.pdf")
+            # Decide extension/content-type based on filler
+            default_ext = getattr(filler, "default_extension", ".pdf")
+            ext = default_ext if default_ext.startswith(".") else f".{default_ext}"
+            filename = f"{submission_id}_filled{ext}"
+            output_path = os.path.join(temp_output_dir, filename)
+
+            content_type = {
+                ".pdf": "application/pdf",
+                ".csv": "text/csv",
+                ".json": "application/json",
+            }.get(ext.lower(), "application/octet-stream")
 
             fill_report = filler.fill(
                 canonical_data=canonical_data,
@@ -803,7 +814,7 @@ class SubmissionService:
             )
             remote_output = self._upload_to_remote(
                 local_path=output_path,
-                content_type="application/pdf",
+                content_type=content_type,
                 client_id=metadata.get("client_id"),
                 submission_id=submission_id,
                 category="outputs",

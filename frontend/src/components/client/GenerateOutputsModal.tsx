@@ -30,6 +30,8 @@ interface GenerateOutputsModalProps {
   availableTemplates: OutputTemplate[]
   selectedTemplateIds: string[]
   onToggleTemplate: (templateId: string) => void
+  onSelectAllTemplates: () => void
+  onDeselectAllTemplates: () => void
   mergedData: MergedData | null
   inputIds?: string[] // NEW: Optional input file IDs
 }
@@ -41,6 +43,8 @@ export default function GenerateOutputsModal({
   availableTemplates,
   selectedTemplateIds,
   onToggleTemplate,
+  onSelectAllTemplates,
+  onDeselectAllTemplates,
   mergedData,
   inputIds,
 }: GenerateOutputsModalProps) {
@@ -231,13 +235,31 @@ export default function GenerateOutputsModal({
           {/* Available Templates */}
           {availableOnly.length > 0 && (
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-gray-900">
-                  Available Templates
-                </h3>
-                <p className="text-xs text-gray-500">
-                  {selectedCount} of {availableOnly.length} selected
-                </p>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-gray-900">
+                    Available Templates
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    {selectedCount} of {availableOnly.length} selected
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={onSelectAllTemplates}
+                    className="text-xs px-2.5 py-1.5 rounded border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    Select all
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onDeselectAllTemplates}
+                    className="text-xs px-2.5 py-1.5 rounded border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    Clear
+                  </button>
+                </div>
               </div>
               
               {availableOnly.map(({ template, completeness, estimatedFields }) => (

@@ -157,13 +157,13 @@ function FileUploadDropZone({
       </span>
     </div>
     <button
-    onClick={onUploadMore}
-    disabled={isUploading || !activePackageName}
-    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm disabled:bg-gray-300 disabled:cursor-not-allowed"
-  >
-    <Plus className="w-4 h-4" />
-    Add Files
-  </button>
+  onClick={onUploadMore}
+  disabled={isUploading || !activePackageName}
+  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm disabled:bg-gray-300 disabled:cursor-not-allowed active:scale-95 active:bg-blue-800"
+>
+  <Plus className="w-4 h-4" />
+  Add Files
+</button>
   </div>
 </div>
 
@@ -982,26 +982,26 @@ const [isCreating, setIsCreating] = useState(false)
 
     {/* RIGHT: Active Package Info (if merged data is shown) */}
     {hasExtractedFiles && activePackage && (
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
-        <button
-          onClick={() => setIsGenerateModalOpen(true)}
-          disabled={availableTemplates.length === 0 || isMergedDataLoading}
-          className="inline-flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-xs sm:text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm disabled:bg-gray-300 disabled:cursor-not-allowed"
-        >
-          <FileText className="w-4 h-4" />
-          <span>Generate</span>
-          <span className="text-xs opacity-90">({selectedTemplateIds.length})</span>
-        </button>
-        <button
-          onClick={triggerFileUpload}
-          disabled={isUploading}
-          className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-gray-700 text-xs sm:text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Add Files</span>
-        </button>
-      </div>
-    )}
+  <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
+    <button
+      onClick={() => setIsGenerateModalOpen(true)}
+      disabled={availableTemplates.length === 0 || isMergedDataLoading}
+      className="inline-flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-xs sm:text-sm font-semibold rounded-lg hover:bg-blue-700 transition-all shadow-sm disabled:bg-gray-300 disabled:cursor-not-allowed active:scale-95 active:shadow-inner cursor-pointer"
+    >
+      <FileText className="w-4 h-4" />
+      <span>Generate</span>
+      <span className="text-xs opacity-90">({selectedTemplateIds.length})</span>
+    </button>
+    <button
+      onClick={triggerFileUpload}
+      disabled={isUploading}
+      className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-gray-700 text-xs sm:text-sm font-medium rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 active:bg-gray-100 active:border-gray-500 cursor-pointer"
+    >
+      <Plus className="w-3.5 h-3.5" />
+      <span>Add Files</span>
+    </button>
+  </div>
+)}
   </div>
 </div>
 

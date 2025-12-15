@@ -51,6 +51,7 @@ export function SubmissionsView({ onSubmissionClick }: SubmissionsViewProps) {
       const lower = searchQuery.toLowerCase()
       filtered = filtered.filter(
         (sub) =>
+          (sub.name && sub.name.toLowerCase().includes(lower)) ||
           sub.filename.toLowerCase().includes(lower) ||
           sub.submission_id.toLowerCase().includes(lower)
       )
@@ -157,7 +158,7 @@ export function SubmissionsView({ onSubmissionClick }: SubmissionsViewProps) {
                 >
                   <div>
                     <p className="text-sm font-semibold text-gray-900 truncate">
-                      {sub.filename || 'Untitled Submission'}
+                      {sub.name || sub.filename || 'Untitled Submission'}
                     </p>
                     <p className="text-xs text-gray-500 break-all">{sub.submission_id}</p>
                     {sub.client_name && (
@@ -220,7 +221,7 @@ export function SubmissionsView({ onSubmissionClick }: SubmissionsViewProps) {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
                           <FileStack className="w-4 h-4 text-gray-400" />
-                          <span>{sub.filename || 'Untitled Submission'}</span>
+                          <span>{sub.name || sub.filename || 'Untitled Submission'}</span>
                         </div>
                         <div className="text-xs text-gray-500 truncate mt-0.5">
                           {sub.client_name ? `${sub.client_name} • ` : ''}{sub.submission_id}

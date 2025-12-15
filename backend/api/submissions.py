@@ -680,6 +680,7 @@ def list_all_submissions():
             {
                 "submission_id": s.get("submission_id"),
                 "client_id": s.get("client_id"),
+                "name": s.get("name"),
                 "filename": s.get("filename"),
                 "status": s.get("status"),
                 "uploaded_at": s.get("uploaded_at"),

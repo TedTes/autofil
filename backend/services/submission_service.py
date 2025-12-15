@@ -661,11 +661,13 @@ class SubmissionService:
             except Exception:
                 client_name = None
 
+        submission_name = metadata.get('name') or metadata.get('title') or f"Submission {submission_id[:8]}"
+
         return {
             'submission_id': submission_id,
             'client_id': client_id,
             'client_name': client_name,
-            'name': metadata.get('name') or metadata.get('filename') or f'Submission {submission_id[:8]}',
+            'name': submission_name,
             'status': metadata.get('status', 'uploaded'),
             'uploaded_at': uploaded_at,
             'updated_at': updated_at,
@@ -1459,12 +1461,17 @@ class SubmissionService:
             client_id = metadata.get("client_id")
             client_name = metadata.get("client_name")
             
-
             inputs_meta = metadata.get("inputs") or []
             primary_input = inputs_meta[-1] if inputs_meta else None
+            submission_name = (
+                metadata.get("name")
+                or metadata.get("title")
+                or f"Submission {submission_id[:8]}"
+            )
 
             summaries.append({
                 "submission_id": submission_id,
+                "name": submission_name,
                 "filename": (
                     (primary_input or {}).get("filename")
                     or metadata.get("filename")

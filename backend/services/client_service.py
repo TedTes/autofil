@@ -175,10 +175,13 @@ class ClientService:
         uploaded_at = metadata.get('uploaded_at') or metadata.get('created_at')
         updated_at = metadata.get('updated_at') or uploaded_at
 
+        # Keep submission display name independent of any uploaded filename
+        submission_name = metadata.get('name') or metadata.get('title') or f"Submission {submission_id[:8]}"
+
         return {
             'submission_id': submission_id,
             'client_id': client_metadata.get('client_id'),
-            'name': metadata.get('name') or metadata.get('filename') or f'Submission {submission_id[:8]}',
+            'name': submission_name,
             'status': metadata.get('status', 'uploaded'),
             'uploaded_at': uploaded_at,
             'updated_at': updated_at,

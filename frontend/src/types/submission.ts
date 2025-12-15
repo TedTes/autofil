@@ -100,6 +100,7 @@ export interface SubmissionStatusBadge {
  */
 export interface SubmissionListItem {
   submission_id: string
+  name?: string
   filename: string
   status: Submission['status']
   uploaded_at: string

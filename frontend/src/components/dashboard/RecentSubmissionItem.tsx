@@ -65,9 +65,12 @@ export default function RecentSubmissionItem({
 
   // Get template type display
   const getTemplateTypeDisplay = () => {
+    if (submission.template_metadata?.name) {
+      return submission.template_metadata.name
+    }
     if (!submission.template_type) return null
-    
-    const typeMap = {
+
+    const typeMap: Record<string, string> = {
       'property_renewal': '🏢 Property',
       'wc_quote': '👷 Workers Comp',
       'gl_new_business': '🛡️ GL',

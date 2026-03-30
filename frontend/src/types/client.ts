@@ -12,11 +12,19 @@ export interface Client {
     submissions_detailed?: ClientSubmissionPackage[]  // Populated submissions
   }
   
-  export interface Submission {
+export interface Submission {
     submission_id: string
     client_id: string
     name: string
-    template_type?: 'property_renewal' | 'wc_quote' | 'gl_new_business' | 'custom'
+    template_type?: string
+    template_metadata?: {
+      template_id?: string
+      name?: string
+      description?: string
+      expected_documents?: string[]
+      suggested_forms?: string[]
+      expected_fields?: string[]
+    }
     created_at: string
     updated_at: string
     status: 'created' | 'uploading' | 'extracting' | 'ready' | 'filled' | 'error' | 'extracted'
@@ -38,6 +46,15 @@ export interface Client {
     client_id: string
     client_name?: string
     name: string
+    template_type?: string
+    template_metadata?: {
+      template_id?: string
+      name?: string
+      description?: string
+      expected_documents?: string[]
+      suggested_forms?: string[]
+      expected_fields?: string[]
+    }
     status: string
     uploaded_at: string
     updated_at: string

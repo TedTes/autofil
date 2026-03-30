@@ -182,6 +182,8 @@ class ClientService:
             'submission_id': submission_id,
             'client_id': client_metadata.get('client_id'),
             'name': submission_name,
+            'template_type': metadata.get('template_type'),
+            'template_metadata': metadata.get('template_metadata'),
             'status': metadata.get('status', 'uploaded'),
             'uploaded_at': uploaded_at,
             'updated_at': updated_at,

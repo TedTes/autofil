@@ -5,6 +5,25 @@ import { Submission } from '@/types'
 import InputFileCard from './InputFileCard'
 import { Upload, AlertCircle, FolderOpen } from 'lucide-react'
 
+function getTemplateDisplay(
+  templateType?: string,
+  templateMetadata?: { name?: string; template_id?: string }
+): string | null {
+  if (templateMetadata?.name) {
+    return templateMetadata.name
+  }
+  if (!templateType) return null
+
+  const legacyLabels: Record<string, string> = {
+    property_renewal: 'Property Renewal',
+    wc_quote: 'Workers Comp Quote',
+    gl_new_business: 'GL New Business',
+    custom: 'Custom Submission',
+  }
+
+  return legacyLabels[templateType] || templateType.replaceAll('_', ' ').toUpperCase()
+}
+
 interface InputFilesSectionProps {
   files: InputFile[]
   activeSubmission: Submission | null  // ADDED
@@ -22,6 +41,11 @@ export default function InputFilesSection({
   onPreview,
   onViewExtraction,
 }: InputFilesSectionProps) {
+  const templateDisplay = getTemplateDisplay(
+    activeSubmission?.template_type,
+    activeSubmission?.template_metadata,
+  )
+
   // If no submission selected, show prompt
   if (!activeSubmission) {
     return (
@@ -67,12 +91,9 @@ export default function InputFilesSection({
               <p className="text-sm font-semibold text-gray-900">
                 {activeSubmission.name}
               </p>
-              {activeSubmission.template_type && (
+              {templateDisplay && (
                 <p className="text-xs text-gray-500 mt-0.5">
-                  {activeSubmission.template_type === 'property_renewal' && '🏢 Property Renewal'}
-                  {activeSubmission.template_type === 'wc_quote' && '👷 Workers Comp Quote'}
-                  {activeSubmission.template_type === 'gl_new_business' && '🛡️ GL New Business'}
-                  {activeSubmission.template_type === 'custom' && '✨ Custom Submission'}
+                  {templateDisplay}
                 </p>
               )}
             </div>
@@ -98,12 +119,9 @@ export default function InputFilesSection({
               <span className="text-sm font-medium text-gray-700">
                 {activeSubmission.name}
               </span>
-              {activeSubmission.template_type && (
+              {templateDisplay && (
                 <span className="text-xs text-gray-500">
-                  • {activeSubmission.template_type === 'property_renewal' && 'Property Renewal'}
-                  {activeSubmission.template_type === 'wc_quote' && 'Workers Comp'}
-                  {activeSubmission.template_type === 'gl_new_business' && 'GL New Business'}
-                  {activeSubmission.template_type === 'custom' && 'Custom'}
+                  • {templateDisplay}
                 </span>
               )}
             </div>

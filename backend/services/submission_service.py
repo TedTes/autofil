@@ -494,6 +494,8 @@ class SubmissionService:
             'client_id': resolved_client_id,
             'client_name': client_name,
             'folder_id': metadata.get('folder_id'),
+            'template_type': metadata.get('template_type'),
+            'template_metadata': metadata.get('template_metadata'),
             'filename': filename,
             'status': metadata['status'],
             'uploaded_at': metadata['uploaded_at'],
@@ -530,6 +532,8 @@ class SubmissionService:
             'client_id': client_id,
             'client_name': client_name,
             'name': submission_name,
+            'template_type': metadata.get('template_type'),
+            'template_metadata': metadata.get('template_metadata'),
             'status': metadata.get('status', 'uploaded'),
             'uploaded_at': uploaded_at,
             'updated_at': updated_at,
@@ -1195,6 +1199,7 @@ class SubmissionService:
                 "submission_id": r.get("submission_id"),
                 "client_id": r.get("client_id"),
                 "filename": r.get("filename"),
+                "name": r.get("name"),
                 "status": r.get("status"),
                 "folder_id": r.get("folder_id"),
                 "uploaded_at": r.get("uploaded_at"),
@@ -1203,6 +1208,8 @@ class SubmissionService:
                 "updated_at": r.get("updated_at"),
                 "last_activity_at": r.get("last_activity_at"),
                 "confidence": r.get("confidence"),
+                "template_type": r.get("template_type"),
+                "template_metadata": r.get("template_metadata"),
             }
             for r in page
         ]
@@ -1308,6 +1315,12 @@ class SubmissionService:
         results = []
         generated = 0
         for template_id in template_ids:
+            template_name = template_id.replace("_", " ").upper()
+            try:
+                template = get_template(template_id)
+                template_name = template.name
+            except Exception:
+                pass
             try:
                 report, output_meta = self.fill_pdf(
                     submission_id,
@@ -1317,7 +1330,7 @@ class SubmissionService:
                 generated += 1
                 results.append({
                     "templateId": template_id,
-                    "templateName": template_id.replace("_", " ").upper(),
+                    "templateName": template_name,
                     "success": True,
                     "fileUrl": output_meta.get("url"),
                     "filename": output_meta.get("filename"),
@@ -1330,7 +1343,7 @@ class SubmissionService:
             except Exception as exc:
                 results.append({
                     "templateId": template_id,
-                    "templateName": template_id.replace("_", " ").upper(),
+                    "templateName": template_name,
                     "success": False,
                     "fileUrl": None,
                     "filename": None,

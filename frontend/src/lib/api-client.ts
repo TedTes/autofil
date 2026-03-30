@@ -1315,8 +1315,9 @@ export async function getRecentSubmissions(
       return {
         submission_id: sub.submission_id || '',
         client_id: sub.client_id || '',
-        name: sub.filename || `Submission ${(sub.submission_id || '').slice(0, 8)}`,
-        template_type: undefined, 
+        name: (sub as { name?: string }).name || sub.filename || `Submission ${(sub.submission_id || '').slice(0, 8)}`,
+        template_type: (sub as { template_type?: string }).template_type,
+        template_metadata: (sub as { template_metadata?: RecentSubmission['template_metadata'] }).template_metadata,
         created_at: sub.uploaded_at || '',
         updated_at: timestamp,
         status: (sub.status as RecentSubmission['status']) || 'ready',
@@ -1470,8 +1471,9 @@ export async function getRecentSubmissionById(
       return {
         submission_id: sub.submission_id || '',
         client_id: sub.client_id || '',
-      name: sub.filename || `Submission ${(sub.submission_id || '').slice(0, 8)}`,
-      template_type: undefined,
+      name: (sub as { name?: string }).name || sub.filename || `Submission ${(sub.submission_id || '').slice(0, 8)}`,
+      template_type: (sub as { template_type?: string }).template_type,
+      template_metadata: (sub as { template_metadata?: RecentSubmission['template_metadata'] }).template_metadata,
       created_at: sub.uploaded_at || '',
       updated_at: timestamp,
       status: (sub.status as RecentSubmission['status']) || 'ready',

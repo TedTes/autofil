@@ -52,6 +52,8 @@ class SubmissionQueryService:
                 "folder_id": metadata.get("folder_id"),
                 "client_id": metadata.get("client_id"),
                 "client_name": metadata.get("client_name"),
+                "template_type": metadata.get("template_type"),
+                "template_metadata": metadata.get("template_metadata"),
                 "file_count": metadata.get("file_count", 0),
             })
         return summaries

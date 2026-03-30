@@ -7,7 +7,7 @@ from typing import ClassVar, Dict, List, Optional, Type, Any
 
 from pypdf import PdfReader, PdfWriter
 
-from extraction.utils.semantic_section_builder import SemanticSectionBuilder
+from filling.canonical_projection import CanonicalFillView
 from ..template_loader import TemplateLoader, TemplateConfig
 from ..writers.pdf_field_writer import PdfFieldWriter
 
@@ -123,44 +123,50 @@ class BaseFiller:
           ...
         }
         """
-        sections = canonical.get("semantic_sections") or canonical.get("semanticSections") or []
-        entities = SemanticSectionBuilder.flatten(sections)
-        flat: Dict[str, Any] = {}
+        template_repeaters = {}
+        if template is not None and hasattr(template, "repeater_mappings"):
+            template_repeaters = template.repeater_mappings
 
-        # --- 1) Generic scalar mapping: first value of each entity ----------
-        for field_id, values in entities.items():
-            if not values:
-                continue
+        view = CanonicalFillView.from_canonical(canonical)
+        repeater_aliases = self._repeater_field_aliases(template_repeaters)
+        flat: Dict[str, Any] = view.scalar_fields(exclude=repeater_aliases.keys())
 
-            # Classification is handled separately below
-            if field_id == "Classification":
-                continue
-
-            first = values[0]
-            value = first.get("value")
-
-            # Skip empty / None
-            if value is None or value == "":
-                continue
-
-            flat[field_id] = value
-
-        # --- 2) Classification repeater mapping -----------------------------
-        class_entities = entities.get("Classification") or []
-        rows = []
-
-        for ev in class_entities:
-            row = ev.get("value")
-            # Expect row to be a dict with columns like { "class_code": "...", ... }
-            if isinstance(row, dict):
-                # Filter out completely empty rows {} or all empty/None
-                if any(v not in ("", None, "") for v in row.values()):
-                    rows.append(row)
-
-        if rows:
-            flat["Classification"] = rows
+        for repeater_key, source_fields in repeater_aliases.items():
+            rows = view.repeated_rows(*source_fields)
+            if rows:
+                flat[repeater_key] = rows
 
         return flat
+
+    def _repeater_field_aliases(self, repeater_mappings: Dict[str, Any]) -> Dict[str, List[str]]:
+        aliases: Dict[str, List[str]] = {}
+        for repeater_key in repeater_mappings.keys():
+            aliases[repeater_key] = self._candidate_repeater_fields(repeater_key)
+        return aliases
+
+    def _candidate_repeater_fields(self, repeater_key: str) -> List[str]:
+        """
+        Candidate canonical field ids that may populate a repeater.
+
+        The explicit repeater key is always tried first, followed by a small
+        alias set for the ACORD forms currently supported in this codebase.
+        """
+        candidates = [repeater_key]
+        alias_map = {
+            "Classification": ["Classifications"],
+            "Classifications": ["Classification"],
+            "BlanketSummary": ["BlanketCoverage", "Blankets"],
+        }
+        candidates.extend(alias_map.get(repeater_key, []))
+
+        seen = set()
+        ordered: List[str] = []
+        for candidate in candidates:
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            ordered.append(candidate)
+        return ordered
 
     def _load_template(
         self,
@@ -350,3 +356,6 @@ class BaseFiller:
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__} form_type={self.form_type}>"
+
+    def get_supported_form_type(self) -> str:
+        return self.form_type

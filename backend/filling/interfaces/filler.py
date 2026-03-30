@@ -1,48 +1,61 @@
-"""
-Interface for PDF fillers.
-"""
+"""Interface for canonical-data fillers."""
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any
+from typing import Dict, Any, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from filling.fillers.base_filler import FillReport
 
 
 class IFiller(ABC):
     """
-    Interface for filling PDF forms with data.
-    
-    Implementations orchestrate the filling workflow:
-    mapping data, formatting values, writing to PDF.
+    Interface for generating output artifacts from canonical data.
+
+    Implementations orchestrate the filling/export workflow:
+    - canonical projection
+    - template selection
+    - output generation
     """
-    
+
     @abstractmethod
-    def fill(self, template_path: str, data: Dict[str, Any], output_path: str) -> Dict[str, Any]:
+    def fill(
+        self,
+        canonical_data: Dict[str, Any],
+        output_path: str,
+        template_id: Optional[str] = None,
+        template_version: str = "latest",
+        template_pdf_override: Optional[str] = None,
+    ) -> "FillReport":
         """
-        Fill PDF template with data.
-        
+        Generate an output artifact from canonical data.
+
         Args:
-            template_path: Path to blank PDF template
-            data: Canonical JSON data to fill
-            output_path: Path where filled PDF should be saved
-            
+            canonical_data: Canonical extraction payload
+            output_path: Path where the generated artifact should be saved
+            template_id: Optional normalized template identifier
+            template_version: Optional template version selector
+            template_pdf_override: Optional explicit PDF/template path override
+
         Returns:
-            Fill report dictionary containing:
-            - written: int (number of fields written)
-            - skipped: list (fields that couldn't be filled)
-            - unknown_pdf_fields: list (PDF fields not in template)
-            - notes: list (additional information)
-            
-        Raises:
-            FileNotFoundError: If template doesn't exist
-            ValueError: If data validation fails
+            FillReport describing artifact generation coverage and warnings.
         """
-        pass
-    
+        raise NotImplementedError
+
+    @abstractmethod
+    def fill_from_canonical(
+        self,
+        canonical_data: Dict[str, Any],
+        output_path: str,
+        template_id: str,
+        template_version: str = "latest",
+        template_pdf_override: Optional[str] = None,
+    ) -> "FillReport":
+        """
+        Generate an output artifact from canonical data with an explicit template.
+        """
+        raise NotImplementedError
+
     @abstractmethod
     def get_supported_form_type(self) -> str:
-        """
-        Return the form type this filler supports.
-        
-        Returns:
-            Form type identifier (e.g., "126", "125", "140")
-        """
-        pass
+        """Return the normalized form type identifier this filler supports."""
+        raise NotImplementedError

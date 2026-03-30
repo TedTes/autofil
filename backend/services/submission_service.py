@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 from enum import Enum
 
+from extraction.classifiers import classifier_registry
 from extraction.core.document import Document, DocumentType
 from extraction.extractors.mfc import MFC
 from filling.fillers import *  # noqa: F401,F403 - ensure fillers register themselves

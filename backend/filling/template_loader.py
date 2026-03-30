@@ -35,11 +35,29 @@ class RepeaterMapping:
 @dataclass
 class TemplateConfig:
     template_id: str
+    form_type: str
     field_map: Dict[str, str]        # canonical → pdf field name
     repeaters: Dict[str, Any]        # table configs
     raw: Dict[str, Any]              # original JSON contents
+    name: Optional[str] = None
+    description: str = ""
     pdf_url: Optional[str] = None    # remote or local PDF path
     version: Optional[str] = None    # e.g. "v2016_09"
+    required_data_sections: List[str] = None
+    optional_data_sections: List[str] = None
+    expected_documents: List[str] = None
+    estimated_fields: int = 0
+    icon: Optional[str] = None
+    is_popular: bool = False
+
+    def __post_init__(self) -> None:
+        self.required_data_sections = list(self.required_data_sections or [])
+        self.optional_data_sections = list(self.optional_data_sections or [])
+        self.expected_documents = list(self.expected_documents or [])
+        self.field_map = dict(self.field_map or {})
+        self.repeaters = dict(self.repeaters or {})
+        self.raw = dict(self.raw or {})
+        self.name = self.name or self.template_id
 
     def get_pdf_field(self, canonical_field: str) -> Optional[str]:
         return self.field_map.get(canonical_field)
@@ -61,8 +79,25 @@ class TemplateConfig:
     def version_metadata(self) -> Dict[str, Any]:
         return {
             "template_id": self.template_id,
+            "form_type": self.form_type,
             "version": self.version,
             "pdf_url": self.pdf_url,
+        }
+
+    def to_library_dict(self, template_url: Optional[str] = None) -> Dict[str, Any]:
+        return {
+            "id": self.template_id,
+            "name": self.name,
+            "description": self.description,
+            "formType": self.form_type,
+            "requiredDataSections": self.required_data_sections,
+            "optionalDataSections": self.optional_data_sections,
+            "estimatedFields": self.estimated_fields,
+            "version": self.version,
+            "icon": self.icon,
+            "isPopular": self.is_popular,
+            "templateUrl": template_url or self.pdf_url,
+            "expectedDocuments": self.expected_documents,
         }
 
 
@@ -113,6 +148,46 @@ class TemplateLoader:
 
         # 3. Fallback local
         return cls._load_from_local(template_id, version)
+
+    @classmethod
+    def _build_config(
+        cls,
+        raw_data: Dict[str, Any],
+        *,
+        template_id: str,
+        version: str,
+        pdf_url: Optional[str],
+    ) -> TemplateConfig:
+        config = TemplateConfig(
+            template_id=raw_data.get("template_id", template_id),
+            form_type=raw_data.get("form_type") or raw_data.get("formType") or "CUSTOM",
+            field_map=raw_data.get("field_map", {}),
+            repeaters=raw_data.get("repeaters", {}),
+            raw=raw_data,
+            name=raw_data.get("name"),
+            description=raw_data.get("description", ""),
+            pdf_url=pdf_url,
+            version=raw_data.get("version", version),
+            required_data_sections=raw_data.get("required_data_sections") or raw_data.get("requiredDataSections"),
+            optional_data_sections=raw_data.get("optional_data_sections") or raw_data.get("optionalDataSections"),
+            expected_documents=raw_data.get("expected_documents") or raw_data.get("expectedDocuments"),
+            estimated_fields=int(raw_data.get("estimated_fields") or raw_data.get("estimatedFields") or 0),
+            icon=raw_data.get("icon"),
+            is_popular=bool(raw_data.get("is_popular") or raw_data.get("isPopular", False)),
+        )
+        cls._validate_config(config)
+        return config
+
+    @staticmethod
+    def _validate_config(config: TemplateConfig) -> None:
+        if not config.template_id:
+            raise ValueError("template_id is required")
+        if not config.form_type:
+            raise ValueError(f"form_type is required for template {config.template_id}")
+        if not isinstance(config.field_map, dict):
+            raise ValueError(f"field_map must be a mapping for template {config.template_id}")
+        if not isinstance(config.repeaters, dict):
+            raise ValueError(f"repeaters must be a mapping for template {config.template_id}")
 
     @classmethod
     def _load_from_storage(cls, template_id: str, version: str) -> Optional[TemplateConfig]:
@@ -178,13 +253,11 @@ class TemplateLoader:
             except Exception:
                 pdf_local_path = None
 
-        return TemplateConfig(
-            template_id=raw_data.get("template_id", template_id),
-            field_map=raw_data.get("field_map", {}),
-            repeaters=raw_data.get("repeaters", {}),
-            raw=raw_data,
+        return cls._build_config(
+            raw_data,
+            template_id=template_id,
+            version=version,
             pdf_url=str(pdf_local_path) if pdf_local_path else raw_data.get("pdf_url"),
-            version=raw_data.get("version", version),
         )
 
     # ----------------------------------------------------------------------
@@ -204,13 +277,11 @@ class TemplateLoader:
                 return None
 
             raw = r.json()
-            return TemplateConfig(
-                template_id=raw.get("template_id", template_id),
-                field_map=raw.get("field_map", {}),
-                repeaters=raw.get("repeaters", {}),
-                raw=raw,
+            return cls._build_config(
+                raw,
+                template_id=template_id,
+                version=version,
                 pdf_url=raw.get("pdf_url"),
-                version=raw.get("version", version),
             )
 
         except Exception as e:
@@ -259,13 +330,11 @@ class TemplateLoader:
                     default_name="template.pdf",
                 )
 
-                return TemplateConfig(
-                    template_id=raw.get("template_id", template_id),
-                    field_map=raw.get("field_map", {}),
-                    repeaters=raw.get("repeaters", {}),
-                    raw=raw,
+                return cls._build_config(
+                    raw,
+                    template_id=template_id,
+                    version=version,
                     pdf_url=pdf_path,
-                    version=raw.get("version", version),
                 )
             except Exception as e:
                 logger.warning("template_loader local load error: %s", e)
@@ -293,13 +362,11 @@ class TemplateLoader:
                 fallback_name=f"{candidate.stem}.pdf",
             )
 
-            return TemplateConfig(
-                template_id=raw.get("template_id", template_id),
-                field_map=raw.get("field_map", {}),
-                repeaters=raw.get("repeaters", {}),
-                raw=raw,
+            return cls._build_config(
+                raw,
+                template_id=template_id,
+                version="latest",
                 pdf_url=pdf_path,
-                version=raw.get("version", "latest"),
             )
 
         logger.warning("template_loader template not found for id=%s", template_id)

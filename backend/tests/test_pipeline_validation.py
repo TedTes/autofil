@@ -83,3 +83,39 @@ def test_pipeline_metadata_includes_low_confidence_and_extraction_observability(
     ]
     assert enriched.metadata["validation_warning_count"] == 1
     assert enriched.metadata["extraction_method"] == "fillable_pdf"
+
+
+def test_pipeline_classification_trace_marks_ambiguous_docs_for_review():
+    class _FakeClassifier:
+        def can_classify(self, document):
+            return True
+
+        def classify_detailed(self, document):
+            return {
+                "document_type": "loss_run",
+                "confidence": 0.62,
+                "strategy": "highest_confidence",
+                "classifier_results": [
+                    {"classifier": "A", "priority": 10, "document_type": "loss_run", "confidence": 0.62},
+                    {"classifier": "B", "priority": 20, "document_type": "sov", "confidence": 0.6},
+                ],
+                "classifier_errors": [],
+                "candidate_types": [
+                    {"document_type": "loss_run", "votes": 1, "avg_confidence": 0.62, "max_confidence": 0.62, "classifiers": ["A"]},
+                    {"document_type": "sov", "votes": 1, "avg_confidence": 0.6, "max_confidence": 0.6, "classifiers": ["B"]},
+                ],
+                "indicators": [],
+                "conflict_detected": True,
+                "review_required": True,
+            }
+
+    pipeline = ExtractionPipeline(use_classification=False, min_classification_confidence=0.6)
+    pipeline.classifier = _FakeClassifier()
+    document = Document(file_path="/tmp/sample.pdf", file_name="sample.pdf")
+
+    classified = pipeline._classify_document(document)
+
+    assert classified.document_type == DocumentType.LOSS_RUN
+    assert classified.metadata["classification"]["review_required"] is True
+    assert classified.metadata["classification"]["conflict_detected"] is True
+    assert classified.metadata["classification_training_record"]["status"] == "pending_review"

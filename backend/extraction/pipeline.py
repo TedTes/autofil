@@ -221,7 +221,23 @@ class ExtractionPipeline:
     def _classify_document(self, document: Document) -> Document:
         """Classify document type."""
         if self.classifier and self.classifier.can_classify(document):
-            doc_type, confidence = self.classifier.classify(document)
+            if hasattr(self.classifier, 'classify_detailed'):
+                classification = self.classifier.classify_detailed(document)
+                doc_type = self._coerce_document_type(classification['document_type'])
+                confidence = float(classification.get('confidence', 0.0))
+            else:
+                doc_type, confidence = self.classifier.classify(document)
+                classification = {
+                    'document_type': doc_type.value,
+                    'confidence': confidence,
+                    'strategy': self.classification_strategy,
+                    'classifier_results': [],
+                    'classifier_errors': [],
+                    'candidate_types': [],
+                    'indicators': [],
+                    'conflict_detected': False,
+                    'review_required': False,
+                }
             
             # Only apply classification if confidence meets threshold
             if confidence >= self.min_classification_confidence:
@@ -232,6 +248,28 @@ class ExtractionPipeline:
                 if document.metadata is None:
                     document.metadata = {}
                 document.metadata['low_classification_confidence'] = True
+
+            document.metadata['classification_timestamp'] = datetime.utcnow().isoformat()
+
+            top_candidates = classification.get('candidate_types', [])
+            document.metadata['classification'] = {
+                **classification,
+                'threshold': self.min_classification_confidence,
+                'applied_document_type': document.document_type.value,
+                'applied_confidence': document.confidence,
+                'review_required': (
+                    classification.get('review_required', False)
+                    or confidence < self.min_classification_confidence
+                ),
+            }
+            document.metadata['classification_training_record'] = {
+                'file_name': document.file_name,
+                'predicted_document_type': classification.get('document_type', DocumentType.UNKNOWN.value),
+                'predicted_confidence': confidence,
+                'candidate_types': top_candidates,
+                'status': 'pending_review',
+                'classified_at': document.metadata.get('classification_timestamp'),
+            }
         
         return document
     
@@ -340,6 +378,11 @@ class ExtractionPipeline:
         result.metadata['document_support'] = assess_document_support(document)
         result.metadata['review_required'] = result.metadata['document_support']['needs_review']
         result.metadata['recommended_action'] = result.metadata['document_support']['recommended_action']
+        result.metadata['classification'] = document.metadata.get('classification', {})
+        result.metadata['classification_training_record'] = document.metadata.get(
+            'classification_training_record',
+            {},
+        )
         low_confidence_fields = result.get_low_confidence_fields()
         result.metadata['low_confidence_field_count'] = len(low_confidence_fields)
         result.metadata['low_confidence_fields'] = [

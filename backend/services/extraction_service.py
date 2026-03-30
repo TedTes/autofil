@@ -140,44 +140,17 @@ class ExtractionService:
         try:
             # Load document
             document = self.file_loader.load(file_path)
-            
-            # Classify using composite classifier
-            doc_type, confidence = self.classifier.classify(document)
-            
-            # Get detailed classification results
-            classification_details = document.get_classification_info()
-            
-            # Build indicators list
-            indicators = []
-            if hasattr(self.classifier, 'get_indicators'):
-                indicators = self.classifier.get_indicators(document)
-            else:
-                # Fallback indicators
-                indicators.append(f'Document classified as {doc_type.value}')
-                indicators.append(f'Confidence: {confidence:.2%}')
-            
-            # Store classification
+
+            document = self.pipeline._maybe_enrich_with_ocr(document)
+            document = self.pipeline._classify_document(document)
+
             classification = {
-                'document_type': doc_type.value,
-                'confidence': confidence,
-                'indicators': indicators,
-                'classifier_results': [],
-                'classified_at': datetime.utcnow().isoformat()
+                'document_type': document.document_type.value,
+                'confidence': document.confidence,
+                'classified_at': document.metadata.get('classification_timestamp'),
+                **(document.metadata.get('classification') or {}),
             }
             classification.update(assess_document_support(document))
-            
-            # Try to get individual classifier results if available
-            if hasattr(self.classifier, 'classifiers'):
-                for cls in self.classifier.classifiers:
-                    try:
-                        cls_type, cls_conf = cls.classify(document)
-                        classification['classifier_results'].append({
-                            'classifier': cls.__class__.__name__,
-                            'document_type': cls_type.value,
-                            'confidence': cls_conf
-                        })
-                    except:
-                        pass
             
             self.classifications[file_id] = classification
             self.files[file_id]['status'] = 'classified'

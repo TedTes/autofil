@@ -203,6 +203,7 @@ class CompositeClassifier(IClassifier):
         self.classifiers = sorted(classifiers, key=lambda classifier: classifier.get_priority())
         self.strategy = strategy
         self.last_errors: List[Dict[str, str]] = []
+        self.last_results: List[Dict[str, Any]] = []
     
     def classify(self, document: Document) -> Tuple[DocumentType, float]:
         """
@@ -214,38 +215,52 @@ class CompositeClassifier(IClassifier):
         Returns:
             Tuple of (DocumentType, confidence)
         """
-        results = []
-        self.last_errors = []
-        
-        # Run all classifiers
-        for classifier in self.classifiers:
-            if classifier.can_classify(document):
-                try:
-                    doc_type, confidence = classifier.classify(document)
-                    results.append((doc_type, confidence, classifier.get_name()))
-                except Exception as e:
-                    self.last_errors.append({
-                        'classifier': classifier.get_name(),
-                        'error': str(e),
-                    })
-                    logger.warning(
-                        "classifier %s failed during classify: %s",
-                        classifier.get_name(),
-                        e,
-                    )
-        
+        results = self._run_classifiers(document)
+        return self._aggregate_results(results)
+
+    def classify_detailed(self, document: Document) -> Dict[str, Any]:
+        results = self._run_classifiers(document, include_indicators=True)
+        indicators = self.get_indicators(document)
+
+        if not results:
+            return {
+                'document_type': DocumentType.UNKNOWN.value,
+                'confidence': 0.0,
+                'strategy': self.strategy,
+                'classifier_results': [],
+                'classifier_errors': list(self.last_errors),
+                'candidate_types': [],
+                'indicators': indicators,
+                'conflict_detected': False,
+                'review_required': bool(self.last_errors),
+            }
+
+        chosen_type, chosen_confidence = self._aggregate_results(results)
+        candidate_types = self._build_candidate_types(results)
+        conflict_detected = self._has_conflict(candidate_types)
+
+        return {
+            'document_type': chosen_type.value,
+            'confidence': chosen_confidence,
+            'strategy': self.strategy,
+            'classifier_results': list(self.last_results),
+            'classifier_errors': list(self.last_errors),
+            'candidate_types': candidate_types,
+            'indicators': indicators,
+            'conflict_detected': conflict_detected,
+            'review_required': conflict_detected or bool(self.last_errors),
+        }
+
+    def _aggregate_results(self, results: List[Tuple[DocumentType, float, str]]) -> Tuple[DocumentType, float]:
         if not results:
             return DocumentType.UNKNOWN, 0.0
-        
-        # Aggregate results based on strategy
         if self.strategy == 'highest_confidence':
             return self._highest_confidence(results)
-        elif self.strategy == 'weighted_average':
+        if self.strategy == 'weighted_average':
             return self._weighted_average(results)
-        elif self.strategy == 'voting':
+        if self.strategy == 'voting':
             return self._voting(results)
-        else:
-            return self._highest_confidence(results)
+        return self._highest_confidence(results)
     
     def _highest_confidence(self, results: List[Tuple[DocumentType, float, str]]) -> Tuple[DocumentType, float]:
         """Return result with highest confidence."""
@@ -320,6 +335,83 @@ class CompositeClassifier(IClassifier):
                     )
         
         return all_indicators
+
+    def _run_classifiers(self, document: Document, include_indicators: bool = False) -> List[Tuple[DocumentType, float, str]]:
+        results: List[Tuple[DocumentType, float, str]] = []
+        self.last_errors = []
+        self.last_results = []
+
+        for classifier in self.classifiers:
+            if not classifier.can_classify(document):
+                continue
+            try:
+                doc_type, confidence = classifier.classify(document)
+                results.append((doc_type, confidence, classifier.get_name()))
+                classifier_result = {
+                    'classifier': classifier.get_name(),
+                    'priority': classifier.get_priority(),
+                    'document_type': doc_type.value,
+                    'confidence': confidence,
+                }
+                if include_indicators:
+                    classifier_result['indicators'] = classifier.get_indicators(document)
+                self.last_results.append(classifier_result)
+            except Exception as e:
+                self.last_errors.append({
+                    'classifier': classifier.get_name(),
+                    'error': str(e),
+                })
+                logger.warning(
+                    "classifier %s failed during classify: %s",
+                    classifier.get_name(),
+                    e,
+                )
+        return results
+
+    @staticmethod
+    def _build_candidate_types(results: List[Tuple[DocumentType, float, str]]) -> List[Dict[str, Any]]:
+        grouped: Dict[DocumentType, Dict[str, Any]] = {}
+        for doc_type, confidence, classifier_name in results:
+            grouped.setdefault(
+                doc_type,
+                {
+                    'document_type': doc_type.value,
+                    'votes': 0,
+                    'confidences': [],
+                    'classifiers': [],
+                },
+            )
+            grouped[doc_type]['votes'] += 1
+            grouped[doc_type]['confidences'].append(confidence)
+            grouped[doc_type]['classifiers'].append(classifier_name)
+
+        candidates = []
+        for item in grouped.values():
+            avg_confidence = sum(item['confidences']) / len(item['confidences'])
+            candidates.append(
+                {
+                    'document_type': item['document_type'],
+                    'votes': item['votes'],
+                    'avg_confidence': avg_confidence,
+                    'max_confidence': max(item['confidences']),
+                    'classifiers': item['classifiers'],
+                }
+            )
+        return sorted(
+            candidates,
+            key=lambda item: (item['votes'], item['avg_confidence'], item['max_confidence']),
+            reverse=True,
+        )
+
+    @staticmethod
+    def _has_conflict(candidate_types: List[Dict[str, Any]], confidence_gap: float = 0.15) -> bool:
+        if len(candidate_types) <= 1:
+            return False
+        top = candidate_types[0]
+        second = candidate_types[1]
+        same_votes = top['votes'] == second['votes']
+        close_confidence = abs(top['avg_confidence'] - second['avg_confidence']) <= confidence_gap
+        return same_votes or close_confidence
     
     def can_classify(self, document: Document) -> bool:
         """Can classify if any sub-classifier can."""

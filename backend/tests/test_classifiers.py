@@ -111,3 +111,19 @@ def test_composite_classifier_sorts_by_priority_and_records_failures():
     assert composite.last_errors == [
         {"classifier": "_FailingClassifier", "error": "boom"}
     ]
+
+
+def test_composite_classifier_exposes_detailed_trace_and_conflicts():
+    document = Document(file_path="/tmp/doc.pdf", file_name="doc.pdf", file_extension=".pdf")
+    composite = CompositeClassifier(
+        [_LowPriorityClassifier(), _HighPriorityClassifier()],
+        strategy="voting",
+    )
+
+    details = composite.classify_detailed(document)
+
+    assert details["document_type"] in {DocumentType.LOSS_RUN.value, DocumentType.SOV.value}
+    assert len(details["classifier_results"]) == 2
+    assert len(details["candidate_types"]) == 2
+    assert details["conflict_detected"] is True
+    assert details["review_required"] is True

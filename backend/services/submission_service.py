@@ -34,6 +34,8 @@ from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 from services.supabase_db_service import SupabaseDatabaseService
 from services.supabase_storage_service import SupabaseStorageService
+from services.submission_file_store import SubmissionFileStore
+from services.submission_repository import SubmissionRepository
 from services.version_service import VersionService
 
 
@@ -368,10 +370,12 @@ class SubmissionService:
             classifier_names=['mime', 'keyword', 'table'],
             strategy='highest_confidence'
         )
-        self.remote_storage = SupabaseStorageService()
-        if not getattr(self.remote_storage, "enabled", False):
+        self.file_store = SubmissionFileStore()
+        self.remote_storage = self.file_store.storage
+        if not self.file_store.enabled:
             raise RuntimeError("Supabase storage must be configured for file storage.")
-        self.db = SupabaseDatabaseService()
+        self.repository = SubmissionRepository()
+        self.db = self.repository.db
 
         self.merge_config = MergeConfig(
             strategy=MergeStrategy.HIGHEST_CONFIDENCE,
@@ -391,7 +395,7 @@ class SubmissionService:
             },
             consensus_threshold=2
         )
-        if not self.db.enabled:
+        if not self.repository.enabled:
             raise RuntimeError("Supabase database must be configured for submission metadata storage.")
     def upload_and_extract(
         self,
@@ -579,7 +583,7 @@ class SubmissionService:
                 shutil.rmtree(temp_upload_dir, ignore_errors=True)
     
     def get_submission_metadata(self, submission_id: str) -> Optional[Dict[str, Any]]:
-        return self.db.get_submission_metadata(submission_id)
+        return self.repository.get(submission_id)
 
     def get_submission(
         self,
@@ -725,18 +729,13 @@ class SubmissionService:
 
         for input_meta in metadata.get("inputs", []):
             storage_info = input_meta.get("storage") or {}
-            storage_path = storage_info.get("path")
-            if storage_path:
-                self.remote_storage.delete_file(storage_path)
+            self.file_store.delete(storage_info)
 
         for output_meta in metadata.get("outputs", []):
             storage_info = output_meta.get("storage") or {}
-            storage_path = storage_info.get("path")
-            if storage_path:
-                self.remote_storage.delete_file(storage_path)
+            self.file_store.delete(storage_info)
 
-        if getattr(self.db, "enabled", False):
-            self.db.delete_submission_metadata(submission_id)
+        self.repository.delete(submission_id)
 
         folder_id = metadata.get("folder_id")
         if folder_id:
@@ -999,9 +998,7 @@ class SubmissionService:
                 pass
 
         storage_info = entry.get("storage") or entry.get("upload_storage") or {}
-        storage_path = storage_info.get("path")
-        if storage_path:
-            self.remote_storage.delete_file(storage_path)
+        self.file_store.delete(storage_info)
 
         metadata["inputs"] = inputs
         metadata["file_count"] = len(inputs)
@@ -1034,9 +1031,7 @@ class SubmissionService:
         entry = outputs.pop(index)
 
         storage_info = entry.get("storage") or {}
-        storage_path = storage_info.get("path")
-        if storage_path:
-            self.remote_storage.delete_file(storage_path)
+        self.file_store.delete(storage_info)
 
         local_path = entry.get("path") or entry.get("output_path")
         abs_path = self._abs_storage_path(local_path)
@@ -1229,19 +1224,13 @@ class SubmissionService:
     ) -> Optional[Dict[str, Any]]:
         """Upload a file to remote storage, returning metadata for persistence."""
         try:
-            if not getattr(self.remote_storage, "enabled", False):
-                return None
-
-            segments: List[Optional[str]] = []
-            if client_id:
-                segments.extend(["clients", client_id])
-            else:
-                segments.append("submissions")
-            segments.extend([submission_id, category, filename])
-            upload_info = self.remote_storage.upload_file(
+            upload_info = self.file_store.upload(
                 local_path=local_path,
-                storage_path=self.remote_storage.build_path(*segments),
                 content_type=content_type,
+                client_id=client_id,
+                submission_id=submission_id,
+                category=category,
+                filename=filename,
             )
             return upload_info
         except Exception as e:
@@ -1249,8 +1238,7 @@ class SubmissionService:
         return None
 
     def _persist_submission_metadata(self, metadata: Dict[str, Any]) -> None:
-        if getattr(self.db, "enabled", False):
-            self.db.save_submission_metadata(metadata)
+        self.repository.save(metadata)
 
     def _select_filler(self, template_id: str):
         if not template_id:
@@ -1262,12 +1250,7 @@ class SubmissionService:
         return self.filler_cache[cache_key]
 
     def _download_storage_entry(self, storage_info: Optional[Dict[str, Any]]) -> Optional[bytes]:
-        if not storage_info:
-            return None
-        path = storage_info.get("path")
-        if not path:
-            return None
-        return self.remote_storage.download_file(path)
+        return self.file_store.download(storage_info)
 
     def _get_input_storage(
         self,
@@ -1458,7 +1441,7 @@ class SubmissionService:
         """
         Return lightweight submission metadata records without loading full JSON data.
         """
-        metadata_rows = self.db.list_submissions_metadata()
+        metadata_rows = self.repository.list_all()
         client_name_cache: Dict[str, Optional[str]] = {}
         summaries: List[Dict[str, Any]] = []
 
@@ -1510,7 +1493,7 @@ class SubmissionService:
         """
         try: 
             submissions = []
-            data = self.db.list_submissions_metadata()
+            data = self.repository.list_all()
             
             for metadata in data:
                 submission_id = metadata.get("submission_id")
@@ -1677,7 +1660,7 @@ class SubmissionService:
         """
         Aggregate submission metrics for the reports dashboard.
         """
-        metadata_rows = self.db.list_submissions_metadata()
+        metadata_rows = self.repository.list_all()
         now = datetime.utcnow()
         cutoff = now - timedelta(days=max(range_days, 1))
 

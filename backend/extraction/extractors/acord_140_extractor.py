@@ -92,6 +92,7 @@ class ACORD140Extractor(IExtractor):
                             display_name="Property Section",
                             description="Location schedule",
                             fields={
+                                "Location": locations,
                                 "locations": locations,
                                 "extractedAt": datetime.utcnow().isoformat(),
                             },
@@ -139,9 +140,8 @@ class ACORD140Extractor(IExtractor):
     ) -> ExtractionResult:
         """Extract from fillable fields."""
         mapped = self._map_fields(raw_fields, template_config)
-        fields = dict(mapped)
-        if locations:
-            fields["locations"] = locations
+        shared_fields = self._build_shared_fields(mapped, locations)
+        fields = {**mapped, **shared_fields}
         canonical = build_generic_canonical_output(
             document,
             section_payloads=[
@@ -156,7 +156,12 @@ class ACORD140Extractor(IExtractor):
             metadata=Metadata(
                 form_type_detected="ACORD_140", line_of_business="Property"
             ),
-            raw={"mapped_fields": mapped, "raw_fields": raw_fields, "locations": locations},
+            raw={
+                "mapped_fields": mapped,
+                "shared_fields": shared_fields,
+                "raw_fields": raw_fields,
+                "locations": locations,
+            },
         )
         return ExtractionResult(
             success=True,
@@ -172,17 +177,16 @@ class ACORD140Extractor(IExtractor):
             return locations
 
         for table in document.tables:
-            headers_lower = [h.lower() for h in table.headers]
+            headers = list(table.headers or [])
+            headers_lower = [h.lower() for h in headers]
             if any("location" in h or "building" in h for h in headers_lower):
+                column_map = self._map_table_columns(headers)
                 for row in table.rows:
-                    if len(row) >= 2:
-                        locations.append(
-                            {
-                                "location": row[0],
-                                "building_value": row[1] if len(row) > 1 else "",
-                                "contents_value": row[2] if len(row) > 2 else "",
-                            }
-                        )
+                    if not row:
+                        continue
+                    location = self._row_to_location(row, column_map)
+                    if any(value not in ("", None) for value in location.values()):
+                        locations.append(location)
         return locations
     
     def _map_fields(
@@ -202,6 +206,99 @@ class ACORD140Extractor(IExtractor):
                     mapped[standard_field] = raw_fields[possible_name]
                     break
         return mapped
+
+    def _build_shared_fields(
+        self,
+        mapped: Dict[str, Any],
+        locations: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        shared: Dict[str, Any] = {}
+        if mapped.get("InsuredName"):
+            shared["InsuredName"] = mapped["InsuredName"]
+
+        normalized_locations = [location for location in locations if isinstance(location, dict)]
+        if not normalized_locations:
+            single_location = {
+                "location_number": mapped.get("LocationNumber"),
+                "address": mapped.get("LocationAddressLine1"),
+                "year_built": mapped.get("BuiltYear"),
+                "square_feet": mapped.get("BuildingArea"),
+                "building_value": mapped.get("BuildingValue"),
+                "contents_value": mapped.get("ContentsLimit"),
+                "business_income": mapped.get("BusinessIncomeLimit"),
+                "construction": mapped.get("ConstructionType"),
+                "stories": mapped.get("NumberOfStories"),
+                "sprinkler": mapped.get("SprinklerIndicator"),
+                "fire_alarm": mapped.get("FireAlarmIndicator"),
+                "burglar_alarm": mapped.get("BurglarAlarmIndicator"),
+            }
+            if any(value not in ("", None) for value in single_location.values()):
+                normalized_locations = [single_location]
+
+        if normalized_locations:
+            shared["Location"] = normalized_locations
+            total_insured_value = 0.0
+            saw_value = False
+            for location in normalized_locations:
+                for key in ("building_value", "contents_value", "business_income"):
+                    raw_value = location.get(key)
+                    if raw_value in ("", None):
+                        continue
+                    try:
+                        total_insured_value += float(str(raw_value).replace(",", "").replace("$", ""))
+                        saw_value = True
+                    except (TypeError, ValueError):
+                        continue
+            if saw_value:
+                shared["TotalInsuredValue"] = total_insured_value
+
+        return shared
+
+    def _map_table_columns(self, headers: List[str]) -> Dict[int, str]:
+        mapping: Dict[int, str] = {}
+        for index, header in enumerate(headers):
+            normalized = (header or "").strip().lower()
+            if not normalized:
+                continue
+            if "location" in normalized and ("number" in normalized or "#" in normalized or normalized == "loc"):
+                mapping[index] = "location_number"
+            elif "address" in normalized:
+                mapping[index] = "address"
+            elif "building" in normalized and ("value" in normalized or "limit" in normalized):
+                mapping[index] = "building_value"
+            elif "contents" in normalized:
+                mapping[index] = "contents_value"
+            elif "business" in normalized and "income" in normalized:
+                mapping[index] = "business_income"
+            elif "construction" in normalized:
+                mapping[index] = "construction"
+            elif "year" in normalized and "built" in normalized:
+                mapping[index] = "year_built"
+            elif "square" in normalized or "sq" in normalized:
+                mapping[index] = "square_feet"
+            elif "stor" in normalized:
+                mapping[index] = "stories"
+            elif "sprinkler" in normalized:
+                mapping[index] = "sprinkler"
+        return mapping
+
+    def _row_to_location(self, row: List[Any], column_map: Dict[int, str]) -> Dict[str, Any]:
+        if column_map:
+            location: Dict[str, Any] = {}
+            for index, field_name in column_map.items():
+                if index >= len(row):
+                    continue
+                value = row[index]
+                if value in (None, ""):
+                    continue
+                location[field_name] = value
+            return location
+
+        return {
+            "location_number": row[0] if len(row) > 0 else "",
+            "building_value": row[1] if len(row) > 1 else "",
+            "contents_value": row[2] if len(row) > 2 else "",
+        }
     
     def __repr__(self) -> str:
         return "Acord140Extractor()"

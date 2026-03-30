@@ -100,6 +100,12 @@ class ACORD130Extractor(IExtractor):
     ) -> ExtractionResult:
         """Extract from fillable fields."""
         mapped = self._map_fields(raw_fields, template_config)
+        shared_fields = self._build_shared_fields(mapped)
+        classification_rows = self._extract_classification_rows(raw_fields, template_config)
+        if classification_rows:
+            shared_fields["Classification"] = classification_rows
+            mapped.setdefault("Classifications", classification_rows)
+
         canonical = build_generic_canonical_output(
             document,
             section_payloads=[
@@ -108,7 +114,7 @@ class ACORD130Extractor(IExtractor):
                     display_name="Workers Compensation",
                     description="Employer & coverage information",
                     priority=1,
-                    fields=mapped,
+                    fields={**mapped, **shared_fields},
                 )
             ],
             extraction_method="fillable_pdf",
@@ -116,7 +122,11 @@ class ACORD130Extractor(IExtractor):
                 form_type_detected="ACORD_130",
                 line_of_business="Workers Compensation",
             ),
-            raw={"mapped_fields": mapped, "raw_fields": raw_fields},
+            raw={
+                "mapped_fields": mapped,
+                "shared_fields": shared_fields,
+                "raw_fields": raw_fields,
+            },
         )
         return ExtractionResult(success=True, data=canonical.to_dict(), confidence=0.8)
     
@@ -144,7 +154,9 @@ class ACORD130Extractor(IExtractor):
                 description="Classification schedule",
                 priority=1,
                 fields={
-                    "classifications": classifications,
+                    "Classification": classifications,
+                    "Classifications": classifications,
+                    "Payroll": self._sum_payroll(classifications),
                     "extractedAt": datetime.utcnow().isoformat(),
                 },
             )
@@ -182,6 +194,74 @@ class ACORD130Extractor(IExtractor):
                     mapped[standard_field] = raw_fields[possible_name]
                     break
         return mapped
+
+    def _build_shared_fields(self, mapped: Dict[str, Any]) -> Dict[str, Any]:
+        shared: Dict[str, Any] = {}
+
+        insured_name = mapped.get("EmployerName")
+        if insured_name:
+            shared["InsuredName"] = insured_name
+
+        mailing_address = {
+            "street": mapped.get("EmployerAddressLine1"),
+            "line2": mapped.get("EmployerAddressLine2"),
+            "city": mapped.get("EmployerCity"),
+            "state": mapped.get("EmployerState"),
+            "zip": mapped.get("EmployerPostalCode"),
+        }
+        if any(value not in ("", None) for value in mailing_address.values()):
+            shared["MailingAddress"] = mailing_address
+
+        if mapped.get("FederalID"):
+            shared["FEIN"] = mapped["FederalID"]
+        if mapped.get("StateID"):
+            shared["StateEmployerIdentifier"] = mapped["StateID"]
+        if mapped.get("TotalEstimatedPayroll") not in ("", None):
+            shared["Payroll"] = mapped["TotalEstimatedPayroll"]
+
+        return shared
+
+    def _extract_classification_rows(
+        self,
+        raw_fields: Dict[str, Any],
+        template_config: Optional[TemplateConfig],
+    ) -> List[Dict[str, Any]]:
+        rows: List[Dict[str, Any]] = []
+        repeater = (template_config.repeaters or {}).get("Classifications") if template_config else None
+        if not isinstance(repeater, dict):
+            return rows
+
+        row_ids = list(repeater.get("row_ids", []) or [])
+        columns = dict(repeater.get("columns", {}) or {})
+        if not row_ids or not columns:
+            return rows
+
+        for row_id in row_ids:
+            row: Dict[str, Any] = {}
+            for canonical_col, pattern in columns.items():
+                field_name = pattern.format(row_id=row_id)
+                value = raw_fields.get(field_name)
+                if value in (None, "", "/Off", "Off"):
+                    continue
+                row[canonical_col] = value
+            if any(value not in ("", None) for value in row.values()):
+                rows.append(row)
+
+        return rows
+
+    def _sum_payroll(self, classifications: List[Dict[str, Any]]) -> Optional[float]:
+        total = 0.0
+        seen = False
+        for row in classifications:
+            raw_value = row.get("payroll")
+            if raw_value in (None, ""):
+                continue
+            try:
+                total += float(str(raw_value).replace(",", "").replace("$", ""))
+                seen = True
+            except (TypeError, ValueError):
+                continue
+        return total if seen else None
     
     def __repr__(self) -> str:
         return "ACORD130Extractor()"

@@ -376,20 +376,56 @@ class ExtractionPipeline:
             'ocr_applied': bool(document.metadata.get('ocr_applied')),
         }
         result.metadata['document_support'] = assess_document_support(document)
-        result.metadata['review_required'] = result.metadata['document_support']['needs_review']
-        result.metadata['recommended_action'] = result.metadata['document_support']['recommended_action']
-        result.metadata['classification'] = document.metadata.get('classification', {})
+        classification_metadata = document.metadata.get('classification', {})
+        document_support = result.metadata['document_support']
+        low_confidence_fields = result.get_low_confidence_fields()
+        validation_warning_count = len(result.warnings)
+
+        review_reasons = self._dedupe_messages([
+            *(document_support.get('review_reasons') or []),
+            *(
+                ['Classifier disagreement requires review before relying on this result.']
+                if classification_metadata.get('conflict_detected')
+                else []
+            ),
+            *(
+                [f"{len(low_confidence_fields)} extracted field(s) are below the confidence threshold."]
+                if low_confidence_fields
+                else []
+            ),
+            *(
+                [f"{validation_warning_count} validation warning(s) were generated during extraction."]
+                if validation_warning_count
+                else []
+            ),
+        ])
+
+        review_required = any([
+            document_support.get('needs_review', False),
+            classification_metadata.get('review_required', False),
+            bool(low_confidence_fields),
+            validation_warning_count > 0,
+            not result.success,
+        ])
+
+        recommended_action = document_support.get('recommended_action', 'extract')
+        if review_required and recommended_action == 'extract':
+            recommended_action = 'review_then_extract'
+
+        result.metadata['review_required'] = review_required
+        result.metadata['recommended_action'] = recommended_action
+        result.metadata['review_reasons'] = review_reasons
+        result.metadata['classification'] = classification_metadata
         result.metadata['classification_training_record'] = document.metadata.get(
             'classification_training_record',
             {},
         )
-        low_confidence_fields = result.get_low_confidence_fields()
         result.metadata['low_confidence_field_count'] = len(low_confidence_fields)
         result.metadata['low_confidence_fields'] = [
             {'field_id': field_id, 'confidence': confidence}
             for field_id, confidence in low_confidence_fields
         ]
-        result.metadata['validation_warning_count'] = len(result.warnings)
+        result.metadata['validation_warning_count'] = validation_warning_count
         result.metadata['extraction_method'] = (
             (result.data.get('source') or {}).get('extraction_method')
             if isinstance(result.data, dict)

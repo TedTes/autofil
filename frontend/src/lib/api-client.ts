@@ -789,6 +789,9 @@ export async function classifyDocument(fileId: string): Promise<{
   document_type: string
   confidence: number
   indicators: string[]
+  candidate_types?: Array<{ document_type: string; confidence: number; votes?: number }>
+  classifier_errors?: string[]
+  conflict_detected?: boolean
   is_supported?: boolean
   is_insurance_relevant?: boolean
   needs_review?: boolean
@@ -831,6 +834,10 @@ export async function extractDocument(
     }
     review_required?: boolean
     recommended_action?: string
+    review_reasons?: string[]
+    low_confidence_field_count?: number
+    low_confidence_fields?: Array<{ field_id: string; confidence: number }>
+    validation_warning_count?: number
     [key: string]: unknown
   }
 }> {

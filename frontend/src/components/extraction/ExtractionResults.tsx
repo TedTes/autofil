@@ -120,6 +120,9 @@ export default function ExtractionResults({
   
   const stats = getLowConfidenceStats()
   const confidenceStyle = getConfidenceStyle(result.confidence)
+  const reviewRequired = Boolean(result.metadata?.review_required)
+  const reviewReasons = result.metadata?.review_reasons || []
+  const recommendedAction = result.metadata?.recommended_action
 
   // Group data by category
   const groupedData = groupDataByCategory(result.data, result.field_confidence)
@@ -160,6 +163,29 @@ export default function ExtractionResults({
               <p className="text-xs text-yellow-700 mt-0.5">
                 These fields may need manual review
               </p>
+            </div>
+          </div>
+        )}
+
+        {reviewRequired && (
+          <div className="mt-3 flex items-start gap-2 px-3 py-3 bg-amber-50 border border-amber-200 rounded-lg">
+            <HelpCircle className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-amber-800">
+                Manual review is recommended before using this extraction
+              </p>
+              {recommendedAction && (
+                <p className="text-xs text-amber-700 mt-0.5">
+                  Recommended action: {recommendedAction.replaceAll('_', ' ')}
+                </p>
+              )}
+              {reviewReasons.length > 0 && (
+                <ul className="mt-2 space-y-1 text-xs text-amber-800">
+                  {reviewReasons.map((reason, index) => (
+                    <li key={`${reason}-${index}`}>• {reason}</li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
         )}

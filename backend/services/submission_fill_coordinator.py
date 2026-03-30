@@ -6,9 +6,11 @@ import os
 import shutil
 import tempfile
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from filling.fillers.base_filler import FillReport
+from filling.template_loader import TemplateLoader
 from services.submission_file_store import SubmissionFileStore
 from services.submission_repository import SubmissionRepository
 
@@ -55,8 +57,16 @@ class SubmissionFillCoordinator:
                 "template_id is required when filling a document. Please select a destination template."
             )
 
-        metadata["template_type"] = template_choice
-        filler = self.select_filler(template_choice)
+        template_choice = Path(str(template_choice)).stem
+        template_config = TemplateLoader.load(template_choice)
+        if not template_config:
+            raise ValueError(
+                f"Unknown output template '{template_choice}'. Select a supported YAML-backed template id."
+            )
+        resolved_template_id = template_config.template_id
+
+        metadata["template_type"] = resolved_template_id
+        filler = self.select_filler(resolved_template_id)
 
         temp_output_dir = tempfile.mkdtemp(prefix=f"filled_{submission_id}_")
         try:
@@ -68,30 +78,40 @@ class SubmissionFillCoordinator:
             fill_report = filler.fill(
                 canonical_data=canonical_data,
                 output_path=output_path,
-                template_id=template_choice,
+                template_id=resolved_template_id,
             )
-            remote_output = self.file_store.upload(
-                local_path=output_path,
-                content_type=self._content_type_for_extension(ext),
-                client_id=metadata.get("client_id"),
-                submission_id=submission_id,
-                category="outputs",
-                filename=os.path.basename(output_path),
-            )
-
-            metadata["status"] = "filled"
-            metadata["filled_at"] = datetime.utcnow().isoformat()
-            outputs_meta = metadata.setdefault("outputs", [])
-            output_entry = {
-                "template_id": template_choice,
-                "filename": os.path.basename(output_path),
-                "generated_at": metadata["filled_at"],
-                "url": remote_output.get("public_url") if remote_output else None,
-                "storage": remote_output,
+            output_entry: Dict[str, Any] = {
+                "template_id": resolved_template_id,
+                "generated_at": datetime.utcnow().isoformat(),
             }
-            outputs_meta.append(output_entry)
-            if remote_output:
-                metadata["output_storage"] = remote_output
+
+            remote_output = None
+            if fill_report.success and os.path.exists(output_path):
+                remote_output = self.file_store.upload(
+                    local_path=output_path,
+                    content_type=self._content_type_for_extension(ext),
+                    client_id=metadata.get("client_id"),
+                    submission_id=submission_id,
+                    category="outputs",
+                    filename=os.path.basename(output_path),
+                )
+
+                metadata["status"] = "filled"
+                metadata["filled_at"] = output_entry["generated_at"]
+                output_entry.update({
+                    "filename": os.path.basename(output_path),
+                    "url": remote_output.get("public_url") if remote_output else None,
+                    "storage": remote_output,
+                })
+                outputs_meta = metadata.setdefault("outputs", [])
+                outputs_meta.append(output_entry)
+                if remote_output:
+                    metadata["output_storage"] = remote_output
+            else:
+                metadata["status"] = "extracted"
+                output_entry["filename"] = os.path.basename(output_path)
+                output_entry["url"] = None
+
             metadata["fill_report"] = {
                 "success": fill_report.success,
                 "coverage": fill_report.coverage,

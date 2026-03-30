@@ -133,21 +133,85 @@ class TemplateLoader:
         """
 
         # Normalize: accept "acord_126_2016.pdf" or "acord_126_2016"
-        template_id = Path(template_id).stem
+        requested_template_id = Path(template_id).stem
+        template_id = requested_template_id
 
-        # 1. Try Supabase storage if available
+        # Prefer local YAML/JSON templates for launch stability. Remote storage
+        # remains a fallback for deployments that intentionally externalize
+        # template assets.
+        config = cls._load_from_local(template_id, version)
+        if config:
+            return config
+
+        # 2. Try Supabase storage if available
         config = cls._load_from_storage(template_id, version)
         if config:
             return config
 
-        # 2. Try cloud URL override
+        # 3. Try cloud URL override
         if cls.cloud_base_url:
             config = cls._load_from_cloud(template_id, version)
             if config:
                 return config
 
-        # 3. Fallback local
-        return cls._load_from_local(template_id, version)
+        alias_template_id = cls._resolve_template_alias(requested_template_id)
+        if alias_template_id and alias_template_id != template_id:
+            config = cls._load_from_local(alias_template_id, version)
+            if config:
+                return config
+            config = cls._load_from_storage(alias_template_id, version)
+            if config:
+                return config
+            if cls.cloud_base_url:
+                config = cls._load_from_cloud(alias_template_id, version)
+                if config:
+                    return config
+
+        return None
+
+    @classmethod
+    def _resolve_template_alias(cls, template_id: str) -> Optional[str]:
+        """
+        Allow callers to pass broader identifiers like ``ACORD_126`` and resolve
+        them to the current YAML-backed template id such as ``acord_126_2016``.
+        """
+        normalized = Path(template_id).stem.strip().lower()
+        if not normalized:
+            return None
+
+        local_dir = getattr(cls, "local_template_dir", None)
+        if not isinstance(local_dir, Path) or not local_dir.exists():
+            return None
+
+        candidates: List[str] = []
+        try:
+            for candidate in local_dir.iterdir():
+                if candidate.name.startswith("."):
+                    continue
+                if candidate.is_file() and candidate.suffix.lower() in {".yaml", ".yml", ".json"}:
+                    candidates.append(candidate.stem)
+                elif candidate.is_dir():
+                    candidates.append(candidate.name)
+        except OSError:
+            return None
+
+        if normalized in candidates:
+            return normalized
+
+        prefix_matches = sorted(
+            candidate for candidate in candidates
+            if candidate == normalized or candidate.startswith(f"{normalized}_")
+        )
+        if prefix_matches:
+            return prefix_matches[0]
+
+        upper_normalized = normalized.upper()
+        for candidate in sorted(set(candidates)):
+            config = cls._load_from_local(candidate, version="latest")
+            if config and (config.form_type or "").upper() == upper_normalized:
+                return candidate
+
+        return None
 
     @classmethod
     def _build_config(
@@ -216,6 +280,11 @@ class TemplateLoader:
                     json_text = None
 
         if not json_text:
+            logger.debug(
+                "template_loader storage config not found for template=%s version=%s",
+                template_id,
+                version,
+            )
             return None
 
         # Determine PDF source
@@ -319,7 +388,7 @@ class TemplateLoader:
 
             template_path = cls._find_template_file(version_dir)
             if not template_path:
-                logger.warning("template_loader missing local template file in %s", version_dir)
+                logger.debug("template_loader missing local template file in %s", version_dir)
                 return None
 
             try:
@@ -369,7 +438,7 @@ class TemplateLoader:
                 pdf_url=pdf_path,
             )
 
-        logger.warning("template_loader template not found for id=%s", template_id)
+        logger.debug("template_loader template not found for id=%s", template_id)
         return None
 
     @classmethod

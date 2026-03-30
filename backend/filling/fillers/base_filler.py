@@ -2,9 +2,14 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import ClassVar, Dict, List, Optional, Type, Any
 
+from pypdf import PdfReader, PdfWriter
+
 from extraction.utils.semantic_section_builder import SemanticSectionBuilder
+from ..template_loader import TemplateLoader, TemplateConfig
+from ..writers.pdf_field_writer import PdfFieldWriter
 
 
 @dataclass
@@ -33,7 +38,7 @@ class BaseFiller:
                 BaseFiller._registry[normalized] = cls
 
     def __init__(self):
-        pass
+        self.pdf_writer = PdfFieldWriter()
 
     @staticmethod
     def _normalize_template_id(template_id: str) -> str:
@@ -156,6 +161,190 @@ class BaseFiller:
             flat["Classification"] = rows
 
         return flat
+
+    def _load_template(
+        self,
+        template_id: str,
+        template_version: str,
+        template_pdf_override: Optional[str] = None,
+    ) -> Optional[TemplateConfig]:
+        template = TemplateLoader.load(template_id=template_id, version=template_version)
+        if template and template_pdf_override:
+            template.pdf_url = template_pdf_override
+        return template
+
+    def _template_missing_report(
+        self,
+        template_id: str,
+        template_version: str,
+    ) -> FillReport:
+        return FillReport(
+            success=False,
+            coverage=0.0,
+            filled_fields=0,
+            unmapped_fields=[],
+            warnings=[f"No template found for {template_id} ({template_version})"],
+            errors=["Template loading failed"],
+        )
+
+    def _resolve_template_pdf_path(self, template: TemplateConfig) -> Optional[Path]:
+        if not template.pdf_url:
+            return None
+        return Path(template.pdf_url)
+
+    def _missing_pdf_report(self, template: TemplateConfig, reason: str) -> FillReport:
+        return FillReport(
+            success=False,
+            coverage=0.0,
+            filled_fields=0,
+            unmapped_fields=list(template.field_map.keys()),
+            warnings=[reason],
+            errors=["PDF template not found"],
+        )
+
+    def _open_pdf_template(self, template_pdf_path: Path) -> tuple[PdfReader, PdfWriter]:
+        reader = PdfReader(str(template_pdf_path))
+        writer = PdfWriter()
+        for page in reader.pages:
+            writer.add_page(page)
+        self.pdf_writer.setup_acro_form(reader, writer)
+        self.pdf_writer.set_need_appearances(writer)
+        return reader, writer
+
+    def _fill_simple_fields(
+        self,
+        writer: PdfWriter,
+        template: TemplateConfig,
+        flat_fields: Dict[str, Any],
+        warnings: List[str],
+        unmapped: List[str],
+    ) -> int:
+        filled_count = 0
+        for canonical_key, value in flat_fields.items():
+            if canonical_key in template.repeaters:
+                continue
+
+            pdf_key = template.field_map.get(canonical_key)
+            if not pdf_key:
+                warnings.append(
+                    f"Canonical field has no mapping for this template: {canonical_key}"
+                )
+                continue
+
+            if not self.pdf_writer.has_field(writer, pdf_key):
+                unmapped.append(pdf_key)
+                warnings.append(
+                    f"PDF field not found: {pdf_key} (from canonical {canonical_key})"
+                )
+                continue
+
+            if self.pdf_writer.write_field(writer, pdf_key, value):
+                filled_count += 1
+            else:
+                unmapped.append(pdf_key)
+                warnings.append(
+                    f"Failed to write PDF field: {pdf_key} (from canonical {canonical_key})"
+                )
+        return filled_count
+
+    def _fill_repeaters(
+        self,
+        writer: PdfWriter,
+        template: TemplateConfig,
+        flat_fields: Dict[str, Any],
+        warnings: List[str],
+        unmapped: List[str],
+    ) -> int:
+        filled_count = 0
+        for repeater_key, repeater_config in template.repeaters.items():
+            rows_data = flat_fields.get(repeater_key)
+
+            if not rows_data:
+                warnings.append(f"No data for repeater: {repeater_key}")
+                continue
+
+            if not isinstance(rows_data, list):
+                warnings.append(
+                    f"Repeater {repeater_key} expected list of rows, got {type(rows_data)}"
+                )
+                continue
+
+            row_ids: List[str] = repeater_config.get("row_ids", [])
+            columns: Dict[str, str] = repeater_config.get("columns", {})
+
+            if not row_ids or not columns:
+                warnings.append(
+                    f"Repeater {repeater_key} misconfigured (missing row_ids or columns)"
+                )
+                continue
+
+            max_rows = min(len(rows_data), len(row_ids))
+            for row_idx in range(max_rows):
+                row_data = rows_data[row_idx] or {}
+                row_id = row_ids[row_idx]
+                for canonical_col, pattern in columns.items():
+                    value = row_data.get(canonical_col)
+                    if value is None:
+                        continue
+
+                    field_name = pattern.format(row_id=row_id)
+                    if not self.pdf_writer.has_field(writer, field_name):
+                        unmapped.append(field_name)
+                        warnings.append(
+                            f"PDF field not found for repeater {repeater_key}: {field_name}"
+                        )
+                        continue
+
+                    if self.pdf_writer.write_field(writer, field_name, value):
+                        filled_count += 1
+                    else:
+                        unmapped.append(field_name)
+                        warnings.append(
+                            f"Failed to write repeater field {field_name} for {repeater_key}"
+                        )
+
+            if len(rows_data) > max_rows:
+                warnings.append(
+                    f"Truncated {repeater_key} to {max_rows} rows (original: {len(rows_data)})"
+                )
+        return filled_count
+
+    def _calculate_coverage(
+        self,
+        template: TemplateConfig,
+        flat_fields: Dict[str, Any],
+        filled_count: int,
+    ) -> float:
+        simple_keys = [k for k in flat_fields.keys() if k not in template.repeaters]
+        total_expected_simple = len(simple_keys)
+
+        total_expected_repeaters = 0
+        for repeater_key, repeater_config in template.repeaters.items():
+            rows = flat_fields.get(repeater_key, [])
+            if isinstance(rows, list):
+                row_ids: List[str] = repeater_config.get("row_ids", [])
+                columns: Dict[str, str] = repeater_config.get("columns", {})
+                max_rows = min(len(rows), len(row_ids))
+                total_expected_repeaters += max_rows * len(columns)
+
+        total_expected = total_expected_simple + total_expected_repeaters
+        return filled_count / total_expected if total_expected > 0 else 0.0
+
+    def _save_pdf(self, writer: PdfWriter, output_path: str) -> None:
+        path = Path(output_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("wb") as handle:
+            writer.write(handle)
+
+    def _error_report(self, message: str) -> FillReport:
+        return FillReport(
+            success=False,
+            coverage=0.0,
+            filled_fields=0,
+            unmapped_fields=[],
+            warnings=[],
+            errors=[message],
+        )
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__} form_type={self.form_type}>"

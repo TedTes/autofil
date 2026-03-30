@@ -1,9 +1,7 @@
-"""
-Interface for PDF writers.
-"""
+"""Interface for low-level PDF field writers."""
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Optional
 from pypdf import PdfWriter, PdfReader
 
 
@@ -26,6 +24,34 @@ class IPdfWriter(ABC):
             
         Returns:
             True if write was successful, False otherwise
+        """
+        pass
+
+    @abstractmethod
+    def has_field(self, writer: PdfWriter, field_name: str) -> bool:
+        """
+        Check whether a field exists in the PDF.
+
+        Args:
+            writer: PdfWriter instance
+            field_name: PDF field name
+
+        Returns:
+            True if a matching field exists
+        """
+        pass
+
+    @abstractmethod
+    def get_checkbox_on_value(self, writer: PdfWriter, field_name: str) -> Optional[str]:
+        """
+        Inspect a checkbox/radio field and return its "on" value.
+
+        Args:
+            writer: PdfWriter instance
+            field_name: PDF field name
+
+        Returns:
+            Appearance state string like ``/Yes`` when available
         """
         pass
     

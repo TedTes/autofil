@@ -35,6 +35,7 @@ from datetime import datetime
 from services.supabase_db_service import SupabaseDatabaseService
 from services.supabase_storage_service import SupabaseStorageService
 from services.submission_file_store import SubmissionFileStore
+from services.submission_extraction_coordinator import SubmissionExtractionCoordinator
 from services.submission_fill_coordinator import SubmissionFillCoordinator
 from services.submission_merge_coordinator import SubmissionMergeCoordinator
 from services.submission_query_service import SubmissionQueryService
@@ -388,6 +389,13 @@ class SubmissionService:
         self.merge_coordinator = SubmissionMergeCoordinator(
             load_input_data=self._load_input_data,
         )
+        self.extraction_coordinator = SubmissionExtractionCoordinator(
+            repository=self.repository,
+            file_store=self.file_store,
+            client_service=self.client_service,
+            version_service=self.version_service,
+            merge_coordinator=self.merge_coordinator,
+        )
         self.query_service = SubmissionQueryService(
             repository=self.repository,
             get_submission=self.get_submission,
@@ -424,182 +432,22 @@ class SubmissionService:
         """
         Upload a PDF to Supabase Storage, extract data, and persist metadata remotely.
         """
-        if not file or not getattr(file, "filename", None):
-            raise ValueError("No file provided")
-
-        temp_upload_dir = None
-        try:
-            if folder_id and client_id and submission_id is None:
-                raise ValueError("Cannot specify both folder_id and client_id")
-
-            is_existing_submission = submission_id is not None
-            metadata: Dict[str, Any] = {}
-            client_name: Optional[str] = None
-            if not submission_id:
-                submission_id = str(uuid.uuid4())
-
-            if progress_callback:
-                progress_callback(submission_id, 0, "starting", "Initializing upload...")
-
-            if is_existing_submission:
-                metadata = self.get_submission_metadata(submission_id)
-                if not metadata:
-                    raise ValueError("Submission not found")
-                existing_client_id = metadata.get("client_id")
-                if existing_client_id and client_id and existing_client_id != client_id:
-                    raise ValueError("Submission does not belong to the specified client")
-                client_id = existing_client_id or client_id
-                folder_id = metadata.get("folder_id") or folder_id
-                client_name = metadata.get("client_name")
-            elif client_id:
-                client = self.client_service.get_client(client_id)
-                if not client:
-                    raise ValueError("Client not found")
-                client_name = client.get("name")
-                self.client_service.add_submission(client_id, submission_id)
-
-            temp_upload_dir = tempfile.mkdtemp(prefix=f"upload_{submission_id}_")
-            filename = secure_filename(file.filename or f"{submission_id}.pdf")
-            upload_path = os.path.join(temp_upload_dir, filename)
-            file.save(upload_path)
-
-            if progress_callback:
-                progress_callback(submission_id, 30, "uploaded", "File saved successfully")
-
-            remote_input = self._upload_to_remote(
-                local_path=upload_path,
-                content_type=getattr(file, "content_type", None),
-                client_id=client_id,
-                submission_id=submission_id,
-                category="inputs",
-                filename=filename,
-            )
-
-            if progress_callback:
-                progress_callback(submission_id, 40, "extracting", "Analyzing document...")
-
-            loader = UniversalFileLoader()
-            try:
-                doc = loader.load(upload_path)
-                print(f"Document loaded - MIME: {doc.mime_type}, Type: {doc.document_type}")
-                print("🔍 Running composite classifier (mime + keyword + table)...")
-                try:
-                    doc_type, confidence = self.classifier.classify(doc)
-                    doc.set_document_type(doc_type, confidence)
-                    print(f"Classified as: {doc_type} (confidence: {confidence:.2f})")
-                except Exception as exc:
-                    print(f"⚠️ Classification failed: {exc}")
-                    doc.set_document_type(DocumentType.GENERIC, 0.3)
-            except Exception as exc:
-                raise ValueError(f"Failed to load file: {exc}")
-
-            extractor = extractor_registry.get_extractor_for_document(doc)
-            if not extractor:
-                raise ValueError(f"No extractor for {doc.document_type}")
-
-            extraction_result = extractor.extract(doc)
-            extraction_confidence = getattr(extraction_result, "confidence", None)
-
-            if progress_callback:
-                progress_callback(submission_id, 70, "extracting", "Processing fields...")
-
-            if hasattr(extraction_result, "is_successful") and not extraction_result.is_successful():
-                err = getattr(extraction_result, "error", "Unknown extraction error")
-                if progress_callback:
-                    progress_callback(submission_id, 100, "error", f"Extraction failed: {err}")
-                raise ValueError(f"Extraction failed: {err}")
-
-            if progress_callback:
-                progress_callback(submission_id, 80, "extracting", "Saving extracted data...")
-
-            json_data = self._dedupe_entity_values(
-                extraction_result.to_dict() if hasattr(extraction_result, "to_dict") else extraction_result
-            )
-            json_data = self._clean_entities(json_data)
-            timestamp = datetime.utcnow().isoformat()
-            version_notes = "Re-extraction" if is_existing_submission else "Initial extraction"
-            metadata.setdefault("submission_id", submission_id)
-            metadata.setdefault("uploaded_at", timestamp)
-            metadata["updated_at"] = timestamp
-            metadata["folder_id"] = folder_id
-            metadata["client_id"] = client_id
-            if not metadata.get("client_name") and client_name:
-                metadata["client_name"] = client_name
-            metadata["filename"] = metadata.get("filename") or filename
-            metadata.setdefault("name", metadata["filename"])
-            metadata["status"] = "extracted"
-            if extraction_confidence is not None:
-                metadata["confidence"] = extraction_confidence
-
-            extraction_hash = self._compute_extraction_hash(json_data)
-            inputs_meta = metadata.setdefault("inputs", [])
-
-            duplicate_entry = None
-            for entry in inputs_meta:
-                if "extraction_hash" not in entry:
-                    existing_data = entry.get("data")
-                    if existing_data:
-                        entry["extraction_hash"] = self._compute_extraction_hash(existing_data)
-                if entry.get("extraction_hash") == extraction_hash:
-                    duplicate_entry = entry
-                    break
-
-            if duplicate_entry:
-                merged_data = self._dedupe_entity_values(self._merge_input_data(inputs_meta) or json_data)
-                metadata["data"] = merged_data
-                metadata["file_count"] = len(inputs_meta)
-                self._persist_submission_metadata(metadata)
-                if progress_callback:
-                    progress_callback(submission_id, 100, "ready", "Duplicate document detected; using existing data.")
-                return {
-                    "submission_id": submission_id,
-                    "data": json_data,
-                    "duplicate_of": duplicate_entry.get("input_id"),
-                }
-
-            input_entry = {
-                "input_id": str(uuid.uuid4()),
-                "filename": filename,
-                "uploaded_at": timestamp,
-                "extraction_status": "extracted",
-                "confidence": extraction_confidence,
-                "url": remote_input.get("public_url") if remote_input else None,
-                "storage": remote_input,
-                "data": json_data,
-                "extraction_hash": extraction_hash,
-            }
-            inputs_meta.append(input_entry)
-            metadata["file_count"] = len(inputs_meta)
-
-            merged_data = self._dedupe_entity_values(self._merge_input_data(inputs_meta) or json_data)
-            metadata["data"] = merged_data
-            version_id = self.version_service.create_version(
-                submission_id=submission_id,
-                data=merged_data,
-                user="system",
-                action="extract",
-                notes=f"{version_notes} from {filename}",
-            )
-            metadata["current_version_id"] = version_id
-            self._persist_submission_metadata(metadata)
-
-            if folder_id:
-                from services.folder_service import FolderService
-                FolderService().add_submission(folder_id, submission_id, filename)
-            if progress_callback:
-                progress_callback(submission_id, 100, "ready", "Extraction complete")
-            return {
-                "submission_id": submission_id,
-                "data": json_data,
-            }
-        except Exception as e:
-            print("uploading and extracting error", str(e))
-        finally:
-            if temp_upload_dir:
-                shutil.rmtree(temp_upload_dir, ignore_errors=True)
+        return self.extraction_coordinator.upload_and_extract(
+            file,
+            folder_id=folder_id,
+            client_id=client_id,
+            submission_id=submission_id,
+            progress_callback=progress_callback,
+            on_folder_submission=self._add_submission_to_folder,
+        )
     
     def get_submission_metadata(self, submission_id: str) -> Optional[Dict[str, Any]]:
         return self.repository.get(submission_id)
+
+    def _add_submission_to_folder(self, folder_id: str, submission_id: str, filename: str) -> None:
+        from services.folder_service import FolderService
+
+        FolderService().add_submission(folder_id, submission_id, filename)
 
     def get_submission(
         self,

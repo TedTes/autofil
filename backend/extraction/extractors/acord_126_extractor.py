@@ -4,14 +4,15 @@ import re
 from functools import lru_cache
 
 from ..core.schema import (
-    CanonicalOutput,
     EntityValue,
     SourceRef,
     Metadata,
     SourceInfo,
 )
-from ..core.document import Document
+from ..core.document import Document, DocumentType
 from ..extractors.extractor_base import BaseExtractor
+from ..models.extraction_result import ExtractionResult
+from ..validation.validator import validate
 from ..parsers.pdf_field_parser import PdfFieldParser
 from ..extractors.mfc import MFC
 from utils.versioned_template_loader import (
@@ -31,7 +32,12 @@ class ACORD126Extractor(BaseExtractor):
         self.template_loader = VersionedTemplateLoader()
         self.template_recognizer = TemplateRecognizer(base_dir=self.template_loader.base_dir)
 
-    def extract(self, doc: Document) -> CanonicalOutput:
+    def extract(self, doc: Document) -> ExtractionResult:
+        if doc.document_type != DocumentType.ACORD_126:
+            return self._failure_result(
+                f"Expected ACORD_126 document, got {doc.document_type.value}"
+            )
+
         entities: Dict[str, List[EntityValue]] = {}
         confidence = 0.65
 
@@ -57,7 +63,7 @@ class ACORD126Extractor(BaseExtractor):
         semantic_sections = SemanticSectionBuilder.build(entities)
 
         # 3) Build CanonicalOutput
-        return CanonicalOutput(
+        output = CanonicalOutput(
             job_id=doc.job_id,
             source=SourceInfo(
                 file_name=doc.file_name,
@@ -73,6 +79,21 @@ class ACORD126Extractor(BaseExtractor):
                 # no template id in alias mode
             ),
         )
+        validated = validate(output)
+        return self._success_result(
+            validated,
+            confidence=confidence,
+            metadata={
+                "form_type": self.FORM_TYPE,
+                "line_of_business": self.LOB,
+            },
+        )
+
+    def can_extract(self, document: Document) -> bool:
+        return document.document_type == DocumentType.ACORD_126
+
+    def get_supported_types(self) -> List[DocumentType]:
+        return [DocumentType.ACORD_126]
 
     # ---------------------------------------------------------- #
     # Alias-based mapping

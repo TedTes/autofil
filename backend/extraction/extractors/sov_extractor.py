@@ -11,14 +11,16 @@ Extracts property/location data from Schedule of Values documents:
 
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
-from ..interfaces.extractor import IExtractor
+from ..extractors.extractor_base import BaseExtractor
 from ..core.document import Document, DocumentType
-from ..core.schema import CanonicalOutput, SourceInfo, Metadata
+from ..core.schema import SourceInfo, Metadata
+from ..models.extraction_result import ExtractionResult
 from ..utils.semantic_section_builder import SemanticSectionBuilder
 from ..parsers import TableParser, ExcelParser
+from ..validation.validator import validate
 
 
-class SovExtractor(IExtractor):
+class SovExtractor(BaseExtractor):
     """
     Extractor for Schedule of Values (SOV) documents.
     
@@ -115,7 +117,7 @@ class SovExtractor(IExtractor):
         self.table_parser = TableParser(flavor='auto', min_confidence=60.0)
         self.excel_parser = ExcelParser()
     
-    def extract(self, document: Document) -> CanonicalOutput:
+    def extract(self, document: Document) -> ExtractionResult:
         """
         Extract SOV data from document.
         
@@ -126,7 +128,9 @@ class SovExtractor(IExtractor):
             ExtractionResult with extracted property data
         """
         if document.document_type != DocumentType.SOV:
-            raise ValueError(f"Expected SOV document, got {document.document_type.value}")
+            return self._failure_result(
+                f"Expected SOV document, got {document.document_type.value}"
+            )
 
         extraction: Optional[Tuple[Dict[str, Any], List[str], float]] = None
 
@@ -137,15 +141,20 @@ class SovExtractor(IExtractor):
             extraction = self._extract_from_excel(document)
 
         if not extraction:
-            raise ValueError("No extractable SOV data found")
+            return self._failure_result("No extractable SOV data found")
 
         data, warnings, confidence = extraction
         canonical = self._build_canonical_output(document, data, confidence)
-
-        if warnings:
-            canonical.raw.setdefault("warnings", warnings)
-
-        return canonical
+        validated = validate(canonical)
+        return self._success_result(
+            validated,
+            confidence=confidence,
+            warnings=warnings,
+            metadata={
+                "form_type": "SOV",
+                "line_of_business": "Property",
+            },
+        )
     
     def can_extract(self, document: Document) -> bool:
         """Check if can extract from document."""
@@ -207,11 +216,7 @@ class SovExtractor(IExtractor):
         excel_result = self.excel_parser.extract_fields(document.file_path)
         
         if not excel_result.get('sheets'):
-            return ExtractionResult(
-                success=False,
-                data={},
-                errors=["No sheets found in Excel file"]
-            )
+            return None
         
         # Use first sheet (or find sheet with SOV data)
         sheet_data = excel_result['sheets'][0]

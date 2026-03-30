@@ -23,16 +23,16 @@ class EntityValue(BaseModel):
     """One extracted value (may appear many times for the same field)."""
     value: Any
     confidence: float = Field(ge=0.0, le=1.0)
-    # source: SourceRef
-    # tags: List[str] = Field(default_factory=list)   # e.g. ["primary", "dba"]
+    source: Optional[SourceRef] = None
+    tags: List[str] = Field(default_factory=list)   # e.g. ["primary", "dba"]
 
 
 class SemanticField(BaseModel):
     """Field definition + values grouped under a semantic section."""
     id: str
-    # label: Optional[str] = None
-    # type: Optional[str] = None
-    # aliases: List[str] = Field(default_factory=list)
+    label: Optional[str] = None
+    type: Optional[str] = None
+    aliases: List[str] = Field(default_factory=list)
     values: List[EntityValue] = Field(default_factory=list)
 
 

@@ -15,12 +15,13 @@ from datetime import datetime
 import re
 
 from ..core.schema import (
-    CanonicalOutput, EntityValue, SourceRef,
+    EntityValue, SourceRef,
     Metadata, SourceInfo
 )
 from ..extractors.mfc import MFC
 from ..validation.validator import validate
-from ..core.document import Document
+from ..core.document import Document, DocumentType
+from ..models.extraction_result import ExtractionResult
 from ..parsers import PdfFieldParser, OcrFallbackParser
 from utils.versioned_template_loader import (
     VersionedTemplateLoader,
@@ -41,7 +42,7 @@ class ACORD125Extractor(BaseExtractor):
             base_dir=self.template_loader.base_dir
         )
 
-    def extract(self, doc: Document) -> CanonicalOutput:
+    def extract(self, doc: Document) -> ExtractionResult:
         entities: Dict[str, List[EntityValue]] = {}
 
         # === 1. Try Fillable PDF Fields (High Confidence) ===
@@ -85,9 +86,16 @@ class ACORD125Extractor(BaseExtractor):
         )
 
         # === 4. Validate (MFC + confidence) ===
-        validate(output)
+        validated = validate(output)
 
-        return output
+        return self._success_result(
+            validated,
+            confidence=0.98 if self.pdf_parser.is_fillable(doc.file_path) else 0.65,
+            metadata={
+                "form_type": "ACORD_125",
+                "line_of_business": "Property",
+            },
+        )
 
     # --------------------------------------------------------------------- #
     #  Fillable PDF Extraction
@@ -199,6 +207,13 @@ class ACORD125Extractor(BaseExtractor):
 
     def __repr__(self) -> str:
         return "ACORD125Extractor()"
+
+    def can_extract(self, document: Document) -> bool:
+        return document.document_type.value == "acord_125"
+
+    def get_supported_types(self) -> List[DocumentType]:
+        return [DocumentType.ACORD_125]
+
     def _map_via_template(
         self, field_name: str, template_config: TemplateConfig
     ) -> Optional[str]:

@@ -5,10 +5,12 @@ Provides high-level interface for document extraction with
 automatic extractor selection.
 """
 
-from typing import Optional
+from typing import Any, Dict, Optional
 from ..core.document import Document, DocumentType
+from ..core.schema import CanonicalOutput
 from ..models.extraction_result import ExtractionResult
 from ..interfaces.extractor import IExtractor
+from ..utils.semantic_section_builder import SemanticSectionBuilder
 from .registry import extractor_registry
 
 
@@ -76,6 +78,7 @@ class ExtractorFactory:
         # Extract data
         try:
             result = extractor.extract(document)
+            result = ExtractorFactory._normalize_result(result, document)
             
             # Add extractor info to result
             if result.metadata is None:
@@ -91,6 +94,54 @@ class ExtractorFactory:
                 data={},
                 errors=[f"Extraction failed with {extractor.__class__.__name__}: {str(e)}"]
             )
+
+    @staticmethod
+    def _normalize_result(result: Any, document: Document) -> ExtractionResult:
+        if isinstance(result, CanonicalOutput):
+            result = ExtractionResult(success=True, data=result.to_dict())
+
+        if not isinstance(result, ExtractionResult):
+            raise TypeError(f"Extractor returned unsupported result type: {type(result)}")
+
+        canonical = result.data if isinstance(result.data, dict) else {}
+        semantic_sections = canonical.get("semantic_sections") or canonical.get("semanticSections") or []
+
+        if semantic_sections:
+            entity_map = SemanticSectionBuilder.flatten(semantic_sections)
+            if not result.field_confidence:
+                result.field_confidence = {
+                    field_id: max(
+                        (
+                            float(value.get("confidence", 0.0))
+                            for value in values
+                            if isinstance(value, dict)
+                        ),
+                        default=0.0,
+                    )
+                    for field_id, values in entity_map.items()
+                }
+
+            if result.metadata is None:
+                result.metadata = {}
+
+            if "field_provenance" not in result.metadata:
+                result.metadata["field_provenance"] = {
+                    field_id: [
+                        source
+                        for source in (
+                            value.get("source")
+                            for value in values
+                            if isinstance(value, dict)
+                        )
+                        if isinstance(source, dict) and source
+                    ]
+                    for field_id, values in entity_map.items()
+                }
+
+            if result.confidence == 0.0 and result.field_confidence:
+                result.confidence = sum(result.field_confidence.values()) / len(result.field_confidence)
+
+        return result
     
     @staticmethod
     def can_extract(document: Document) -> bool:

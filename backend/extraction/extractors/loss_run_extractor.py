@@ -14,16 +14,18 @@ import os
 from pathlib import Path
 import yaml
 from datetime import datetime
-from ..interfaces.extractor import IExtractor
+from ..extractors.extractor_base import BaseExtractor
 from ..core.document import Document, DocumentType
-from ..core.schema import CanonicalOutput, SourceInfo, Metadata
+from ..core.schema import SourceInfo, Metadata
+from ..models.extraction_result import ExtractionResult
 from ..utils.semantic_section_builder import SemanticSectionBuilder
 from ..parsers import TableParser, OcrFallbackParser
+from ..validation.validator import validate
 
 FIELD_CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "templates" / "loss_run_fields.yaml"
 
 
-class LossRunExtractor(IExtractor):
+class LossRunExtractor(BaseExtractor):
     """
     Extractor for Loss Run documents.
     
@@ -44,12 +46,14 @@ class LossRunExtractor(IExtractor):
         self.ocr_parser = OcrFallbackParser()
         if not self.COLUMN_PATTERNS:
             self.COLUMN_PATTERNS = self._load_field_patterns()
-    def extract(self, document: Document) -> CanonicalOutput:
+    def extract(self, document: Document) -> ExtractionResult:
         """
         Extract loss run data and return canonical output.
         """
         if document.document_type != DocumentType.LOSS_RUN:
-            raise ValueError(f"Expected LOSS_RUN document, got {document.document_type.value}")
+            return self._failure_result(
+                f"Expected LOSS_RUN document, got {document.document_type.value}"
+            )
 
         extraction: Optional[Tuple[Dict[str, Any], List[str], float]] = None
 
@@ -60,15 +64,20 @@ class LossRunExtractor(IExtractor):
             extraction = self._extract_from_text(document)
 
         if not extraction:
-            raise ValueError("No extractable loss run data found")
+            return self._failure_result("No extractable loss run data found")
 
         data, warnings, confidence = extraction
         canonical = self._build_canonical_output(document, data, confidence)
-
-        if warnings:
-            canonical.raw.setdefault("warnings", warnings)
-
-        return canonical
+        validated = validate(canonical)
+        return self._success_result(
+            validated,
+            confidence=confidence,
+            warnings=warnings,
+            metadata={
+                "form_type": "LOSS_RUN",
+                "line_of_business": "Claims History",
+            },
+        )
     
     def can_extract(self, document: Document) -> bool:
         """Check if can extract from document."""
@@ -160,12 +169,7 @@ class LossRunExtractor(IExtractor):
             elif ',' in sample:
                 delimiter = ','
             else:
-                return ExtractionResult(
-                    success=False,
-                    data={},
-                    errors=["Unable to detect delimiter in text"],
-                    warnings=["Text-based extraction not possible"]
-                )
+                return None
 
         reader = csv.reader(lines, delimiter=delimiter)
         rows = [

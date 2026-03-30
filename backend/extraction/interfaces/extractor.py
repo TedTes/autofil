@@ -3,7 +3,8 @@ Interface for document extractors.
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import List
+from ..core.document import Document, DocumentType
 from ..models.extraction_result import ExtractionResult
 
 
@@ -16,12 +17,12 @@ class IExtractor(ABC):
     """
     
     @abstractmethod
-    def extract(self, pdf_path: str) -> ExtractionResult:
+    def extract(self, document: Document) -> ExtractionResult:
         """
         Extract data from PDF and return structured result.
         
         Args:
-            pdf_path: Path to PDF file
+            document: Loaded document object
             
         Returns:
             ExtractionResult containing:
@@ -37,24 +38,19 @@ class IExtractor(ABC):
         pass
     
     @abstractmethod
-    def can_extract(self, pdf_path: str) -> bool:
+    def can_extract(self, document: Document) -> bool:
         """
         Check if this extractor can handle the given PDF.
         
         Args:
-            pdf_path: Path to PDF file
+            document: Loaded document object
             
         Returns:
             True if this extractor can process the PDF
         """
         pass
     
-    def get_supported_form_type(self) -> str:
-        """
-        Return the form type this extractor supports.
-        
-        Returns:
-            Form type identifier (e.g., "126", "125", "140")
-        """
-        # Default implementation - subclasses can override
-        return self.__class__.__name__.replace('Extractor', '').lower()
+    @abstractmethod
+    def get_supported_types(self) -> List[DocumentType]:
+        """Return the document types supported by this extractor."""
+        pass

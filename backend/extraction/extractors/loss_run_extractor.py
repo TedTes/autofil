@@ -16,7 +16,7 @@ import yaml
 from datetime import datetime
 from ..extractors.extractor_base import BaseExtractor
 from ..core.document import Document, DocumentType
-from ..core.schema import SourceInfo, Metadata
+from ..core.schema import CanonicalOutput, SourceInfo, Metadata
 from ..models.extraction_result import ExtractionResult
 from ..utils.semantic_section_builder import SemanticSectionBuilder
 from ..parsers import TableParser, OcrFallbackParser

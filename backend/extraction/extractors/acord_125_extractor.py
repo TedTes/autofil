@@ -15,6 +15,7 @@ from datetime import datetime
 import re
 
 from ..core.schema import (
+    CanonicalOutput,
     EntityValue, SourceRef,
     Metadata, SourceInfo
 )

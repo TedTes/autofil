@@ -125,9 +125,31 @@ class ExtractorFactory:
                 result.metadata = {}
 
             if "field_provenance" not in result.metadata:
+                source_info = canonical.get("source") or {}
+                source_file = source_info.get("file_name")
+                extraction_method = source_info.get("extraction_method")
+                raw = canonical.get("raw") or {}
+                field_evidence = raw.get("field_evidence", {}) if isinstance(raw, dict) else {}
                 result.metadata["field_provenance"] = {
                     field_id: [
-                        source
+                        {
+                            **source,
+                            **(
+                                {"source_file": source_file}
+                                if source_file
+                                else {}
+                            ),
+                            **(
+                                {"extraction_method": extraction_method}
+                                if extraction_method
+                                else {}
+                            ),
+                            **(
+                                {"evidence_snippet": field_evidence.get(field_id)}
+                                if field_evidence.get(field_id)
+                                else {}
+                            ),
+                        }
                         for source in (
                             value.get("source")
                             for value in values

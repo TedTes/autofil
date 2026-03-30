@@ -37,7 +37,7 @@ def test_normalize_result_populates_field_confidence_and_provenance():
             )
         ],
         metadata=Metadata(form_type_detected="ACORD_125"),
-        raw={},
+        raw={"field_evidence": {"InsuredName": "Named insured: Acme LLC"}},
     )
 
     document = Document(file_path="/tmp/sample.pdf", file_name="sample.pdf")
@@ -46,3 +46,6 @@ def test_normalize_result_populates_field_confidence_and_provenance():
     assert result.success is True
     assert result.field_confidence["InsuredName"] == 0.91
     assert result.metadata["field_provenance"]["InsuredName"][0]["page"] == 1
+    assert result.metadata["field_provenance"]["InsuredName"][0]["source_file"] == "sample.pdf"
+    assert result.metadata["field_provenance"]["InsuredName"][0]["extraction_method"] == "fillable_pdf"
+    assert result.metadata["field_provenance"]["InsuredName"][0]["evidence_snippet"] == "Named insured: Acme LLC"

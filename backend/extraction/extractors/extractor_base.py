@@ -10,6 +10,34 @@ from ..utils.semantic_section_builder import SemanticSectionBuilder
 
 
 class BaseExtractor(ABC):
+    def _build_field_provenance(self, canonical: CanonicalOutput) -> Dict[str, List[Dict[str, Any]]]:
+        entity_map = SemanticSectionBuilder.flatten(canonical.semantic_sections)
+        raw = canonical.raw or {}
+        field_evidence = raw.get("field_evidence", {}) if isinstance(raw, dict) else {}
+        provenance: Dict[str, List[Dict[str, Any]]] = {}
+
+        for field_id, values in entity_map.items():
+            evidence = field_evidence.get(field_id)
+            provenance[field_id] = []
+            for index, value in enumerate(values):
+                if not isinstance(value, dict):
+                    continue
+                source = value.get("source")
+                if not isinstance(source, dict):
+                    continue
+
+                entry = {
+                    **source,
+                    "source_file": canonical.source.file_name,
+                    "extraction_method": canonical.source.extraction_method,
+                }
+                if isinstance(evidence, list) and index < len(evidence):
+                    entry["evidence_snippet"] = evidence[index]
+                elif isinstance(evidence, str):
+                    entry["evidence_snippet"] = evidence
+                provenance[field_id].append(entry)
+        return provenance
+
     @abstractmethod
     def extract(self, doc: Document) -> ExtractionResult:
         pass
@@ -36,18 +64,7 @@ class BaseExtractor(ABC):
             for field_id, values in entity_map.items()
         }
 
-        field_provenance = {
-            field_id: [
-                source
-                for source in (
-                    value.get("source")
-                    for value in values
-                    if isinstance(value, dict)
-                )
-                if isinstance(source, dict) and source
-            ]
-            for field_id, values in entity_map.items()
-        }
+        field_provenance = self._build_field_provenance(canonical)
 
         if confidence is None:
             confidence = (

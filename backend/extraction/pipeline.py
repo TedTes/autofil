@@ -8,6 +8,7 @@ Manages the end-to-end document processing workflow:
 4. Validate and format results
 """
 
+import logging
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 from datetime import datetime
@@ -19,6 +20,8 @@ from .models.extraction_result import ExtractionResult
 from .core.schema import CanonicalOutput
 from .support import assess_document_support
 from .validation.validator import ExtractionValidationError, validate
+
+logger = logging.getLogger(__name__)
 
 
 class ExtractionPipeline:
@@ -93,6 +96,16 @@ class ExtractionPipeline:
             result = self._extract_data(document)
             result = self._validate_result(result, document)
             result = self._add_pipeline_metadata(result, document)
+            logger.info(
+                "extraction_pipeline processed file=%s type=%s success=%s review_required=%s method=%s low_confidence=%s validation_warnings=%s",
+                document.file_name,
+                document.document_type.value,
+                result.success,
+                result.metadata.get('review_required'),
+                (result.data.get('source') or {}).get('extraction_method') if isinstance(result.data, dict) else None,
+                result.metadata.get('low_confidence_field_count'),
+                result.metadata.get('validation_warning_count'),
+            )
             return result
             
         except Exception as e:
@@ -178,6 +191,7 @@ class ExtractionPipeline:
             document.metadata['ocr_applied'] = False
             document.metadata['ocr_error'] = str(exc)
             document.add_warning(f"OCR enrichment failed: {str(exc)}")
+            logger.warning("extraction_pipeline OCR enrichment failed for %s: %s", document.file_name, exc)
 
         return document
 
@@ -326,6 +340,19 @@ class ExtractionPipeline:
         result.metadata['document_support'] = assess_document_support(document)
         result.metadata['review_required'] = result.metadata['document_support']['needs_review']
         result.metadata['recommended_action'] = result.metadata['document_support']['recommended_action']
+        low_confidence_fields = result.get_low_confidence_fields()
+        result.metadata['low_confidence_field_count'] = len(low_confidence_fields)
+        result.metadata['low_confidence_fields'] = [
+            {'field_id': field_id, 'confidence': confidence}
+            for field_id, confidence in low_confidence_fields
+        ]
+        result.metadata['validation_warning_count'] = len(result.warnings)
+        result.metadata['extraction_method'] = (
+            (result.data.get('source') or {}).get('extraction_method')
+            if isinstance(result.data, dict)
+            else None
+        )
+        result.metadata['support_status'] = result.metadata['document_support'].get('support_level')
         result.metadata['stages'] = [
             'load',
             'ocr_enrichment' if self.enable_ocr_enrichment else 'ocr_skipped',

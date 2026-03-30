@@ -61,3 +61,25 @@ def test_pipeline_validate_result_converts_validation_failure_to_error_result():
     assert validated.success is False
     assert validated.metadata["canonical_validated"] is False
     assert any("Validation failed:" in error for error in validated.errors)
+
+
+def test_pipeline_metadata_includes_low_confidence_and_extraction_observability():
+    pipeline = ExtractionPipeline(use_classification=False)
+    document = Document(file_path="/tmp/sample.pdf", file_name="sample.pdf")
+    document.set_document_type(DocumentType.ACORD_125, 1.0)
+    result = ExtractionResult(
+        success=True,
+        data=_canonical().to_dict(),
+        confidence=0.92,
+        field_confidence={"InsuredName": 0.65},
+        warnings=["validation warning"],
+    )
+
+    enriched = pipeline._add_pipeline_metadata(result, document)
+
+    assert enriched.metadata["low_confidence_field_count"] == 1
+    assert enriched.metadata["low_confidence_fields"] == [
+        {"field_id": "InsuredName", "confidence": 0.65}
+    ]
+    assert enriched.metadata["validation_warning_count"] == 1
+    assert enriched.metadata["extraction_method"] == "fillable_pdf"

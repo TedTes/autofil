@@ -35,6 +35,7 @@ from datetime import datetime
 from services.supabase_db_service import SupabaseDatabaseService
 from services.supabase_storage_service import SupabaseStorageService
 from services.submission_file_store import SubmissionFileStore
+from services.submission_fill_coordinator import SubmissionFillCoordinator
 from services.submission_repository import SubmissionRepository
 from services.version_service import VersionService
 
@@ -376,6 +377,12 @@ class SubmissionService:
             raise RuntimeError("Supabase storage must be configured for file storage.")
         self.repository = SubmissionRepository()
         self.db = self.repository.db
+        self.fill_coordinator = SubmissionFillCoordinator(
+            repository=self.repository,
+            file_store=self.file_store,
+            select_filler=self._select_filler,
+            merge_input_data=self._merge_input_data,
+        )
 
         self.merge_config = MergeConfig(
             strategy=MergeStrategy.HIGHEST_CONFIDENCE,
@@ -770,86 +777,15 @@ class SubmissionService:
         Returns:
             FillReport
         """
-        temp_output_dir: Optional[str] = None
         try:
-            metadata = self.get_submission_metadata(submission_id)
-            if not metadata:
-                raise ValueError("Submission not found")
-
-            inputs_meta = metadata.get("inputs", [])
-            if input_ids:
-                inputs_meta = [entry for entry in inputs_meta if entry.get("input_id") in input_ids]
-                if not inputs_meta:
-                    raise ValueError("No matching input files selected")
-
-            canonical_data = self._merge_input_data(inputs_meta) or metadata.get("data")
-            if not canonical_data:
-                raise ValueError("Extracted data not found")
-
-            template_choice = template_id or metadata.get("template_type")
-            if not template_choice:
-                raise ValueError(
-                    "template_id is required when filling a document. Please select a destination template."
-                )
-            metadata["template_type"] = template_choice
-            filler = self._select_filler(template_choice)
-            temp_output_dir = tempfile.mkdtemp(prefix=f"filled_{submission_id}_")
-            # Decide extension/content-type based on filler
-            default_ext = getattr(filler, "default_extension", ".pdf")
-            ext = default_ext if default_ext.startswith(".") else f".{default_ext}"
-            filename = f"{submission_id}_filled{ext}"
-            output_path = os.path.join(temp_output_dir, filename)
-
-            content_type = {
-                ".pdf": "application/pdf",
-                ".csv": "text/csv",
-                ".json": "application/json",
-            }.get(ext.lower(), "application/octet-stream")
-
-            fill_report = filler.fill(
-                canonical_data=canonical_data,
-                output_path=output_path,
-                template_id=template_choice,
-            )
-            remote_output = self._upload_to_remote(
-                local_path=output_path,
-                content_type=content_type,
-                client_id=metadata.get("client_id"),
+            return self.fill_coordinator.fill_submission(
                 submission_id=submission_id,
-                category="outputs",
-                filename=os.path.basename(output_path),
+                input_ids=input_ids,
+                template_id=template_id,
             )
-
-            metadata['status'] = 'filled'
-            metadata['filled_at'] = datetime.utcnow().isoformat()
-            outputs_meta = metadata.setdefault('outputs', [])
-            outputs_meta.append({
-                "template_id": template_choice,
-                "filename": os.path.basename(output_path),
-                "generated_at": metadata['filled_at'],
-                "url": remote_output.get("public_url") if remote_output else None,
-                "storage": remote_output,
-            })
-            if remote_output:
-                metadata['output_storage'] = remote_output
-            metadata['fill_report'] = {
-                "success": fill_report.success,
-                "coverage": fill_report.coverage,
-                "filled_fields": fill_report.filled_fields,
-                "unmapped_fields": fill_report.unmapped_fields,
-                "warnings": fill_report.warnings,
-                "errors": fill_report.errors,
-            }
-
-            self._persist_submission_metadata(metadata)
-            return fill_report, outputs_meta[-1]
-
         except Exception as e:
             print("error occured in fill_pdf", str(e))
             raise
-        finally:
-            if temp_output_dir:
-                shutil.rmtree(temp_output_dir, ignore_errors=True)
 
     
     def _load_input_data(self, entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:

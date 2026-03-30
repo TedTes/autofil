@@ -36,6 +36,7 @@ from services.supabase_db_service import SupabaseDatabaseService
 from services.supabase_storage_service import SupabaseStorageService
 from services.submission_file_store import SubmissionFileStore
 from services.submission_fill_coordinator import SubmissionFillCoordinator
+from services.submission_merge_coordinator import SubmissionMergeCoordinator
 from services.submission_query_service import SubmissionQueryService
 from services.submission_repository import SubmissionRepository
 from services.version_service import VersionService
@@ -383,6 +384,9 @@ class SubmissionService:
             file_store=self.file_store,
             select_filler=self._select_filler,
             merge_input_data=self._merge_input_data,
+        )
+        self.merge_coordinator = SubmissionMergeCoordinator(
+            load_input_data=self._load_input_data,
         )
         self.query_service = SubmissionQueryService(
             repository=self.repository,
@@ -901,24 +905,8 @@ class SubmissionService:
         return None
 
     def _merge_input_data(self, inputs: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """
-        Deterministically merge multiple extracted inputs into one canonical payload.
-        """
-        if not inputs:
-            return {}
-
-        merged: Dict[str, Any] = {}
-        for entry in inputs:
-            data = self._load_input_data(entry)
-            if not data:
-                continue
-            deduped = self._dedupe_entity_values(copy.deepcopy(data))
-            cleaned = self._clean_entities(deduped)
-            merged = self._deep_merge_dict(merged, cleaned)
-
-        merged = self._dedupe_entity_values(merged)
-        merged = self._clean_entities(merged)
-        return merged
+        """Deterministically merge multiple extracted inputs into one canonical payload."""
+        return self.merge_coordinator.merge_inputs(inputs)
 
     def delete_input(self, submission_id: str, input_id: str) -> bool:
         metadata = self.get_submission_metadata(submission_id)
@@ -1014,114 +1002,27 @@ class SubmissionService:
         return value
 
     def _compute_extraction_hash(self, data: Any) -> str:
-        canonical_data = self._canonicalize_value_for_hash(data)
-        canonical_json = json.dumps(canonical_data, sort_keys=True, separators=(",", ":"))
-        return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+        return self.merge_coordinator.compute_extraction_hash(data)
 
     def _normalize_entity_value(self, value: Any) -> str:
-        canonical = self._canonicalize_value_for_hash(value)
-        return json.dumps(canonical, sort_keys=True, separators=(",", ":"))
+        return self.merge_coordinator.normalize_entity_value(value)
 
     def _dedupe_entity_values(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        if not isinstance(data, dict):
-            return data
-
-        entity_map = self._semantic_sections_to_entity_map(data)
-        if not entity_map:
-            return data
-
-        deduped_map: Dict[str, List[Dict[str, Any]]] = {}
-        for key, values in entity_map.items():
-            if not isinstance(values, list):
-                continue
-
-            seen: set[str] = set()
-            deduped: List[Dict[str, Any]] = []
-
-            for entry in values:
-                payload = entry if isinstance(entry, dict) else {"value": entry}
-                normalized = self._normalize_entity_value(payload.get("value"))
-                if normalized in seen:
-                    continue
-                seen.add(normalized)
-                deduped.append(payload)
-
-            deduped.sort(
-                key=lambda entry: float(entry.get("confidence") or 0),
-                reverse=True,
-            )
-
-            if not self._field_allows_multiple(key) and deduped:
-                deduped_map[key] = [deduped[0]]
-            elif deduped:
-                deduped_map[key] = deduped
-
-        updated = copy.deepcopy(data)
-        updated["semantic_sections"] = self._entity_map_to_semantic_sections(deduped_map)
-        return updated
+        return self.merge_coordinator.dedupe_entity_values(data)
 
     def _is_noise_value(self, v: Any) -> bool:
-        """
-        Heuristic to drop junk like 'N/A', empty strings, etc.
-        """
-        if v is None:
-            return True
-        if isinstance(v, str):
-            s = v.strip().lower()
-            if not s:
-                return True
-            if s in {"n/a", "na", "none", "null", "--"}:
-                return True
-        return False
+        return self.merge_coordinator.is_noise_value(v)
 
     def _clean_entities(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Minimize semantic sections for downstream merge/LLM:
-        - Drop fields not in MFC
-        - Drop N/A / empty values
-        """
-        if not isinstance(data, dict):
-            return data
-
-        entity_map = self._semantic_sections_to_entity_map(data)
-        if not entity_map:
-            return data
-
-        cleaned_entities: Dict[str, List[Dict[str, Any]]] = {}
-
-        for field_id, values in entity_map.items():
-            field_meta = MFC.field(field_id)
-            if not field_meta:
-                continue
-
-            cleaned_list: List[Dict[str, Any]] = []
-            if not isinstance(values, list):
-                values = [values]
-
-            for entry in values:
-                payload = entry if isinstance(entry, dict) else {"value": entry}
-                if self._is_noise_value(payload.get("value")):
-                    continue
-                cleaned_list.append(payload)
-
-            if cleaned_list:
-                cleaned_entities[field_id] = cleaned_list
-
-        data = copy.deepcopy(data)
-        data["semantic_sections"] = self._entity_map_to_semantic_sections(cleaned_entities)
-        return data
+        return self.merge_coordinator.clean_entities(data)
 
     def _semantic_sections_to_entity_map(self, data: Dict[str, Any]) -> Dict[str, List[Any]]:
-        sections = data.get("semantic_sections") or data.get("semanticSections") or []
-        return SemanticSectionBuilder.flatten(sections)
+        return self.merge_coordinator.semantic_sections_to_entity_map(data)
 
     def _entity_map_to_semantic_sections(
         self, entity_map: Dict[str, List[Dict[str, Any]]]
     ) -> List[Dict[str, Any]]:
-        if not entity_map:
-            return []
-        sections = SemanticSectionBuilder.build(entity_map)
-        return [section.model_dump(mode="json") for section in sections]
+        return self.merge_coordinator.entity_map_to_semantic_sections(entity_map)
 
 
     def _debug_compare_hashes(self, data1: Any, data2: Any) -> bool:
@@ -1131,28 +1032,10 @@ class SubmissionService:
         return hash1 == hash2
 
     def _field_allows_multiple(self, field_id: str) -> bool:
-        field_meta = MFC.field(field_id) or {}
-        cardinality = str(field_meta.get("cardinality", "")).lower()
-        return "many" in cardinality
+        return self.merge_coordinator.field_allows_multiple(field_id)
 
     def _deep_merge_dict(self, base: Dict[str, Any], incoming: Dict[str, Any]) -> Dict[str, Any]:
-        if not base:
-            return copy.deepcopy(incoming)
-        for key, value in incoming.items():
-            if key == "semantic_sections":
-                existing_map = self._semantic_sections_to_entity_map({"semantic_sections": base.get(key, [])})
-                incoming_map = self._semantic_sections_to_entity_map({"semantic_sections": value})
-                for field_id, vals in incoming_map.items():
-                    existing_map.setdefault(field_id, []).extend(vals)
-                base[key] = self._entity_map_to_semantic_sections(existing_map)
-                continue
-            if key in base and isinstance(base[key], dict) and isinstance(value, dict):
-                self._deep_merge_dict(base[key], value)
-            elif key in base and isinstance(base[key], list) and isinstance(value, list):
-                base[key].extend(value)
-            else:
-                base[key] = copy.deepcopy(value)
-        return base
+        return self.merge_coordinator.deep_merge_dict(base, incoming)
     def _upload_to_remote(
         self,
         *,

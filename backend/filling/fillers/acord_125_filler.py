@@ -44,8 +44,6 @@ class Acord125Filler(Acord126Filler):
                 return None
             return values[0].get("value")
 
-        field_map = template.field_map if template else {}
-
         mailing = first_value("MailingAddress")
         if mailing:
             line_one = None
@@ -73,15 +71,15 @@ class Acord125Filler(Acord126Filler):
             else:
                 line_one = mailing
 
-            if line_one and "MailingAddressLineOne" in field_map:
+            if line_one and template and template.has_pdf_field("MailingAddressLineOne"):
                 flat.setdefault("MailingAddressLineOne", line_one)
-            if line_two and "MailingAddressLineTwo" in field_map:
+            if line_two and template and template.has_pdf_field("MailingAddressLineTwo"):
                 flat.setdefault("MailingAddressLineTwo", line_two)
-            if city and "MailingAddressCity" in field_map:
+            if city and template and template.has_pdf_field("MailingAddressCity"):
                 flat.setdefault("MailingAddressCity", city)
-            if state and "MailingAddressState" in field_map:
+            if state and template and template.has_pdf_field("MailingAddressState"):
                 flat.setdefault("MailingAddressState", state)
-            if postal and "MailingAddressPostalCode" in field_map:
+            if postal and template and template.has_pdf_field("MailingAddressPostalCode"):
                 flat.setdefault("MailingAddressPostalCode", postal)
 
         legal_entity = first_value("LegalEntity") or first_value("LegalStructure")
@@ -89,7 +87,7 @@ class Acord125Filler(Acord126Filler):
             normalized = legal_entity.strip().lower()
 
             def set_entity_flag(key: str, keywords: List[str]) -> None:
-                if key not in field_map:
+                if not template or not template.has_pdf_field(key):
                     return
                 if any(word in normalized for word in keywords):
                     flat.setdefault(key, True)

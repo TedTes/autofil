@@ -1,14 +1,35 @@
 import json
+import logging
 import os
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 import requests
 import yaml
 
 from services.supabase_storage_service import SupabaseStorageService
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class RepeaterMapping:
+    key: str
+    row_ids: List[str]
+    columns: Dict[str, str]
+    raw: Dict[str, Any]
+
+    @classmethod
+    def from_raw(cls, key: str, raw: Any) -> "RepeaterMapping":
+        raw_dict = raw if isinstance(raw, dict) else {}
+        return cls(
+            key=key,
+            row_ids=list(raw_dict.get("row_ids", []) or []),
+            columns=dict(raw_dict.get("columns", {}) or {}),
+            raw=raw_dict,
+        )
 
 
 @dataclass
@@ -19,6 +40,30 @@ class TemplateConfig:
     raw: Dict[str, Any]              # original JSON contents
     pdf_url: Optional[str] = None    # remote or local PDF path
     version: Optional[str] = None    # e.g. "v2016_09"
+
+    def get_pdf_field(self, canonical_field: str) -> Optional[str]:
+        return self.field_map.get(canonical_field)
+
+    def has_pdf_field(self, canonical_field: str) -> bool:
+        return canonical_field in self.field_map
+
+    @property
+    def repeater_mappings(self) -> Dict[str, RepeaterMapping]:
+        return {
+            key: RepeaterMapping.from_raw(key, config)
+            for key, config in self.repeaters.items()
+        }
+
+    def get_repeater(self, key: str) -> Optional[RepeaterMapping]:
+        return self.repeater_mappings.get(key)
+
+    @property
+    def version_metadata(self) -> Dict[str, Any]:
+        return {
+            "template_id": self.template_id,
+            "version": self.version,
+            "pdf_url": self.pdf_url,
+        }
 
 
 class TemplateLoader:
@@ -155,7 +200,7 @@ class TemplateLoader:
         try:
             r = requests.get(json_url, timeout=5)
             if r.status_code != 200:
-                print(f"[template_loader] cloud: missing JSON: {json_url}")
+                logger.warning("template_loader cloud missing JSON: %s", json_url)
                 return None
 
             raw = r.json()
@@ -169,7 +214,7 @@ class TemplateLoader:
             )
 
         except Exception as e:
-            print(f"[template_loader] cloud load error: {e}")
+            logger.warning("template_loader cloud load error: %s", e)
             return None
 
     # ----------------------------------------------------------------------
@@ -194,7 +239,7 @@ class TemplateLoader:
                 try:
                     version_dirs = [d for d in template_dir.iterdir() if d.is_dir()]
                 except OSError as e:
-                    print(f"[template_loader] iterdir error on {template_dir}: {e}")
+                    logger.warning("template_loader iterdir error on %s: %s", template_dir, e)
                     return None
 
                 version_dir = sorted(version_dirs)[-1] if version_dirs else template_dir
@@ -203,7 +248,7 @@ class TemplateLoader:
 
             template_path = cls._find_template_file(version_dir)
             if not template_path:
-                print(f"[template_loader] missing local template file in {version_dir}")
+                logger.warning("template_loader missing local template file in %s", version_dir)
                 return None
 
             try:
@@ -223,7 +268,7 @@ class TemplateLoader:
                     version=raw.get("version", version),
                 )
             except Exception as e:
-                print(f"[template_loader] local load error: {e}")
+                logger.warning("template_loader local load error: %s", e)
                 return None
 
         return cls._load_flat_file(template_id)
@@ -238,7 +283,7 @@ class TemplateLoader:
             try:
                 raw = cls._load_template_contents(candidate)
             except Exception as e:
-                print(f"[template_loader] failed to read {candidate}: {e}")
+                logger.warning("template_loader failed to read %s: %s", candidate, e)
                 return None
 
             pdf_path = cls._resolve_pdf_path(
@@ -257,7 +302,7 @@ class TemplateLoader:
                 version=raw.get("version", "latest"),
             )
 
-        print(f"[template_loader] template not found for id={template_id}")
+        logger.warning("template_loader template not found for id=%s", template_id)
         return None
 
     @classmethod

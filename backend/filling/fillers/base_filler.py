@@ -220,11 +220,12 @@ class BaseFiller:
         unmapped: List[str],
     ) -> int:
         filled_count = 0
+        repeater_mappings = template.repeater_mappings
         for canonical_key, value in flat_fields.items():
-            if canonical_key in template.repeaters:
+            if canonical_key in repeater_mappings:
                 continue
 
-            pdf_key = template.field_map.get(canonical_key)
+            pdf_key = template.get_pdf_field(canonical_key)
             if not pdf_key:
                 warnings.append(
                     f"Canonical field has no mapping for this template: {canonical_key}"
@@ -256,7 +257,7 @@ class BaseFiller:
         unmapped: List[str],
     ) -> int:
         filled_count = 0
-        for repeater_key, repeater_config in template.repeaters.items():
+        for repeater_key, repeater_config in template.repeater_mappings.items():
             rows_data = flat_fields.get(repeater_key)
 
             if not rows_data:
@@ -269,8 +270,8 @@ class BaseFiller:
                 )
                 continue
 
-            row_ids: List[str] = repeater_config.get("row_ids", [])
-            columns: Dict[str, str] = repeater_config.get("columns", {})
+            row_ids = repeater_config.row_ids
+            columns = repeater_config.columns
 
             if not row_ids or not columns:
                 warnings.append(
@@ -315,15 +316,16 @@ class BaseFiller:
         flat_fields: Dict[str, Any],
         filled_count: int,
     ) -> float:
-        simple_keys = [k for k in flat_fields.keys() if k not in template.repeaters]
+        repeater_mappings = template.repeater_mappings
+        simple_keys = [k for k in flat_fields.keys() if k not in repeater_mappings]
         total_expected_simple = len(simple_keys)
 
         total_expected_repeaters = 0
-        for repeater_key, repeater_config in template.repeaters.items():
+        for repeater_key, repeater_config in repeater_mappings.items():
             rows = flat_fields.get(repeater_key, [])
             if isinstance(rows, list):
-                row_ids: List[str] = repeater_config.get("row_ids", [])
-                columns: Dict[str, str] = repeater_config.get("columns", {})
+                row_ids = repeater_config.row_ids
+                columns = repeater_config.columns
                 max_rows = min(len(rows), len(row_ids))
                 total_expected_repeaters += max_rows * len(columns)
 

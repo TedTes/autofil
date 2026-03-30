@@ -1,19 +1,15 @@
 """
 Table extraction parser for PDFs and images.
 
-Uses multiple libraries for robust table detection:
-- Camelot: Best for PDFs with clear table structures
-- Tabula: Good for PDFs with stream-based tables
-- pdfplumber: Fallback for complex layouts
-
-Implements IParser interface.
+The parser prefers lightweight built-in extraction and treats heavier engines
+as optional integrations. If Camelot or Tabula are not installed, the parser
+falls back cleanly to ``pdfplumber`` instead of failing at import time.
 """
 
 import os
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
-import camelot
-import tabula
+import importlib
 import pdfplumber
 from ..interfaces.parser import IParser
 
@@ -68,6 +64,13 @@ class TableParser(IParser):
         self.flavor = flavor
         self.min_confidence = min_confidence
         self.detect_headers = detect_headers
+
+    @staticmethod
+    def _optional_import(module_name: str):
+        try:
+            return importlib.import_module(module_name)
+        except ImportError:
+            return None
     
     def extract_fields(self, pdf_path: str) -> Dict[str, Any]:
         """
@@ -176,6 +179,15 @@ class TableParser(IParser):
     
     def _extract_camelot_lattice(self, pdf_path: str) -> Dict[str, Any]:
         """Extract using Camelot lattice mode (bordered tables)."""
+        camelot = self._optional_import('camelot')
+        if camelot is None:
+            return {
+                'tables': [],
+                'table_count': 0,
+                'method': 'camelot_lattice',
+                'confidence': 0,
+                'warnings': ['Camelot not installed; skipping lattice extraction']
+            }
         try:
             tables = camelot.read_pdf(
                 pdf_path,
@@ -197,6 +209,15 @@ class TableParser(IParser):
     
     def _extract_camelot_stream(self, pdf_path: str) -> Dict[str, Any]:
         """Extract using Camelot stream mode (borderless tables)."""
+        camelot = self._optional_import('camelot')
+        if camelot is None:
+            return {
+                'tables': [],
+                'table_count': 0,
+                'method': 'camelot_stream',
+                'confidence': 0,
+                'warnings': ['Camelot not installed; skipping stream extraction']
+            }
         try:
             tables = camelot.read_pdf(
                 pdf_path,
@@ -264,6 +285,15 @@ class TableParser(IParser):
     
     def _extract_with_tabula(self, pdf_path: str) -> Dict[str, Any]:
         """Extract using Tabula."""
+        tabula = self._optional_import('tabula')
+        if tabula is None:
+            return {
+                'tables': [],
+                'table_count': 0,
+                'method': 'tabula',
+                'confidence': 0,
+                'warnings': ['Tabula not installed; skipping extraction']
+            }
         try:
             # Read all tables from PDF
             dfs = tabula.read_pdf(

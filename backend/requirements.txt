@@ -28,17 +28,9 @@ xlrd>=2.0.1
 # OCR dependencies
 pytesseract>=0.3.10
 pdf2image>=1.16.0
-ocrmypdf
-
-# Table extraction dependencies
-camelot-py[cv]>=0.11.0
-tabula-py>=2.9.0
-opencv-python>=4.8.0
-ghostscript>=0.7
 
 pydantic
 pyyaml
-pdfrw==0.4
 requests==2.31.0
 supabase==2.6.0
 python-dotenv>=1.0.0

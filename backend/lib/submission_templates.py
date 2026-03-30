@@ -1,201 +1,101 @@
-"""
-Submission template definitions.
+"""Compatibility helpers for submission templates backed by YAML configs."""
 
-Templates define expected document types, forms, and field structures
-for different types of insurance submissions.
-"""
+from __future__ import annotations
 
-from typing import Dict, List, Any
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, List
+
+from filling.template_loader import TemplateLoader, TemplateConfig
 
 
+@dataclass(frozen=True)
 class SubmissionTemplate:
-    """Base class for submission templates."""
-    
-    def __init__(
-        self,
-        template_id: str,
-        name: str,
-        description: str,
-        expected_documents: List[str],
-        suggested_forms: List[str],
-        expected_fields: List[str]
-    ):
-        self.template_id = template_id
-        self.name = name
-        self.description = description
-        self.expected_documents = expected_documents
-        self.suggested_forms = suggested_forms
-        self.expected_fields = expected_fields
-    
+    """Thin compatibility view over a normalized fill template config."""
+
+    template_id: str
+    name: str
+    description: str
+    expected_documents: List[str]
+    suggested_forms: List[str]
+    expected_fields: List[str]
+    form_type: str
+    version: str | None = None
+
+    @classmethod
+    def from_config(cls, config: TemplateConfig) -> "SubmissionTemplate":
+        return cls(
+            template_id=config.template_id,
+            name=config.name or config.template_id,
+            description=config.description,
+            expected_documents=list(config.expected_documents or []),
+            suggested_forms=[config.template_id],
+            expected_fields=sorted(config.field_map.keys()),
+            form_type=config.form_type,
+            version=config.version,
+        )
+
     def to_dict(self) -> Dict[str, Any]:
-        """Convert template to dictionary."""
         return {
-            'template_id': self.template_id,
-            'name': self.name,
-            'description': self.description,
-            'expected_documents': self.expected_documents,
-            'suggested_forms': self.suggested_forms,
-            'expected_fields': self.expected_fields
+            "template_id": self.template_id,
+            "name": self.name,
+            "description": self.description,
+            "expected_documents": self.expected_documents,
+            "suggested_forms": self.suggested_forms,
+            "expected_fields": self.expected_fields,
+            "form_type": self.form_type,
+            "version": self.version,
         }
 
 
-# Template Definitions
-PROPERTY_RENEWAL = SubmissionTemplate(
-    template_id='property_renewal',
-    name='Property Renewal',
-    description='Commercial property insurance renewal submission',
-    expected_documents=[
-        'Statement of Values (SOV)',
-        'Loss Run Report',
-        'Property Schedule',
-        'Current Policy Declarations',
-        'Building Valuations'
-    ],
-    suggested_forms=[
-        'ACORD 126',  # Commercial Insurance Application
-        'ACORD 140',  # Property Section
-    ],
-    expected_fields=[
-        'applicant.business_name',
-        'applicant.business_address',
-        'properties',
-        'property_values',
-        'construction_type',
-        'occupancy_type',
-        'protection_class',
-        'coverage_limits.building',
-        'coverage_limits.contents',
-        'coverage_limits.business_income',
-        'prior_losses'
-    ]
-)
+def _discover_template_ids() -> List[str]:
+    local_dir = getattr(TemplateLoader, "local_template_dir", None)
+    if not isinstance(local_dir, Path) or not local_dir.exists():
+        return []
 
-WC_QUOTE = SubmissionTemplate(
-    template_id='wc_quote',
-    name='Workers Comp Quote',
-    description='New workers compensation insurance quote',
-    expected_documents=[
-        'Payroll Report',
-        'Loss Run Report',
-        'Employee Census',
-        'OSHA Logs',
-        'Safety Program Documentation'
-    ],
-    suggested_forms=[
-        'ACORD 130',  # Workers Compensation Application
-        'ACORD 126',  # Commercial Insurance Application
-    ],
-    expected_fields=[
-        'applicant.business_name',
-        'applicant.business_address',
-        'applicant.naics_code',
-        'payroll.total_annual',
-        'payroll.by_class_code',
-        'employee_count',
-        'experience_mod',
-        'prior_losses',
-        'safety_programs'
-    ]
-)
-
-GL_NEW_BUSINESS = SubmissionTemplate(
-    template_id='gl_new_business',
-    name='GL New Business',
-    description='General liability new business submission',
-    expected_documents=[
-        'Business Description',
-        'Loss Run Report',
-        'Operations Schedule',
-        'Subcontractor List',
-        'Current Insurance Declarations'
-    ],
-    suggested_forms=[
-        'ACORD 125',  # Commercial Insurance Application
-        'ACORD 126',  # Commercial Insurance Application
-    ],
-    expected_fields=[
-        'applicant.business_name',
-        'applicant.business_address',
-        'applicant.years_in_business',
-        'operations_description',
-        'annual_revenue',
-        'number_of_employees',
-        'coverage_limits.general_aggregate',
-        'coverage_limits.products_completed_ops',
-        'coverage_limits.each_occurrence',
-        'prior_losses',
-        'subcontractors'
-    ]
-)
-
-CUSTOM = SubmissionTemplate(
-    template_id='custom',
-    name='Custom Submission',
-    description='Custom insurance submission with flexible requirements',
-    expected_documents=[
-        'Supporting Documents (varies)',
-    ],
-    suggested_forms=[
-        'ACORD 126',  # Default to general application
-    ],
-    expected_fields=[
-        'applicant.business_name',
-        'applicant.business_address',
-    ]
-)
+    template_ids = set()
+    for candidate in local_dir.iterdir():
+        if candidate.name.startswith("."):
+            continue
+        if candidate.is_file() and candidate.suffix.lower() in {".yaml", ".yml", ".json"}:
+            template_ids.add(candidate.stem)
+        elif candidate.is_dir():
+            template_ids.add(candidate.name)
+    return sorted(template_ids)
 
 
-# Template Registry
-TEMPLATES: Dict[str, SubmissionTemplate] = {
-    'property_renewal': PROPERTY_RENEWAL,
-    'wc_quote': WC_QUOTE,
-    'gl_new_business': GL_NEW_BUSINESS,
-    'custom': CUSTOM,
-}
+def _load_templates() -> Dict[str, SubmissionTemplate]:
+    templates: Dict[str, SubmissionTemplate] = {}
+    for template_id in _discover_template_ids():
+        config = TemplateLoader.load(template_id)
+        if not config:
+            continue
+        if not config.field_map:
+            continue
+        template = SubmissionTemplate.from_config(config)
+        templates[template.template_id] = template
+    return templates
+
+
+TEMPLATES: Dict[str, SubmissionTemplate] = _load_templates()
 
 
 def get_template(template_id: str) -> SubmissionTemplate:
-    """
-    Get template by ID.
-    
-    Args:
-        template_id: Template identifier
-        
-    Returns:
-        SubmissionTemplate instance
-        
-    Raises:
-        ValueError: If template not found
-    """
     if template_id not in TEMPLATES:
         raise ValueError(f"Template '{template_id}' not found")
-    
     return TEMPLATES[template_id]
 
 
 def list_templates() -> List[Dict[str, Any]]:
-    """
-    List all available templates.
-    
-    Returns:
-        List of template dictionaries
-    """
     return [template.to_dict() for template in TEMPLATES.values()]
 
 
 def get_template_metadata(template_id: str) -> Dict[str, Any]:
-    """
-    Get template metadata without full details.
-    
-    Args:
-        template_id: Template identifier
-        
-    Returns:
-        Template metadata dictionary
-    """
     template = get_template(template_id)
     return {
-        'template_id': template.template_id,
-        'name': template.name,
-        'description': template.description,
+        "template_id": template.template_id,
+        "name": template.name,
+        "description": template.description,
+        "form_type": template.form_type,
+        "version": template.version,
     }

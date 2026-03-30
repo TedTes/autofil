@@ -35,11 +35,14 @@ export default function BatchExtractionPanel({
 
   // Filter files that are ready for extraction (classified but not extracted)
   const extractableFiles = files.filter(
-    f => f.status === 'classified' || f.status === 'uploaded'
+    f =>
+      (f.status === 'classified' || f.status === 'uploaded')
+      && f.classification?.is_supported !== false
   )
 
   const extractedFiles = files.filter(f => f.status === 'extracted')
   const failedFiles = files.filter(f => f.status === 'error')
+  const reviewFiles = files.filter(f => f.classification?.needs_review)
 
   // Toggle individual file selection
   const toggleFile = (fileId: string) => {
@@ -101,6 +104,7 @@ export default function BatchExtractionPanel({
             </h3>
             <p className="text-sm text-gray-600">
               {extractableFiles.length} files ready • {extractedFiles.length} completed • {failedFiles.length} failed
+              {reviewFiles.length > 0 && ` • ${reviewFiles.length} need review`}
             </p>
           </div>
 
@@ -263,6 +267,11 @@ export default function BatchExtractionPanel({
             <p className="text-sm text-gray-500">No files uploaded yet</p>
           </div>
         )}
+        {files.length > 0 && extractableFiles.length === 0 && extractedFiles.length === 0 && failedFiles.length === 0 && (
+          <div className="px-6 py-12 text-center">
+            <p className="text-sm text-gray-500">No supported files are ready for extraction</p>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -347,6 +356,16 @@ function BatchFileItem({
             <p className="text-xs text-gray-500">
               {Object.keys(file.extractionResult.data).length} fields • {' '}
               {Math.round(file.extractionResult.confidence * 100)}% confidence
+            </p>
+          )}
+
+          {file.classification?.message && (
+            <p
+              className={`text-xs mt-1 ${
+                file.classification.is_supported === false ? 'text-red-600' : 'text-yellow-700'
+              }`}
+            >
+              {file.classification.message}
             </p>
           )}
 

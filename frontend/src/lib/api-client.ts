@@ -717,6 +717,12 @@ export async function uploadFileForExtraction(
     document_type: string
     confidence: number
     indicators: string[]
+    is_supported?: boolean
+    is_insurance_relevant?: boolean
+    needs_review?: boolean
+    recommended_action?: string
+    message?: string
+    review_reasons?: string[]
   }
 }> {
   const formData = new FormData()
@@ -783,6 +789,12 @@ export async function classifyDocument(fileId: string): Promise<{
   document_type: string
   confidence: number
   indicators: string[]
+  is_supported?: boolean
+  is_insurance_relevant?: boolean
+  needs_review?: boolean
+  recommended_action?: string
+  message?: string
+  review_reasons?: string[]
   classifier_results?: Array<{
     classifier: string
     document_type: string
@@ -808,7 +820,19 @@ export async function extractDocument(
   confidence: number
   warnings?: string[]
   errors?: string[]
-  metadata?: Record<string, unknown>
+  metadata?: {
+    document_support?: {
+      is_supported?: boolean
+      is_insurance_relevant?: boolean
+      needs_review?: boolean
+      recommended_action?: string
+      message?: string
+      review_reasons?: string[]
+    }
+    review_required?: boolean
+    recommended_action?: string
+    [key: string]: unknown
+  }
 }> {
   const response = await api.post('/extraction/extract', {
     file_id: fileId,

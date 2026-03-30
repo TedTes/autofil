@@ -19,6 +19,7 @@ from extraction.classifiers import classifier_registry
 from extraction.extractors import ExtractorFactory
 from extraction.pipeline import ExtractionPipeline
 from extraction import extract_from_file
+from extraction.support import assess_document_support
 
 
 class ExtractionService:
@@ -163,6 +164,7 @@ class ExtractionService:
                 'classifier_results': [],
                 'classified_at': datetime.utcnow().isoformat()
             }
+            classification.update(assess_document_support(document))
             
             # Try to get individual classifier results if available
             if hasattr(self.classifier, 'classifiers'):
@@ -192,6 +194,13 @@ class ExtractionService:
                 'classifier_results': [],
                 'classified_at': datetime.utcnow().isoformat()
             }
+            classification.update(
+                assess_document_support(
+                    'unknown',
+                    confidence=0.0,
+                    file_name=file_meta['file_name'],
+                )
+            )
             
             self.classifications[file_id] = classification
             self.files[file_id]['status'] = 'classification_failed'
@@ -232,7 +241,10 @@ class ExtractionService:
         
         try:
             # Use the extraction pipeline for complete workflow
-            result = self.pipeline.process(file_path)
+            result = self.pipeline.process(
+                file_path,
+                override_document_type=document_type,
+            )
             
             # Convert ExtractionResult to API format
             extraction_result = {

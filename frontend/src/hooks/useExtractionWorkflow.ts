@@ -94,11 +94,22 @@ export function useExtractionWorkflow() {
       )
 
       const result = await extractDocument(fileId, { documentType })
+      const extractionError =
+        !result.success
+          ? result.errors?.[0]
+            || result.metadata?.document_support?.message
+            || 'Extraction could not continue for this file'
+          : undefined
 
       setFiles(prev =>
         prev.map(f =>
           f.id === fileId
-            ? { ...f, extractionResult: result, status: 'extracted' as const }
+            ? {
+                ...f,
+                extractionResult: result,
+                status: result.success ? ('extracted' as const) : ('error' as const),
+                error: extractionError,
+              }
             : f
         )
       )

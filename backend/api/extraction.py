@@ -361,9 +361,12 @@ def batch_extract():
                 
                 results.append({
                     'file_id': file_id,
-                    'success': True,
+                    'success': result.get('success', False),
                     'data': result.get('data'),
-                    'confidence': result.get('confidence')
+                    'confidence': result.get('confidence'),
+                    'warnings': result.get('warnings', []),
+                    'errors': result.get('errors', []),
+                    'metadata': result.get('metadata', {}),
                 })
                 
             except Exception as e:

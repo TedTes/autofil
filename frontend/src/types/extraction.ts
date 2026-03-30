@@ -5,6 +5,14 @@ export interface ClassificationResult {
   document_type: string
   confidence: number
   indicators: (string | { value: string; text?: string; [key: string]: unknown })[]
+  is_supported?: boolean
+  is_insurance_relevant?: boolean
+  needs_review?: boolean
+  recommended_action?: 'extract' | 'review_then_extract' | 'manual_review' | 'reject' | string
+  message?: string
+  review_reasons?: string[]
+  keyword_hits?: string[]
+  keyword_hit_count?: number
   classifier_results?: Array<{
     classifier: string
     document_type: string
@@ -41,6 +49,16 @@ export interface ExtractionResult {
     document_type?: string
     extraction_date?: string
     pipeline?: Record<string, unknown>
+    document_support?: {
+      is_supported?: boolean
+      is_insurance_relevant?: boolean
+      needs_review?: boolean
+      recommended_action?: string
+      message?: string
+      review_reasons?: string[]
+    }
+    review_required?: boolean
+    recommended_action?: string
     low_confidence_count?: number 
     fields_with_hints?: number
   fields_with_issues?: number

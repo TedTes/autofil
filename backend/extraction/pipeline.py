@@ -16,6 +16,7 @@ from .core.document import Document, DocumentType
 from .classifiers.registry import classifier_registry
 from .extractors.factory import ExtractorFactory
 from .models.extraction_result import ExtractionResult
+from .support import assess_document_support
 
 
 class ExtractionPipeline:
@@ -59,7 +60,11 @@ class ExtractionPipeline:
                 strategy=classification_strategy
             )
     
-    def process(self, file_path: str) -> ExtractionResult:
+    def process(
+        self,
+        file_path: str,
+        override_document_type: Optional[str] = None,
+    ) -> ExtractionResult:
         """
         Process a file through the complete extraction pipeline.
         
@@ -73,9 +78,16 @@ class ExtractionPipeline:
             # Step 1: Load file
             document = self._load_file(file_path)
             
-            # Step 2: Classify document type
-            if self.use_classification:
+            # Step 2: Apply override or classify document type
+            if override_document_type:
+                document.set_document_type(self._coerce_document_type(override_document_type), 1.0)
+                document.metadata['document_type_override'] = override_document_type
+            elif self.use_classification:
                 document = self._classify_document(document)
+
+            support = assess_document_support(document)
+            if support['should_block_extraction']:
+                return self._build_blocked_result(document, support)
             
             # Step 3: Extract data
             result = self._extract_data(document)
@@ -91,6 +103,13 @@ class ExtractionPipeline:
                 data={},
                 errors=[f"Pipeline processing failed: {str(e)}"]
             )
+
+    def _coerce_document_type(self, document_type: str) -> DocumentType:
+        normalized = document_type.strip().lower()
+        for candidate in DocumentType:
+            if candidate.value == normalized:
+                return candidate
+        return DocumentType.UNKNOWN
     
     def process_batch(
         self,
@@ -149,6 +168,26 @@ class ExtractionPipeline:
     def _extract_data(self, document: Document) -> ExtractionResult:
         """Extract data from document."""
         return ExtractorFactory.extract(document)
+
+    def _build_blocked_result(
+        self,
+        document: Document,
+        support: Dict[str, Any],
+    ) -> ExtractionResult:
+        return ExtractionResult(
+            success=False,
+            data={},
+            confidence=document.confidence,
+            warnings=support.get('review_reasons', []),
+            errors=[support['message']],
+            metadata={
+                'document_type': document.document_type.value,
+                'document_support': support,
+                'review_required': support['needs_review'],
+                'recommended_action': support['recommended_action'],
+                'file_name': document.file_name,
+            },
+        )
     
     def _add_pipeline_metadata(
         self,
@@ -168,7 +207,10 @@ class ExtractionPipeline:
             'classification_confidence': document.confidence,
             'classification_used': self.use_classification,
         }
-        
+        result.metadata['document_support'] = assess_document_support(document)
+        result.metadata['review_required'] = result.metadata['document_support']['needs_review']
+        result.metadata['recommended_action'] = result.metadata['document_support']['recommended_action']
+
         return result
     
     def get_pipeline_info(self) -> Dict[str, Any]:

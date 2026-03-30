@@ -21,7 +21,17 @@ export default function ClassificationPreview({
   showActions = true,
   className = '',
 }: ClassificationPreviewProps) {
-  const { document_type, confidence, indicators, classifier_results } = classification
+  const {
+    document_type,
+    confidence,
+    indicators,
+    classifier_results,
+    is_supported,
+    needs_review,
+    recommended_action,
+    message,
+    review_reasons,
+  } = classification
 
   // Determine confidence level
   const getConfidenceLevel = (conf: number): {
@@ -92,6 +102,36 @@ export default function ClassificationPreview({
         </div>
       </div>
 
+      {(is_supported === false || needs_review) && (
+        <div
+          className={`mb-4 rounded-lg border p-3 ${
+            is_supported === false
+              ? 'border-red-200 bg-red-50'
+              : 'border-yellow-200 bg-yellow-50'
+          }`}
+        >
+          <p
+            className={`text-sm font-medium ${
+              is_supported === false ? 'text-red-800' : 'text-yellow-800'
+            }`}
+          >
+            {message || 'This file should be reviewed before continuing.'}
+          </p>
+          {recommended_action && (
+            <p className="mt-1 text-xs text-gray-700">
+              Recommended action: {recommended_action.replaceAll('_', ' ')}
+            </p>
+          )}
+          {review_reasons && review_reasons.length > 0 && (
+            <ul className="mt-2 space-y-1 text-xs text-gray-700">
+              {review_reasons.map((reason, index) => (
+                <li key={index}>• {reason}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       {/* Detection Indicators */}
       {indicators && indicators.length > 0 && (
         <div className="mb-4">
@@ -148,7 +188,7 @@ export default function ClassificationPreview({
       )}
 
       {/* Actions */}
-      {showActions && (onConfirm || onReject) && (
+      {showActions && is_supported !== false && (onConfirm || onReject) && (
         <div className="flex gap-2 pt-2 border-t border-gray-200">
           {onConfirm && (
             <button

@@ -8,33 +8,22 @@ import json
 import logging
 import os
 import re
-import shutil
-import tempfile
 import uuid
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 from enum import Enum
-from werkzeug.utils import secure_filename
 
-from extraction.classifiers import classifier_registry
-from extraction.core import UniversalFileLoader
 from extraction.core.document import Document, DocumentType
-from extraction.core.readers.pdf_reader import PdfReader
-from extraction.extractors import extractor_registry
 from extraction.extractors.mfc import MFC
-from extraction.utils.semantic_section_builder import SemanticSectionBuilder
 from filling.fillers import *  # noqa: F401,F403 - ensure fillers register themselves
 from filling.fillers.base_filler import BaseFiller
 from lib.submission_templates import TEMPLATES, get_template
 from services.client_service import ClientService
 from services.comparison_service import ComparisonService
 from services.export_service import ExportService
-from filling.fillers.data_export_fillers import _BaseDataExportFiller
 from dataclasses import dataclass, field as dataclass_field
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
-from services.supabase_db_service import SupabaseDatabaseService
-from services.supabase_storage_service import SupabaseStorageService
 from services.submission_file_store import SubmissionFileStore
 from services.submission_extraction_coordinator import SubmissionExtractionCoordinator
 from services.submission_fill_coordinator import SubmissionFillCoordinator
@@ -887,30 +876,6 @@ class SubmissionService:
 
     def _deep_merge_dict(self, base: Dict[str, Any], incoming: Dict[str, Any]) -> Dict[str, Any]:
         return self.merge_coordinator.deep_merge_dict(base, incoming)
-    def _upload_to_remote(
-        self,
-        *,
-        local_path: str,
-        content_type: Optional[str],
-        client_id: Optional[str],
-        submission_id: str,
-        category: str,
-        filename: str,
-    ) -> Optional[Dict[str, Any]]:
-        """Upload a file to remote storage, returning metadata for persistence."""
-        try:
-            upload_info = self.file_store.upload(
-                local_path=local_path,
-                content_type=content_type,
-                client_id=client_id,
-                submission_id=submission_id,
-                category=category,
-                filename=filename,
-            )
-            return upload_info
-        except Exception as e:
-            logger.exception("upload to remote failed for submission_id=%s filename=%s", submission_id, filename)
-        return None
 
     def _persist_submission_metadata(self, metadata: Dict[str, Any]) -> None:
         self.repository.save(metadata)
@@ -1081,35 +1046,7 @@ class SubmissionService:
         submission_id: str,
         include_optional: bool = True
      ) -> Dict[str, Any]:
-        """
-        Generate dynamic form for a submission.
-        
-        Args:
-            submission_id: Submission identifier
-            include_optional: Include optional fields
-            
-        Returns:
-            Form definition
-        """
-        submission = self.get_submission(submission_id)
-        if not submission:
-            raise ValueError("Submission not found")
-        
-        # Get template from metadata
-        template_id = submission.get('metadata', {}).get('template_id', 'custom')
-        
-        # Get current data
-        data = submission.get('data', {})
-        
-        # Generate form
-        # form = self.form_generator.generate_form(
-        #     template_id=template_id,
-        #     data=data,
-        #     include_optional=include_optional
-        # )
-        
-        # return form
-        return
+        raise NotImplementedError("Dynamic form generation has not been implemented")
 
 
     def list_submission_summaries(self) -> List[Dict[str, Any]]:

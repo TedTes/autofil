@@ -8,7 +8,7 @@ Adds Workers Comp–specific repeater handling and small value normalizations.
 
 from typing import Any, Dict, List, Optional
 
-from extraction.utils.semantic_section_builder import SemanticSectionBuilder
+from filling.canonical_projection import CanonicalFillView
 
 from .acord_126_filler import Acord126Filler
 
@@ -31,25 +31,10 @@ class Acord130Filler(Acord126Filler):
         """
         flat = super()._canonical_to_template_fields(canonical, template)
 
-        sections = canonical.get("semantic_sections") or canonical.get("semanticSections") or []
-        entities = SemanticSectionBuilder.flatten(sections)
-
-        def collect_rows(field_ids: List[str]) -> List[Dict[str, Any]]:
-            rows: List[Dict[str, Any]] = []
-            for field_id in field_ids:
-                values = entities.get(field_id) or []
-                for ev in values:
-                    value = ev.get("value")
-                    if isinstance(value, list):
-                        for item in value:
-                            if isinstance(item, dict) and any(v not in ("", None) for v in item.values()):
-                                rows.append(item)
-                    elif isinstance(value, dict) and any(v not in ("", None) for v in value.values()):
-                        rows.append(value)
-            return rows
+        view = CanonicalFillView.from_canonical(canonical)
 
         # Map Classification rows to the template's expected repeater key
-        classification_rows = collect_rows(["Classifications", "Classification"])
+        classification_rows = view.repeated_rows("Classifications", "Classification")
         if classification_rows:
             flat["Classifications"] = classification_rows
 

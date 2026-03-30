@@ -8,7 +8,7 @@ flattening, entity flags). Shares the same canonical → PDF mapping pipeline.
 
 from typing import Any, Dict, Optional, List
 
-from extraction.utils.semantic_section_builder import SemanticSectionBuilder
+from filling.canonical_projection import CanonicalFillView
 
 from .acord_126_filler import Acord126Filler
 
@@ -31,20 +31,9 @@ class Acord125Filler(Acord126Filler):
         """
         flat = super()._canonical_to_template_fields(canonical, template)
 
-        sections = (
-            canonical.get("semantic_sections")
-            or canonical.get("semanticSections")
-            or []
-        )
-        entities = SemanticSectionBuilder.flatten(sections)
+        view = CanonicalFillView.from_canonical(canonical)
 
-        def first_value(field_id: str) -> Any:
-            values = entities.get(field_id) or []
-            if not values:
-                return None
-            return values[0].get("value")
-
-        mailing = first_value("MailingAddress")
+        mailing = view.first_value("MailingAddress")
         if mailing:
             line_one = None
             line_two = None
@@ -82,7 +71,7 @@ class Acord125Filler(Acord126Filler):
             if postal and template and template.has_pdf_field("MailingAddressPostalCode"):
                 flat.setdefault("MailingAddressPostalCode", postal)
 
-        legal_entity = first_value("LegalEntity") or first_value("LegalStructure")
+        legal_entity = view.first_value("LegalEntity") or view.first_value("LegalStructure")
         if legal_entity and isinstance(legal_entity, str):
             normalized = legal_entity.strip().lower()
 

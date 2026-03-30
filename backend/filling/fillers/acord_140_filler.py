@@ -8,7 +8,7 @@ Adds blanket summary repeater handling and light normalization.
 
 from typing import Any, Dict, List, Optional
 
-from extraction.utils.semantic_section_builder import SemanticSectionBuilder
+from filling.canonical_projection import CanonicalFillView
 
 from .acord_126_filler import Acord126Filler
 
@@ -30,24 +30,9 @@ class Acord140Filler(Acord126Filler):
         """
         flat = super()._canonical_to_template_fields(canonical, template)
 
-        sections = canonical.get("semantic_sections") or canonical.get("semanticSections") or []
-        entities = SemanticSectionBuilder.flatten(sections)
+        view = CanonicalFillView.from_canonical(canonical)
 
-        def collect_rows(field_ids: List[str]) -> List[Dict[str, Any]]:
-            rows: List[Dict[str, Any]] = []
-            for field_id in field_ids:
-                values = entities.get(field_id) or []
-                for ev in values:
-                    value = ev.get("value")
-                    if isinstance(value, list):
-                        for item in value:
-                            if isinstance(item, dict) and any(v not in ("", None) for v in item.values()):
-                                rows.append(item)
-                    elif isinstance(value, dict) and any(v not in ("", None) for v in value.values()):
-                        rows.append(value)
-            return rows
-
-        blanket_rows = collect_rows(["BlanketSummary", "BlanketCoverage", "Blankets"])
+        blanket_rows = view.repeated_rows("BlanketSummary", "BlanketCoverage", "Blankets")
         if blanket_rows:
             flat["BlanketSummary"] = blanket_rows
 

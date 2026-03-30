@@ -36,6 +36,7 @@ from services.supabase_db_service import SupabaseDatabaseService
 from services.supabase_storage_service import SupabaseStorageService
 from services.submission_file_store import SubmissionFileStore
 from services.submission_fill_coordinator import SubmissionFillCoordinator
+from services.submission_query_service import SubmissionQueryService
 from services.submission_repository import SubmissionRepository
 from services.version_service import VersionService
 
@@ -382,6 +383,10 @@ class SubmissionService:
             file_store=self.file_store,
             select_filler=self._select_filler,
             merge_input_data=self._merge_input_data,
+        )
+        self.query_service = SubmissionQueryService(
+            repository=self.repository,
+            get_submission=self.get_submission,
         )
 
         self.merge_config = MergeConfig(
@@ -1377,47 +1382,7 @@ class SubmissionService:
         """
         Return lightweight submission metadata records without loading full JSON data.
         """
-        metadata_rows = self.repository.list_all()
-        client_name_cache: Dict[str, Optional[str]] = {}
-        summaries: List[Dict[str, Any]] = []
-
-        for metadata in metadata_rows:
-            if not metadata:
-                continue
-            submission_id = metadata.get("submission_id")
-            if not submission_id:
-                continue
-
-            client_id = metadata.get("client_id")
-            client_name = metadata.get("client_name")
-            
-            inputs_meta = metadata.get("inputs") or []
-            primary_input = inputs_meta[-1] if inputs_meta else None
-            submission_name = (
-                metadata.get("name")
-                or metadata.get("title")
-                or f"Submission {submission_id[:8]}"
-            )
-
-            summaries.append({
-                "submission_id": submission_id,
-                "name": submission_name,
-                "filename": (
-                    (primary_input or {}).get("filename")
-                    or metadata.get("filename")
-                    or metadata.get("name")
-                    or "Untitled.pdf"
-                ),
-                "input_id": (primary_input or {}).get("input_id"),
-                "status": metadata.get("status") or metadata.get("workflow_status") or "uploaded",
-                "uploaded_at": (primary_input or {}).get("uploaded_at") or metadata.get("uploaded_at") or metadata.get("created_at"),
-                "confidence": metadata.get("confidence"),
-                "folder_id": metadata.get("folder_id"),
-                "client_id": client_id,
-                "client_name": client_name,
-                "file_count": metadata.get("file_count", 0),
-            })
-        return summaries
+        return self.query_service.list_submission_summaries()
 
 
     def get_all_submissions(self) -> List[Dict[str, Any]]:
@@ -1428,17 +1393,7 @@ class SubmissionService:
             List of all submissions
         """
         try: 
-            submissions = []
-            data = self.repository.list_all()
-            
-            for metadata in data:
-                submission_id = metadata.get("submission_id")
-                if not submission_id:
-                    continue
-                submission = self.get_submission(submission_id)
-                if submission:
-                    submissions.append(submission)
-            return submissions
+            return self.query_service.get_all_submissions()
         except Exception as e:
             print("error from get all submissions ", str(e))
             raise e
@@ -1452,17 +1407,7 @@ class SubmissionService:
         Returns:
             List of submissions
         """
-        submissions = []
-        
-        for submission_id in submission_ids:
-            try:
-                submission = self.get_submission(submission_id)
-                if submission:
-                    submissions.append(submission)
-            except:
-                continue
-        
-        return submissions
+        return self.query_service.get_submissions_by_ids(submission_ids)
 
     def update_status(self, submission_id: str, status: str, user: str = 'system') -> dict:
         """

@@ -4,6 +4,7 @@ import re
 from functools import lru_cache
 
 from ..core.schema import (
+    CanonicalOutput,
     EntityValue,
     SourceRef,
     Metadata,
@@ -40,6 +41,7 @@ class ACORD126Extractor(BaseExtractor):
 
         entities: Dict[str, List[EntityValue]] = {}
         confidence = 0.65
+        extraction_method = "ocr_text_alias"
 
         # 1) Raw fields from fillable PDF
         raw_fields: Dict[str, Any] = {}
@@ -47,6 +49,7 @@ class ACORD126Extractor(BaseExtractor):
             raw_fields = self.pdf_parser.extract_fields(doc.file_path)
             if raw_fields:
                 confidence = 0.98
+                extraction_method = "fillable_pdf_alias"
 
         template_config: Optional[TemplateConfig] = None
         if raw_fields:
@@ -58,17 +61,31 @@ class ACORD126Extractor(BaseExtractor):
         if raw_fields:
             self._map_fields(raw_fields, entities, confidence, template_config)
 
-        # (optional) future: OCR/tables to patch Classification if still missing
+        # 3) Use OCR/text-layer content for scanned forms or to patch missing fields.
+        if doc.raw_text:
+            missing_field_ids = set(self._relevant_field_ids())
+            if entities:
+                missing_field_ids -= set(entities.keys())
+                extraction_method = "fillable_pdf_plus_ocr_text"
+            self._extract_from_text(
+                doc,
+                entities,
+                confidence=0.72 if not raw_fields else 0.78,
+                field_ids=missing_field_ids,
+            )
+
+        if not entities:
+            return self._failure_result("No extractable ACORD 126 data found")
 
         semantic_sections = SemanticSectionBuilder.build(entities)
 
-        # 3) Build CanonicalOutput
+        # 4) Build CanonicalOutput
         output = CanonicalOutput(
             job_id=doc.job_id,
             source=SourceInfo(
                 file_name=doc.file_name,
                 file_type="pdf",
-                extraction_method="fillable_pdf_alias",
+                extraction_method=extraction_method,
                 extracted_at=datetime.utcnow(),
             ),
             semantic_sections=semantic_sections,
@@ -148,6 +165,43 @@ class ACORD126Extractor(BaseExtractor):
                 tags=["fillable_pdf", "alias"],
             )
             entities.setdefault(canonical_id, []).append(ev)
+
+    def _extract_from_text(
+        self,
+        doc: Document,
+        entities: Dict[str, List[EntityValue]],
+        confidence: float,
+        field_ids: set[str],
+    ) -> None:
+        text = doc.raw_text or ""
+        if not text:
+            return
+
+        for field_id in field_ids:
+            if field_id == "Classification":
+                continue
+
+            match = self._match_alias_value(text, field_id)
+            if not match:
+                continue
+
+            value, start_offset = match
+            cleaned_value = self._clean_value(field_id, value)
+            if cleaned_value in ("", None):
+                continue
+
+            entities.setdefault(field_id, []).append(
+                EntityValue(
+                    value=cleaned_value,
+                    confidence=confidence,
+                    source=SourceRef(
+                        page=self._find_page_for_offset(text, start_offset),
+                        text_block_index=start_offset,
+                        extraction_rule="ocr_text_alias",
+                    ),
+                    tags=["ocr_text", "alias"],
+                )
+            )
 
     # ---------------------------------------------------------- #
     # Classification (optional alias-based).
@@ -289,6 +343,45 @@ class ACORD126Extractor(BaseExtractor):
                 mapping[pdf_target] = fid
         return mapping
 
+    @lru_cache(maxsize=1)
+    def _relevant_field_ids(self) -> List[str]:
+        field_ids: List[str] = []
+        for field_id, meta in MFC._load().get("fields", {}).items():
+            required_for = meta.get("required_for", [])
+            targets = meta.get("targets", {})
+            if self.FORM_TYPE in required_for or targets.get("acord_126_pdf"):
+                field_ids.append(field_id)
+        return field_ids
+
+    def _match_alias_value(self, text: str, field_id: str) -> Optional[tuple[str, int]]:
+        aliases = MFC.aliases(field_id)
+        if not aliases:
+            return None
+
+        for alias in aliases:
+            pattern = re.compile(
+                rf"{re.escape(alias)}\s*[:\-]?\s*([^\n]+)",
+                re.IGNORECASE,
+            )
+            match = pattern.search(text)
+            if match:
+                return match.group(1).strip(), match.start(1)
+
+        return None
+
+    def _find_page_for_offset(self, text: str, offset: int) -> Optional[int]:
+        markers = list(re.finditer(r"=== Page (\d+) ===", text))
+        if not markers:
+            return 1
+
+        page_number = 1
+        for marker in markers:
+            marker_page = int(marker.group(1))
+            if marker.start() > offset:
+                break
+            page_number = marker_page
+        return page_number
+
     def _clean_value(self, field_id: str, raw: str):
         """
         Normalize value according to type in MFC schema (money, integer, etc.)
@@ -305,6 +398,12 @@ class ACORD126Extractor(BaseExtractor):
             return float(re.sub(r"[^\d.]", "", raw)) if re.search(r"\d", raw) else 0.0
         if t == "integer":
             return int(re.sub(r"\D", "", raw)) if re.search(r"\d", raw) else 0
+        if t == "boolean":
+            normalized = raw.lower()
+            if normalized in {"yes", "y", "true", "checked", "on"}:
+                return True
+            if normalized in {"no", "n", "false", "unchecked", "off"}:
+                return False
 
         # future: dates, bools, etc.
         return raw

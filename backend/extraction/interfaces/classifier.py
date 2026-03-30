@@ -6,8 +6,11 @@ not filename or extension.
 """
 
 from abc import ABC, abstractmethod
+import logging
 from typing import Dict, Any, List, Optional, Tuple
 from ..core.document import Document, DocumentType
+
+logger = logging.getLogger(__name__)
 
 
 class IClassifier(ABC):
@@ -197,8 +200,9 @@ class CompositeClassifier(IClassifier):
                 - 'weighted_average': Weight by classifier confidence
                 - 'voting': Majority vote with confidence as tiebreaker
         """
-        self.classifiers = classifiers
+        self.classifiers = sorted(classifiers, key=lambda classifier: classifier.get_priority())
         self.strategy = strategy
+        self.last_errors: List[Dict[str, str]] = []
     
     def classify(self, document: Document) -> Tuple[DocumentType, float]:
         """
@@ -211,6 +215,7 @@ class CompositeClassifier(IClassifier):
             Tuple of (DocumentType, confidence)
         """
         results = []
+        self.last_errors = []
         
         # Run all classifiers
         for classifier in self.classifiers:
@@ -219,8 +224,15 @@ class CompositeClassifier(IClassifier):
                     doc_type, confidence = classifier.classify(document)
                     results.append((doc_type, confidence, classifier.get_name()))
                 except Exception as e:
-                    # Log error but continue with other classifiers
-                    pass
+                    self.last_errors.append({
+                        'classifier': classifier.get_name(),
+                        'error': str(e),
+                    })
+                    logger.warning(
+                        "classifier %s failed during classify: %s",
+                        classifier.get_name(),
+                        e,
+                    )
         
         if not results:
             return DocumentType.UNKNOWN, 0.0
@@ -296,8 +308,16 @@ class CompositeClassifier(IClassifier):
                     for indicator in indicators:
                         indicator['classifier'] = classifier.get_name()
                     all_indicators.extend(indicators)
-                except Exception:
-                    pass
+                except Exception as e:
+                    self.last_errors.append({
+                        'classifier': classifier.get_name(),
+                        'error': str(e),
+                    })
+                    logger.warning(
+                        "classifier %s failed during indicator collection: %s",
+                        classifier.get_name(),
+                        e,
+                    )
         
         return all_indicators
     

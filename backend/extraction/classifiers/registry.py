@@ -4,8 +4,11 @@ Classifier registry for managing available classifiers.
 Similar to parser registry but for classifiers.
 """
 
+import logging
 from typing import Dict, List, Type, Optional
 from ..interfaces.classifier import IClassifier, CompositeClassifier
+
+logger = logging.getLogger(__name__)
 
 
 class ClassifierRegistry:
@@ -26,13 +29,13 @@ class ClassifierRegistry:
         try:
             from .mime_classifier import MimeClassifier
             self.register('mime', MimeClassifier)
-        except ImportError:
-            pass
+        except ImportError as exc:
+            logger.warning("failed to register mime classifier: %s", exc)
         try:
             from .keyword_classifier import KeywordClassifier
             self.register('keyword', KeywordClassifier)
-        except ImportError:
-            pass
+        except ImportError as exc:
+            logger.warning("failed to register keyword classifier: %s", exc)
         try:
             from .table_classifier import TableClassifier
             self.register('table', TableClassifier)
@@ -41,8 +44,8 @@ class ClassifierRegistry:
             # Users must manually register when model is available:
             # from .ml_classifier import MLClassifier
             # classifier_registry.register('ml', MLClassifier)
-        except ImportError:
-            pass
+        except ImportError as exc:
+            logger.warning("failed to register table classifier: %s", exc)
     
     def register(self, name: str, classifier_class: Type[IClassifier]):
         """
@@ -111,7 +114,8 @@ class ClassifierRegistry:
             classifier_class = self.get(name)
             if classifier_class:
                 classifiers.append(classifier_class())
-        
+
+        classifiers.sort(key=lambda classifier: classifier.get_priority())
         return CompositeClassifier(classifiers, strategy=strategy)
     
     def get_classifiers_by_priority(self) -> List[IClassifier]:

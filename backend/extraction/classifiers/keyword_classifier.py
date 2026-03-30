@@ -187,7 +187,10 @@ class KeywordClassifier(IClassifier):
         
         # Return highest scoring type
         best_type = max(scores.items(), key=lambda x: x[1])
-        return best_type[0], min(1.0, best_type[1])
+        confidence = min(1.0, best_type[1])
+        if confidence < self.min_confidence:
+            return DocumentType.UNKNOWN, 0.0
+        return best_type[0], confidence
     
     def get_indicators(self, document: Document) -> List[Dict[str, Any]]:
         """Get keywords found for classification."""
@@ -237,8 +240,8 @@ class KeywordClassifier(IClassifier):
             if re.search(pattern, text, re.IGNORECASE)
         )
         
-        if required and required_found == 0:
-            return 0.0  # Must have at least one required keyword
+        if required and required_found < len(required):
+            return 0.0
         
         score += required_found * self.CONFIDENCE_WEIGHTS['required']
         

@@ -144,7 +144,10 @@ class TableClassifier(IClassifier):
         
         # Return highest scoring type
         best_type = max(scores.items(), key=lambda x: x[1])
-        return best_type[0], min(1.0, best_type[1])
+        confidence = min(1.0, best_type[1])
+        if confidence < self.min_confidence:
+            return DocumentType.UNKNOWN, 0.0
+        return best_type[0], confidence
     
     def get_indicators(self, document: Document) -> List[Dict[str, Any]]:
         """Get table structure indicators."""
@@ -160,7 +163,7 @@ class TableClassifier(IClassifier):
             for doc_type, patterns in self.TABLE_PATTERNS.items():
                 matches = self._find_matching_columns(headers_lower, patterns)
                 
-                if matches['required'] or matches['strong']:
+                if len(matches['required']) >= len(patterns.get('required_columns', [])):
                     indicators.append({
                         'type': 'table_structure',
                         'table_index': table_idx,
@@ -203,7 +206,8 @@ class TableClassifier(IClassifier):
             matches = self._find_matching_columns(headers_lower, patterns)
             
             # Must have required columns
-            if len(matches['required']) == 0:
+            required_patterns = patterns.get('required_columns', [])
+            if len(matches['required']) < len(required_patterns):
                 continue
             
             # Calculate score

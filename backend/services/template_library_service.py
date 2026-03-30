@@ -1,33 +1,22 @@
-"""
-Template library service - lists available fillable templates from Supabase storage.
-"""
+"""Template library service backed by normalized YAML template configs."""
 
 from __future__ import annotations
 
-import json
 import os
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from filling.template_loader import TemplateLoader, TemplateConfig
 from services.supabase_storage_service import SupabaseStorageService
 
 
 class TemplateLibraryService:
     """
-    Fetch template metadata stored in Supabase Storage.
+    Discover available templates and expose normalized metadata for the UI/API.
 
-    Expected structure per template:
-        templates/{template_id}/template.json
-        templates/{template_id}/template.pdf
-
-    template.json should include at least:
-        {
-            "template_id": "acord_126",
-            "name": "ACORD 126",
-            "description": "...",
-            "expected_documents": [...],
-            "suggested_forms": [...],
-            "expected_fields": [...]
-        }
+    The canonical source of truth is the YAML/JSON template config loaded through
+    ``TemplateLoader``. Supabase storage is used only as an optional source of
+    discoverable template ids when configured.
     """
 
     def __init__(self) -> None:
@@ -35,73 +24,56 @@ class TemplateLibraryService:
         self.templates_root = os.getenv("SUPABASE_TEMPLATES_PREFIX", "templates").strip("/")
 
     def list_templates(self, form_type: Optional[str] = None) -> List[Dict[str, Any]]:
-        if not getattr(self.storage, "enabled", False):
-            return []
-        items = self.storage.list_objects(self.templates_root)
         templates: List[Dict[str, Any]] = []
-
-        for entry in items:
-            name = entry.get("name")
-            if not name:
+        for template_id in self._discover_template_ids():
+            config = TemplateLoader.load(template_id)
+            if not config:
                 continue
-
-            # Supabase Storage returns files with metadata; folders have metadata None
-            if entry.get("metadata"):
-                continue  # skip files at root level
-
-            template_id = name
-            json_path = self.storage.build_path(self.templates_root, template_id, "template.json")
-            pdf_path = self.storage.build_path(self.templates_root, template_id, "template.pdf")
-
-            json_text = self.storage.download_text(json_path)
-            if not json_text:
-                continue
-
-            try:
-                data = json.loads(json_text)
-            except json.JSONDecodeError:
-                continue
-
-            template = self._map_template(template_id, data, pdf_path)
+            template = self._to_library_dict(config)
             if form_type and template.get("formType") != form_type:
                 continue
             templates.append(template)
 
+        templates.sort(key=lambda item: ((not item.get("isPopular", False)), item.get("name", "")))
         return templates
 
     def get_template(self, template_id: str) -> Optional[Dict[str, Any]]:
-        if not getattr(self.storage, "enabled", False):
+        config = TemplateLoader.load(template_id)
+        if not config:
             return None
-        json_path = self.storage.build_path(self.templates_root, template_id, "template.json")
-        pdf_path = self.storage.build_path(self.templates_root, template_id, "template.pdf")
-        json_text = self.storage.download_text(json_path)
-        if not json_text:
-            return None
-        try:
-            data = json.loads(json_text)
-        except json.JSONDecodeError:
-            return None
-        return self._map_template(template_id, data, pdf_path)
+        return self._to_library_dict(config)
 
-    def _map_template(self, template_id: str, data: Dict[str, Any], pdf_path: str) -> Dict[str, Any]:
-        def _get(key: str, default=None):
-            return data.get(key) or data.get(key.replace('_', '')) or default
+    def _discover_template_ids(self) -> List[str]:
+        template_ids = set()
 
-        return {
-            "id": data.get("id") or data.get("template_id") or template_id,
-            "name": data.get("name") or template_id,
-            "description": data.get("description") or "",
-            "formType": _get("form_type", "CUSTOM"),
-            "filler": data.get("filler"),
-            "requiredDataSections": _get("required_data_sections", []) or [],
-            "optionalDataSections": _get("optional_data_sections", []),
-            "estimatedFields": int(_get("estimated_fields", 0) or 0),
-            "version": data.get("version"),
-            "icon": data.get("icon"),
-            "isPopular": bool(data.get("is_popular") or data.get("isPopular", False)),
-            "estimatedSize": _get("estimated_size"),
-            "templateUrl": self.storage.get_public_url(pdf_path),
-            "expectedDocuments": _get("expected_documents", []),
-            "createdAt": data.get("created_at"),
-            "updatedAt": data.get("updated_at"),
-        }
+        local_dir = getattr(TemplateLoader, "local_template_dir", None)
+        if isinstance(local_dir, Path) and local_dir.exists():
+            for candidate in local_dir.iterdir():
+                if candidate.name.startswith("."):
+                    continue
+                if candidate.is_file() and candidate.suffix.lower() in {".yaml", ".yml", ".json"}:
+                    template_ids.add(candidate.stem)
+                elif candidate.is_dir():
+                    template_ids.add(candidate.name)
+
+        if getattr(self.storage, "enabled", False):
+            for entry in self.storage.list_objects(self.templates_root):
+                name = entry.get("name")
+                if not name or entry.get("metadata"):
+                    continue
+                template_ids.add(name)
+
+        return sorted(template_ids)
+
+    def _to_library_dict(self, config: TemplateConfig) -> Dict[str, Any]:
+        template_url = config.pdf_url
+        if getattr(self.storage, "enabled", False):
+            remote_path = self.storage.build_path(self.templates_root, config.template_id, "template.pdf")
+            template_url = self.storage.get_public_url(remote_path) or template_url
+
+        payload = config.to_library_dict(template_url=template_url)
+        payload["estimatedSize"] = config.raw.get("estimated_size")
+        payload["createdAt"] = config.raw.get("created_at")
+        payload["updatedAt"] = config.raw.get("updated_at")
+        payload["filler"] = config.raw.get("filler")
+        return payload

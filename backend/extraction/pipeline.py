@@ -16,7 +16,9 @@ from .core.document import Document, DocumentType
 from .classifiers.registry import classifier_registry
 from .extractors.factory import ExtractorFactory
 from .models.extraction_result import ExtractionResult
+from .core.schema import CanonicalOutput
 from .support import assess_document_support
+from .validation.validator import ExtractionValidationError, validate
 
 
 class ExtractionPipeline:
@@ -75,26 +77,16 @@ class ExtractionPipeline:
             ExtractionResult with extracted data and metadata
         """
         try:
-            # Step 1: Load file
             document = self._load_file(file_path)
-            
-            # Step 2: Apply override or classify document type
-            if override_document_type:
-                document.set_document_type(self._coerce_document_type(override_document_type), 1.0)
-                document.metadata['document_type_override'] = override_document_type
-            elif self.use_classification:
-                document = self._classify_document(document)
+            document = self._apply_document_typing(document, override_document_type)
 
             support = assess_document_support(document)
             if support['should_block_extraction']:
                 return self._build_blocked_result(document, support)
-            
-            # Step 3: Extract data
+
             result = self._extract_data(document)
-            
-            # Step 4: Add pipeline metadata
+            result = self._validate_result(result, document)
             result = self._add_pipeline_metadata(result, document)
-            
             return result
             
         except Exception as e:
@@ -147,6 +139,22 @@ class ExtractionPipeline:
     def _load_file(self, file_path: str) -> Document:
         """Load file into Document object."""
         return self.file_loader.load(file_path)
+
+    def _apply_document_typing(
+        self,
+        document: Document,
+        override_document_type: Optional[str],
+    ) -> Document:
+        """Apply explicit document type override or run classification."""
+        if override_document_type:
+            document.set_document_type(self._coerce_document_type(override_document_type), 1.0)
+            document.metadata['document_type_override'] = override_document_type
+            return document
+
+        if self.use_classification:
+            return self._classify_document(document)
+
+        return document
     
     def _classify_document(self, document: Document) -> Document:
         """Classify document type."""
@@ -168,6 +176,64 @@ class ExtractionPipeline:
     def _extract_data(self, document: Document) -> ExtractionResult:
         """Extract data from document."""
         return ExtractorFactory.extract(document)
+
+    def _validate_result(
+        self,
+        result: ExtractionResult,
+        document: Document,
+    ) -> ExtractionResult:
+        """Validate canonical extractor output centrally in the pipeline."""
+        if not result.success or not isinstance(result.data, dict) or not result.data:
+            return result
+
+        try:
+            canonical = CanonicalOutput.model_validate(result.data)
+            validated = validate(canonical)
+            result.data = validated.to_dict()
+
+            raw = result.data.get('raw') or {}
+            validation_warnings = raw.get('validation_warnings', [])
+            if isinstance(validation_warnings, list):
+                result.warnings = self._dedupe_messages(
+                    [*result.warnings, *(str(item) for item in validation_warnings)]
+                )
+
+            if result.metadata is None:
+                result.metadata = {}
+
+            result.metadata['canonical_validated'] = True
+            result.metadata['validation_stage'] = 'pipeline'
+            return result
+        except ExtractionValidationError as exc:
+            return ExtractionResult(
+                success=False,
+                data=result.data,
+                confidence=result.confidence,
+                warnings=self._dedupe_messages(result.warnings),
+                errors=self._dedupe_messages([*result.errors, f"Validation failed: {str(exc)}"]),
+                field_confidence=result.field_confidence,
+                metadata={
+                    **(result.metadata or {}),
+                    'canonical_validated': False,
+                    'validation_stage': 'pipeline',
+                    'document_type': document.document_type.value,
+                },
+            )
+        except Exception as exc:
+            return ExtractionResult(
+                success=False,
+                data=result.data,
+                confidence=result.confidence,
+                warnings=self._dedupe_messages(result.warnings),
+                errors=self._dedupe_messages([*result.errors, f"Canonical normalization failed: {str(exc)}"]),
+                field_confidence=result.field_confidence,
+                metadata={
+                    **(result.metadata or {}),
+                    'canonical_validated': False,
+                    'validation_stage': 'pipeline',
+                    'document_type': document.document_type.value,
+                },
+            )
 
     def _build_blocked_result(
         self,
@@ -197,7 +263,7 @@ class ExtractionPipeline:
         """Add pipeline processing metadata to result."""
         if result.metadata is None:
             result.metadata = {}
-        
+
         result.metadata['pipeline'] = {
             'version': '1.0.0',
             'processing_date': datetime.utcnow().isoformat(),
@@ -210,8 +276,30 @@ class ExtractionPipeline:
         result.metadata['document_support'] = assess_document_support(document)
         result.metadata['review_required'] = result.metadata['document_support']['needs_review']
         result.metadata['recommended_action'] = result.metadata['document_support']['recommended_action']
+        result.metadata['stages'] = [
+            'load',
+            'classify' if self.use_classification else 'classify_skipped',
+            'support_gate',
+            'extract',
+            'validate',
+            'normalize_metadata',
+        ]
+        result.warnings = self._dedupe_messages(result.warnings)
+        result.errors = self._dedupe_messages(result.errors)
 
         return result
+
+    def _dedupe_messages(self, messages: List[str]) -> List[str]:
+        seen = set()
+        deduped: List[str] = []
+        for message in messages:
+            if not message:
+                continue
+            if message in seen:
+                continue
+            deduped.append(message)
+            seen.add(message)
+        return deduped
     
     def get_pipeline_info(self) -> Dict[str, Any]:
         """

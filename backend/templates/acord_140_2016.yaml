@@ -1,8 +1,22 @@
 template_id: acord_140_2016
 form_type: ACORD_140
 version: "2016_09"
+name: ACORD 140 Property Section
 description: ACORD 140 Property Section (2016/09) — fillable PDF template mapping to canonical fields.
 pdf_url: template.pdf
+required_data_sections:
+  - insured
+  - locations
+  - coverage
+optional_data_sections:
+  - policy
+expected_documents:
+  - acord_140
+  - sov
+  - supplemental
+estimated_fields: 15
+icon: home
+is_popular: true
 signature_fields:
   - Form_EditionIdentifier_A
   - NamedInsured_FullName_A

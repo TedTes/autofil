@@ -1,8 +1,21 @@
 template_id: acord_125_2016
 form_type: ACORD_125
 version: "2016_09"
+name: ACORD 125 Commercial Insurance Application
 description: ACORD 125 Commercial Insurance Application (2016/09) — fillable PDF template mapping to canonical fields.
 pdf_url: template.pdf
+required_data_sections:
+  - insured
+  - policy
+optional_data_sections:
+  - operations
+  - coverage
+expected_documents:
+  - acord_125
+  - supplemental
+estimated_fields: 18
+icon: file-text
+is_popular: true
 signature_fields:
   - Form_EditionIdentifier_A
   - Producer_FullName_A

@@ -1,8 +1,22 @@
 template_id: acord_130_2016
 form_type: ACORD_130
 version: "2016_09"
+name: ACORD 130 Workers Compensation Application
 description: ACORD 130 Workers Compensation Application (2016/09) — fillable PDF template mapping to canonical fields.
 pdf_url: template.pdf
+required_data_sections:
+  - insured
+  - policy
+  - operations
+optional_data_sections:
+  - losses
+expected_documents:
+  - acord_130
+  - loss_run
+  - supplemental
+estimated_fields: 16
+icon: briefcase
+is_popular: true
 signature_fields:
   - Form_EditionIdentifier_A
   - NamedInsured_FullName_A

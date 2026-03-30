@@ -1,8 +1,23 @@
 template_id: acord_126_2016
 form_type: ACORD_126
 version: "2016_09"
+name: ACORD 126 Commercial General Liability Section
 description: ACORD 126 Commercial General Liability Section (2016/09) — fillable PDF template mapping to canonical fields.
 pdf_url: template.pdf
+required_data_sections:
+  - insured
+  - policy
+  - operations
+  - coverage
+optional_data_sections:
+  - losses
+expected_documents:
+  - acord_126
+  - supplemental
+  - loss_run
+estimated_fields: 42
+icon: shield
+is_popular: true
 signature_fields:
   - Form_EditionIdentifier_A
   - GeneralLiability_GeneralAggregate_LimitAmount_A

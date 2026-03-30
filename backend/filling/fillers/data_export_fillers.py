@@ -12,6 +12,8 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from filling.canonical_projection import CanonicalFillView
+
 from .base_filler import BaseFiller, FillReport
 
 
@@ -79,7 +81,8 @@ class LossRunFiller(_BaseDataExportFiller):
 
     def _export(self, canonical_data: Dict[str, Any], output_path: Path) -> tuple[int, List[str]]:
         warnings: List[str] = []
-        claims = canonical_data.get("claims") or canonical_data.get("data", {}).get("claims") or []
+        view = CanonicalFillView.from_canonical(canonical_data)
+        claims = view.repeated_rows("PriorLosses")
         if not isinstance(claims, list):
             warnings.append("No claims data available to export.")
             claims = []
@@ -116,7 +119,8 @@ class SovFiller(_BaseDataExportFiller):
 
     def _export(self, canonical_data: Dict[str, Any], output_path: Path) -> tuple[int, List[str]]:
         warnings: List[str] = []
-        properties = canonical_data.get("properties") or canonical_data.get("data", {}).get("properties") or []
+        view = CanonicalFillView.from_canonical(canonical_data)
+        properties = view.repeated_rows("Location")
 
         if not isinstance(properties, list):
             warnings.append("No property schedule data available to export.")

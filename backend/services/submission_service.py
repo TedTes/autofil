@@ -5,6 +5,7 @@ Submission service - orchestrates extraction and filling workflow.
 import copy
 import hashlib
 import json
+import logging
 import os
 import re
 import shutil
@@ -41,6 +42,8 @@ from services.submission_merge_coordinator import SubmissionMergeCoordinator
 from services.submission_query_service import SubmissionQueryService
 from services.submission_repository import SubmissionRepository
 from services.version_service import VersionService
+
+logger = logging.getLogger(__name__)
 
 
 class MergeStrategy(Enum):
@@ -607,14 +610,14 @@ class SubmissionService:
                 from services.folder_service import FolderService
                 FolderService().remove_submission(folder_id, submission_id)
             except Exception as exc:
-                print(f"Warning: failed to update folder {folder_id}: {exc}")
+                logger.warning("failed to update folder %s: %s", folder_id, exc)
 
         client_id = metadata.get("client_id")
         if client_id:
             try:
                 self.client_service.remove_submission(client_id, submission_id)
             except Exception as exc:
-                print(f"Warning: failed to update client {client_id}: {exc}")
+                logger.warning("failed to update client %s: %s", client_id, exc)
 
         return True
 
@@ -641,7 +644,7 @@ class SubmissionService:
                 template_id=template_id,
             )
         except Exception as e:
-            print("error occured in fill_pdf", str(e))
+            logger.exception("fill_pdf failed for submission_id=%s", submission_id)
             raise
 
     
@@ -876,7 +879,7 @@ class SubmissionService:
     def _debug_compare_hashes(self, data1: Any, data2: Any) -> bool:
         hash1 = self._compute_extraction_hash(data1)
         hash2 = self._compute_extraction_hash(data2)
-        print(f"[debug] hash1={hash1} hash2={hash2}")
+        logger.debug("extraction hash compare hash1=%s hash2=%s", hash1, hash2)
         return hash1 == hash2
 
     def _field_allows_multiple(self, field_id: str) -> bool:
@@ -906,7 +909,7 @@ class SubmissionService:
             )
             return upload_info
         except Exception as e:
-            print("error from uploading to remote ", str(e))
+            logger.exception("upload to remote failed for submission_id=%s filename=%s", submission_id, filename)
         return None
 
     def _persist_submission_metadata(self, metadata: Dict[str, Any]) -> None:
@@ -1126,7 +1129,7 @@ class SubmissionService:
         try: 
             return self.query_service.get_all_submissions()
         except Exception as e:
-            print("error from get all submissions ", str(e))
+            logger.exception("get_all_submissions failed")
             raise e
     def get_submissions_by_ids(self, submission_ids: List[str]) -> List[Dict[str, Any]]:
         """
@@ -1423,11 +1426,16 @@ class SubmissionService:
         if not conflicts:
             return
         
-        print(f"[MERGE] Detected {len(conflicts)} conflicts:")
+        logger.warning("detected %s merge conflicts", len(conflicts))
         for conflict in conflicts:
-            print(f"  - {conflict.field_id}: {len(conflict.values)} values")
+            logger.warning("merge conflict field=%s values=%s", conflict.field_id, len(conflict.values))
             for val in conflict.values:
-                print(f"    → {val.get('value')} (conf: {val.get('confidence', 0):.2f})")
+                logger.warning(
+                    "merge conflict candidate field=%s value=%s confidence=%.2f",
+                    conflict.field_id,
+                    val.get("value"),
+                    val.get("confidence", 0),
+                )
 
 
     def _select_best_value(

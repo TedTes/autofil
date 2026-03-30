@@ -5,6 +5,7 @@ Uses real extraction pipeline with classifiers and extractors.
 
 import os
 import uuid
+import logging
 from datetime import datetime
 from threading import Lock
 from typing import Dict, List, Optional, Any
@@ -20,6 +21,8 @@ from extraction.extractors import ExtractorFactory
 from extraction.pipeline import ExtractionPipeline
 from extraction import extract_from_file
 from extraction.support import assess_document_support
+
+logger = logging.getLogger(__name__)
 
 
 class ExtractionService:
@@ -374,7 +377,7 @@ class ExtractionService:
             try:
                 self.storage.write_json(self.state_key, state)
             except Exception as exc:
-                print(f"Warning: failed to persist extraction state: {exc}")
+                logger.warning("failed to persist extraction state: %s", exc)
     
     def get_extraction_result(self, extraction_id: str) -> Optional[Dict[str, Any]]:
         """Get extraction result."""

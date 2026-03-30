@@ -6,6 +6,7 @@ when local storage is not available (e.g., ephemeral deploys).
 """
 from __future__ import annotations
 
+import logging
 import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -15,6 +16,8 @@ try:
 except ImportError:  # pragma: no cover
     Client = None  # type: ignore
     create_client = None  # type: ignore
+
+logger = logging.getLogger(__name__)
 
 
 class SupabaseDatabaseService:
@@ -29,7 +32,7 @@ class SupabaseDatabaseService:
             try:
                 self._client = create_client(self.url, self.key)
             except Exception as exc:  # pragma: no cover - initialization failure logging
-                print(f"[supabase-db] Failed to initialize client: {exc}")
+                logger.warning("supabase-db failed to initialize client: %s", exc)
                 self.enabled = False
                 self._client = None
 
@@ -41,7 +44,7 @@ class SupabaseDatabaseService:
             self.enabled = True
             return True
         except Exception as exc:
-            print(f"[supabase-db] Failed to reinitialize client: {exc}")
+            logger.warning("supabase-db failed to reinitialize client: %s", exc)
             self.enabled = False
             self._client = None
             return False
@@ -78,7 +81,7 @@ class SupabaseDatabaseService:
                 ).execute()
                 return
             except Exception as exc:
-                print(f"[supabase-db] Failed to save submission {submission_id}: {exc}")
+                logger.warning("supabase-db failed to save submission %s: %s", submission_id, exc)
                 if attempt == 0 and self._should_retry(exc) and self._reset_client():
                     continue
                 break
@@ -98,7 +101,7 @@ class SupabaseDatabaseService:
                     return data.get("metadata")
                 return None
             except Exception as exc:
-                print(f"[supabase-db] Failed to fetch submission {submission_id}: {exc}")
+                logger.warning("supabase-db failed to fetch submission %s: %s", submission_id, exc)
                 if attempt == 0 and self._should_retry(exc) and self._reset_client():
                     continue
                 break
@@ -110,7 +113,7 @@ class SupabaseDatabaseService:
         try:
             self._client.table("submissions_metadata").delete().eq("submission_id", submission_id).execute()
         except Exception as exc:
-            print(f"[supabase-db] Failed to delete submission {submission_id}: {exc}")
+            logger.warning("supabase-db failed to delete submission %s: %s", submission_id, exc)
 
     def list_submissions_metadata(self) -> List[Dict[str, Any]]:
         for attempt in range(2):
@@ -129,7 +132,7 @@ class SupabaseDatabaseService:
                     if meta and (meta.get("file_count") or 0) > 0
                 ]
             except Exception as exc:
-                print(f"[supabase-db] Failed to list submissions: {exc}")
+                logger.warning("supabase-db failed to list submissions: %s", exc)
                 if attempt == 0 and self._should_retry(exc) and self._reset_client():
                     continue
                 break
@@ -156,7 +159,7 @@ class SupabaseDatabaseService:
                 ).execute()
                 return
             except Exception as exc:
-                print(f"[supabase-db] Failed to save client {client_id}: {exc}")
+                logger.warning("supabase-db failed to save client %s: %s", client_id, exc)
                 if attempt == 0 and self._should_retry(exc) and self._reset_client():
                     continue
                 break
@@ -176,7 +179,7 @@ class SupabaseDatabaseService:
                     return data.get("metadata")
                 return None
             except Exception as exc:
-                print(f"[supabase-db] Failed to fetch client {client_id}: {exc}")
+                logger.warning("supabase-db failed to fetch client %s: %s", client_id, exc)
                 if attempt == 0 and self._should_retry(exc) and self._reset_client():
                     continue
                 break
@@ -196,7 +199,7 @@ class SupabaseDatabaseService:
                     return []
                 return [row.get("metadata") for row in rows if row.get("metadata")]
             except Exception as exc:
-                print(f"[supabase-db] Failed to list clients: {exc}")
+                logger.warning("supabase-db failed to list clients: %s", exc)
                 if attempt == 0 and self._should_retry(exc) and self._reset_client():
                     continue
                 break
@@ -208,7 +211,7 @@ class SupabaseDatabaseService:
         try:
             self._client.table("clients_metadata").delete().eq("client_id", client_id).execute()
         except Exception as exc:
-            print(f"[supabase-db] Failed to delete client {client_id}: {exc}")
+            logger.warning("supabase-db failed to delete client %s: %s", client_id, exc)
 
     # -------------------------------------------------------------------- folders
     def save_folder_metadata(self, metadata: Dict[str, Any]) -> None:
@@ -229,7 +232,7 @@ class SupabaseDatabaseService:
                 on_conflict="folder_id",
             ).execute()
         except Exception as exc:
-            print(f"[supabase-db] Failed to save folder {folder_id}: {exc}")
+            logger.warning("supabase-db failed to save folder %s: %s", folder_id, exc)
 
     def get_folder_metadata(self, folder_id: str) -> Optional[Dict[str, Any]]:
         if not self.enabled or not self._client:
@@ -244,7 +247,7 @@ class SupabaseDatabaseService:
             if data:
                 return data.get("metadata")
         except Exception as exc:
-            print(f"[supabase-db] Failed to fetch folder {folder_id}: {exc}")
+            logger.warning("supabase-db failed to fetch folder %s: %s", folder_id, exc)
         return None
 
     def list_folders_metadata(self) -> List[Dict[str, Any]]:
@@ -260,7 +263,7 @@ class SupabaseDatabaseService:
                 return []
             return [row.get("metadata") for row in rows if row.get("metadata")]
         except Exception as exc:
-            print(f"[supabase-db] Failed to list folders: {exc}")
+            logger.warning("supabase-db failed to list folders: %s", exc)
             return []
 
     def delete_folder_metadata(self, folder_id: str) -> None:
@@ -269,4 +272,4 @@ class SupabaseDatabaseService:
         try:
             self._client.table("folders_metadata").delete().eq("folder_id", folder_id).execute()
         except Exception as exc:
-            print(f"[supabase-db] Failed to delete folder {folder_id}: {exc}")
+            logger.warning("supabase-db failed to delete folder %s: %s", folder_id, exc)

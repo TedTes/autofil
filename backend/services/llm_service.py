@@ -1,6 +1,9 @@
 import json
+import logging
 from typing import Any, Dict, List, Optional
 from openai import OpenAI
+
+logger = logging.getLogger(__name__)
 
 class LLMService:
     def __init__(self, model: Optional[str] = None, temperature: float = 0.0, max_tokens: int = 1500):
@@ -45,8 +48,7 @@ class LLMService:
         )
 
         content = resp.choices[0].message.content
-        print("content")
-        print(content)
+        logger.debug("json_qa raw content: %s", content)
         # In some SDK versions content can be a list of parts; normalize to str
         if isinstance(content, list):
             # Expect list of {"type": "text", "text": {...}} or similar

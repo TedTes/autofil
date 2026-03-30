@@ -7,6 +7,7 @@ codebase can upload/download files without needing to know the SDK details.
 
 from __future__ import annotations
 
+import logging
 import mimetypes
 import os
 from typing import Dict, Optional
@@ -16,6 +17,8 @@ try:
 except ImportError:  # pragma: no cover - handled gracefully at runtime
     Client = None  # type: ignore
     create_client = None  # type: ignore
+
+logger = logging.getLogger(__name__)
 
 
 class SupabaseStorageService:
@@ -39,7 +42,7 @@ class SupabaseStorageService:
             try:
                 self._client = create_client(self.url, self.key)
             except Exception as exc:  # pragma: no cover - network init path
-                print(f"[supabase] Failed to initialize client: {exc}")
+                logger.warning("supabase storage failed to initialize client: %s", exc)
                 self.enabled = False
                 self._client = None
 
@@ -88,7 +91,7 @@ class SupabaseStorageService:
                 "content_type": content_type,
             }
         except Exception as exc:
-            print(f"[supabase] Upload failed for {storage_path}: {exc}")
+            logger.warning("supabase upload failed for %s: %s", storage_path, exc)
             return None
 
     # ------------------------------------------------------------- downloads
@@ -110,7 +113,7 @@ class SupabaseStorageService:
                 return data  # type: ignore[return-value]
             return result
         except Exception as exc:
-            print(f"[supabase] Download failed for {storage_path}: {exc}")
+            logger.warning("supabase download failed for %s: %s", storage_path, exc)
             return None
 
     def download_text(self, storage_path: str, encoding: str = "utf-8") -> Optional[str]:
@@ -121,7 +124,7 @@ class SupabaseStorageService:
         try:
             return data.decode(encoding)
         except Exception as exc:
-            print(f"[supabase] Failed to decode {storage_path}: {exc}")
+            logger.warning("supabase failed to decode %s: %s", storage_path, exc)
             return None
 
     # --------------------------------------------------------------- deletion
@@ -133,7 +136,7 @@ class SupabaseStorageService:
             bucket = self._client.storage.from_(self.bucket)
             bucket.remove([storage_path])
         except Exception as exc:
-            print(f"[supabase] Delete failed for {storage_path}: {exc}")
+            logger.warning("supabase delete failed for %s: %s", storage_path, exc)
 
     # ------------------------------------------------------------- signed URLs
     def create_signed_url(self, storage_path: str, expires_in: int = 3600) -> Optional[str]:
@@ -151,7 +154,7 @@ class SupabaseStorageService:
                 return data.get("signedUrl")
             return response
         except Exception as exc:
-            print(f"[supabase] Signed URL failed for {storage_path}: {exc}")
+            logger.warning("supabase signed URL failed for %s: %s", storage_path, exc)
             return None
 
     def get_public_url(self, storage_path: str) -> Optional[str]:
@@ -166,7 +169,7 @@ class SupabaseStorageService:
                 return data.get("publicUrl")
             return response
         except Exception as exc:
-            print(f"[supabase] Public URL failed for {storage_path}: {exc}")
+            logger.warning("supabase public URL failed for %s: %s", storage_path, exc)
             return None
 
     # --------------------------------------------------------------- listing
@@ -184,5 +187,5 @@ class SupabaseStorageService:
                 raise RuntimeError(response["error"])
             return response or []
         except Exception as exc:
-            print(f"[supabase] List failed for {path}: {exc}")
+            logger.warning("supabase list failed for %s: %s", path, exc)
             return []

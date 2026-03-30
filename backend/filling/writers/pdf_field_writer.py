@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Optional
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import (
@@ -11,6 +12,8 @@ from pypdf.generic import (
     TextStringObject,
 )
 from ..interfaces.writer import IPdfWriter
+
+logger = logging.getLogger(__name__)
 
 
 class PdfFieldWriter(IPdfWriter):
@@ -62,7 +65,7 @@ class PdfFieldWriter(IPdfWriter):
                 if page_updated:
                     continue
             except Exception as e:
-                print(f"Error updating field {field_name}: {e}")
+                logger.exception("error updating PDF field %s", field_name)
                 break
 
         return updated
@@ -90,7 +93,7 @@ class PdfFieldWriter(IPdfWriter):
                 if "/Fields" not in writer._root_object["/AcroForm"]:
                     writer._root_object["/AcroForm"][NameObject("/Fields")] = acro_form.get("/Fields", [])
         except Exception as e:
-            print(f"Error setting up /AcroForm: {e}")
+            logger.exception("error setting up AcroForm")
             raise
 
     def set_need_appearances(self, writer: PdfWriter) -> None:
@@ -111,7 +114,7 @@ class PdfFieldWriter(IPdfWriter):
                 NameObject("/NeedAppearances"): BooleanObject(True)
             })
         except Exception as e:
-            print(f"Warning: Failed to set NeedAppearances: {e}")
+            logger.warning("failed to set NeedAppearances: %s", e)
 
     def flatten_pdf(self, writer: PdfWriter) -> bool:
         """
@@ -129,7 +132,7 @@ class PdfFieldWriter(IPdfWriter):
             writer._flatten()
             return True
         except AttributeError:
-            print("Warning: Flattening not supported. Output may require viewer regeneration.")
+            logger.warning("flattening not supported by current pypdf writer")
             return False
 
     def get_checkbox_on_value(self, writer: PdfWriter, field_name: str) -> Optional[str]:

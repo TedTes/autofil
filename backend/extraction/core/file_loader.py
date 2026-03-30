@@ -102,6 +102,8 @@ class MimeDetector:
         'image/png',
         'image/tiff',
         'image/gif',
+        'image/bmp',
+        'image/webp',
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',  # docx
         'application/msword',  # doc
     }

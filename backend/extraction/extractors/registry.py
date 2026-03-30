@@ -5,19 +5,14 @@ Provides centralized access to extractors and automatic selection
 based on document type.
 """
 
+import logging
+from importlib import import_module
 from typing import Dict, Type, Optional, List
 from ..core.document import Document, DocumentType
 
-# Import all extractors explicitly
-from ..extractors.acord_125_extractor import ACORD125Extractor
-from ..extractors.acord_126_extractor import ACORD126Extractor
-from ..extractors.acord_130_extractor import ACORD130Extractor
-from ..extractors.acord_140_extractor import ACORD140Extractor
-from ..extractors.loss_run_extractor import LossRunExtractor
-from ..extractors.sov_extractor import SovExtractor
-from ..extractors.financial_statement_extractor import FinancialStatementExtractor
-from ..extractors.supplemental_extractor import SupplementalExtractor
 from ..extractors.generic_extractor import GenericExtractor
+
+logger = logging.getLogger(__name__)
 
 
 class ExtractorRegistry:
@@ -34,17 +29,25 @@ class ExtractorRegistry:
     def _register_defaults(cls):
         """Register all known extractors."""
         cls._registry.update({
-            DocumentType.ACORD_125: ACORD125Extractor,
-            DocumentType.ACORD_126: ACORD126Extractor,
-            DocumentType.ACORD_130: ACORD130Extractor,
-            DocumentType.ACORD_140: ACORD140Extractor,
-            DocumentType.LOSS_RUN: LossRunExtractor,
-            DocumentType.SOV: SovExtractor,
-            DocumentType.FINANCIAL_STATEMENT: FinancialStatementExtractor,
-            DocumentType.SUPPLEMENTAL: SupplementalExtractor,
             DocumentType.GENERIC: GenericExtractor,
             DocumentType.UNKNOWN: GenericExtractor,
         })
+        cls._register_if_available(DocumentType.ACORD_125, ".acord_125_extractor", "ACORD125Extractor")
+        cls._register_if_available(DocumentType.ACORD_126, ".acord_126_extractor", "ACORD126Extractor")
+        cls._register_if_available(DocumentType.ACORD_130, ".acord_130_extractor", "ACORD130Extractor")
+        cls._register_if_available(DocumentType.ACORD_140, ".acord_140_extractor", "ACORD140Extractor")
+        cls._register_if_available(DocumentType.LOSS_RUN, ".loss_run_extractor", "LossRunExtractor")
+        cls._register_if_available(DocumentType.SOV, ".sov_extractor", "SovExtractor")
+        cls._register_if_available(DocumentType.FINANCIAL_STATEMENT, ".financial_statement_extractor", "FinancialStatementExtractor")
+        cls._register_if_available(DocumentType.SUPPLEMENTAL, ".supplemental_extractor", "SupplementalExtractor")
+
+    @classmethod
+    def _register_if_available(cls, document_type: DocumentType, module_name: str, export_name: str) -> None:
+        try:
+            module = import_module(module_name, package=__package__)
+            cls._registry[document_type] = getattr(module, export_name)
+        except Exception as exc:
+            logger.warning("failed to register extractor %s for %s: %s", export_name, document_type.value, exc)
 
     @classmethod
     def register(cls, document_type: DocumentType, extractor_class: Type):

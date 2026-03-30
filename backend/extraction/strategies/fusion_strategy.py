@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from ..core.document import Document, DocumentType
 from ..models.extraction_result import ExtractionResult
 from ..extractors.factory import ExtractorFactory
+from ..utils.semantic_section_builder import SemanticSectionBuilder
 
 
 @dataclass
@@ -122,20 +123,13 @@ class FusionStrategy:
                     errors=["No data extracted from any document"]
                 )
             
-            # Step 2: Organize by document type
             organized = self._organize_by_type(individual_results)
-            
-            # Step 3: Merge data
-            fused_data = self._merge_data(organized, document_group)
-            
-            # Step 4: Cross-validate
+            fused_data = self._merge_canonical_results(individual_results, document_group)
+
+            warnings = []
             if self.enable_cross_validation:
-                validation_warnings = self._cross_validate(fused_data, organized)
-                warnings = validation_warnings
-            else:
-                warnings = []
-            
-            # Step 5: Add metadata
+                warnings = self._cross_validate_canonical(individual_results)
+
             fused_data['fusion_metadata'] = self._build_fusion_metadata(
                 document_group,
                 individual_results,
@@ -151,14 +145,85 @@ class FusionStrategy:
                 warnings=warnings,
                 confidence=confidence
             )
-            
         except Exception as e:
             return ExtractionResult(
                 success=False,
                 data={},
                 errors=[f"Fusion failed: {str(e)}"]
             )
-    
+
+    def _merge_canonical_results(
+        self,
+        results: List[Tuple[Document, ExtractionResult]],
+        document_group: DocumentGroup,
+    ) -> Dict[str, Any]:
+        merged_entities: Dict[str, List[Dict[str, Any]]] = {}
+        documents: List[Dict[str, Any]] = []
+
+        for document, result in results:
+            if not result.success or not isinstance(result.data, dict):
+                continue
+
+            documents.append(
+                {
+                    'file_name': document.file_name,
+                    'document_type': document.document_type.value,
+                    'confidence': result.confidence,
+                    'data': result.data,
+                }
+            )
+
+            sections = result.data.get('semantic_sections') or result.data.get('semanticSections') or []
+            entity_map = SemanticSectionBuilder.flatten(sections)
+
+            for field_id, values in entity_map.items():
+                for value in values:
+                    if not isinstance(value, dict):
+                        continue
+                    annotated = {
+                        **value,
+                        '_document_type': document.document_type.value,
+                        '_file_name': document.file_name,
+                    }
+                    merged_entities.setdefault(field_id, []).append(annotated)
+
+        return {
+            'submission_id': document_group.group_id,
+            'submission_date': datetime.utcnow().isoformat(),
+            'document_count': len(document_group.documents),
+            'documents': documents,
+            'merged_entities': merged_entities,
+        }
+
+    def _cross_validate_canonical(
+        self,
+        results: List[Tuple[Document, ExtractionResult]],
+    ) -> List[str]:
+        warnings: List[str] = []
+        merged_entities: Dict[str, Set[str]] = {}
+
+        for _, result in results:
+            if not result.success or not isinstance(result.data, dict):
+                continue
+            sections = result.data.get('semantic_sections') or result.data.get('semanticSections') or []
+            entity_map = SemanticSectionBuilder.flatten(sections)
+            for field_id, values in entity_map.items():
+                for value in values:
+                    if not isinstance(value, dict):
+                        continue
+                    raw_value = value.get('value')
+                    if raw_value in (None, '', [], {}):
+                        continue
+                    merged_entities.setdefault(field_id, set()).add(str(raw_value))
+
+        for field_id, distinct_values in merged_entities.items():
+            if len(distinct_values) > 1:
+                warnings.append(
+                    f"Conflicting values detected for {field_id}: {sorted(distinct_values)[:3]}"
+                )
+
+        return warnings
+            
     def _extract_all(self, document_group: DocumentGroup) -> List[Tuple[Document, ExtractionResult]]:
         """Extract data from all documents in group."""
         results = []

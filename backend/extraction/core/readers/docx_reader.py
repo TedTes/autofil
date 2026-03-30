@@ -12,7 +12,6 @@ from ..file_loader import reader_registry
 
 @reader_registry.register(
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',  # docx
-    'application/msword'  # doc
 )
 class DocxReader(BaseReader):
     """

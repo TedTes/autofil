@@ -4,8 +4,11 @@ Parser registry for managing all available parsers.
 Provides centralized access to parsers and their capabilities.
 """
 
+import logging
 from typing import Dict, Type, List, Optional
 from ..interfaces.parser import IParser
+
+logger = logging.getLogger(__name__)
 
 
 class ParserRegistry:
@@ -26,33 +29,33 @@ class ParserRegistry:
         try:
             from .pdf_field_parser import PdfFieldParser
             self.register('pdf_field', PdfFieldParser)
-        except ImportError:
-            pass
+        except ImportError as exc:
+            logger.warning("failed to register pdf_field parser: %s", exc)
         
         try:
             from .ocr_parser import OcrParser, OcrFallbackParser
             self.register('ocr', OcrParser)
             self.register('ocr_fallback', OcrFallbackParser)
-        except ImportError:
-            pass
+        except ImportError as exc:
+            logger.warning("failed to register ocr parsers: %s", exc)
         
         try:
             from .table_parser import TableParser
             self.register('table', TableParser)
-        except ImportError:
-            pass
+        except ImportError as exc:
+            logger.warning("failed to register table parser: %s", exc)
         
         try:
             from .excel_parser import ExcelParser
             self.register('excel', ExcelParser)
-        except ImportError:
-            pass
+        except ImportError as exc:
+            logger.warning("failed to register excel parser: %s", exc)
         
         try:
             from .image_parser import ImageParser
             self.register('image', ImageParser)
-        except ImportError:
-            pass
+        except ImportError as exc:
+            logger.warning("failed to register image parser: %s", exc)
     
     def register(self, name: str, parser_class: Type[IParser]):
         """

@@ -176,7 +176,6 @@ class GenericExtractor(IExtractor):
         for idx, image in enumerate(document.images):
             image_data = {
                 'image_index': idx,
-                'page': image.page,
                 'width': image.width,
                 'height': image.height,
                 'format': image.format,
@@ -192,7 +191,7 @@ class GenericExtractor(IExtractor):
         metadata = {
             'file_name': document.file_name,
             'file_extension': document.file_extension,
-            'file_size': document.file_size,
+            'file_size': document.metadata.get('file_size'),
             'mime_type': document.mime_type,
             'page_count': document.structure.page_count,
             'document_type': document.document_type.value,

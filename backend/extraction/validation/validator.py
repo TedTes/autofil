@@ -55,12 +55,13 @@ def validate(output: CanonicalOutput) -> CanonicalOutput:
             if fid == "Classification":
                 # At least one row with some real data
                 has_data = any(
-                    isinstance(getattr(v, "value", None), dict)
+                    isinstance((v or {}).get("value"), dict)
                     and any(
                         val not in ("", None, 0, 0.0)
-                        for val in v.value.values()
+                        for val in ((v or {}).get("value") or {}).values()
                     )
                     for v in values
+                    if isinstance(v, dict)
                 )
                 if not has_data:
                     missing.append(fid)
@@ -77,7 +78,7 @@ def validate(output: CanonicalOutput) -> CanonicalOutput:
     for fid, vals in entity_map.items():
         low = [
             v for v in vals
-            if getattr(v, "confidence", 1.0) < 0.70
+            if isinstance(v, dict) and float(v.get("confidence", 1.0)) < 0.70
         ]
         if low:
             warnings.append(

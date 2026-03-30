@@ -11,11 +11,8 @@ This module provides various parsers for different document types:
 All parsers implement the IParser interface.
 """
 
-from .pdf_field_parser import PdfFieldParser
-from .ocr_parser import OcrParser, OcrFallbackParser
-from .table_parser import TableParser
-from .excel_parser import ExcelParser
-from .image_parser import ImageParser
+import logging
+
 from .registry import ParserRegistry, parser_registry
 from .utils import (
     get_file_extension,
@@ -27,20 +24,34 @@ from .utils import (
     estimate_processing_time
 )
 
-__all__ = [
-    # Core parsers
-    'PdfFieldParser',
-    'OcrParser',
-    'OcrFallbackParser',
-    'TableParser',
-    'ExcelParser',
-    'ImageParser',
-    
-    # Registry
+logger = logging.getLogger(__name__)
+
+__all__ = []
+
+
+def _optional_import(module_name: str, *export_names: str) -> None:
+    try:
+        module = __import__(f"{__name__}.{module_name}", fromlist=list(export_names))
+        for export_name in export_names:
+            globals()[export_name] = getattr(module, export_name)
+            __all__.append(export_name)
+    except Exception as exc:
+        for export_name in export_names:
+            globals()[export_name] = None
+            if export_name not in __all__:
+                __all__.append(export_name)
+        logger.warning("failed to import parser module %s: %s", module_name, exc)
+
+
+_optional_import("pdf_field_parser", "PdfFieldParser")
+_optional_import("ocr_parser", "OcrParser", "OcrFallbackParser")
+_optional_import("table_parser", "TableParser")
+_optional_import("excel_parser", "ExcelParser")
+_optional_import("image_parser", "ImageParser")
+
+__all__.extend([
     'ParserRegistry',
     'parser_registry',
-    
-    # Utilities
     'get_file_extension',
     'validate_file_exists',
     'get_file_size_mb',
@@ -48,12 +59,10 @@ __all__ = [
     'clean_extracted_text',
     'truncate_text',
     'estimate_processing_time',
-    
-    # Helper functions
     'get_parser_for_file',
     'list_available_parsers',
     'get_supported_extensions'
-]
+])
 
 # Version info
 __version__ = '1.0.0'

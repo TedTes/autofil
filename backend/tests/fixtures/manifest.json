@@ -1,0 +1,9 @@
+[
+  {
+    "id": "acord_126_fillable_sample",
+    "path": "backend/tests/fixtures/ACORD_126_filled.pdf",
+    "document_type": "acord_126",
+    "expected_outcome": "extract",
+    "expected_fields": ["InsuredName"]
+  }
+]

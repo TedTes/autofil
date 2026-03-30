@@ -39,6 +39,8 @@ class ExtractionPipeline:
         use_classification: bool = True,
         classification_strategy: str = 'highest_confidence',
         min_classification_confidence: float = 0.5,
+        enable_ocr_enrichment: bool = True,
+        ocr_text_threshold: int = 50,
     ):
         """
         Initialize extraction pipeline.
@@ -51,6 +53,9 @@ class ExtractionPipeline:
         self.use_classification = use_classification
         self.classification_strategy = classification_strategy
         self.min_classification_confidence = min_classification_confidence
+        self.enable_ocr_enrichment = enable_ocr_enrichment
+        self.ocr_text_threshold = ocr_text_threshold
+        self._ocr_parser = None
         
         # Initialize components
         self.file_loader = UniversalFileLoader()
@@ -78,6 +83,7 @@ class ExtractionPipeline:
         """
         try:
             document = self._load_file(file_path)
+            document = self._maybe_enrich_with_ocr(document)
             document = self._apply_document_typing(document, override_document_type)
 
             support = assess_document_support(document)
@@ -139,6 +145,48 @@ class ExtractionPipeline:
     def _load_file(self, file_path: str) -> Document:
         """Load file into Document object."""
         return self.file_loader.load(file_path)
+
+    def _maybe_enrich_with_ocr(self, document: Document) -> Document:
+        """
+        Run OCR centrally before classification when the reader indicates it is needed.
+        """
+        if not self.enable_ocr_enrichment:
+            return document
+
+        requires_ocr = bool(document.metadata.get('requires_ocr'))
+        has_enough_text = bool(document.raw_text and len(document.raw_text.strip()) >= self.ocr_text_threshold)
+
+        if not requires_ocr or has_enough_text:
+            return document
+
+        try:
+            ocr_result = self._perform_ocr(document.file_path)
+            ocr_text = (ocr_result.get('text') or '').strip()
+
+            if ocr_text:
+                document.raw_text = ocr_text
+                document.metadata['ocr_applied'] = True
+                document.metadata['ocr_confidence'] = ocr_result.get('confidence')
+                document.metadata['ocr_page_count'] = ocr_result.get('page_count')
+                document.metadata['ocr_language'] = ocr_result.get('language')
+                document.metadata['requires_ocr'] = False
+
+            for warning in ocr_result.get('warnings', []):
+                document.add_warning(f"OCR: {warning}")
+
+        except Exception as exc:
+            document.metadata['ocr_applied'] = False
+            document.metadata['ocr_error'] = str(exc)
+            document.add_warning(f"OCR enrichment failed: {str(exc)}")
+
+        return document
+
+    def _perform_ocr(self, file_path: str) -> Dict[str, Any]:
+        if self._ocr_parser is None:
+            from .parsers.ocr_parser import OcrParser
+
+            self._ocr_parser = OcrParser()
+        return self._ocr_parser.extract_fields(file_path)
 
     def _apply_document_typing(
         self,
@@ -272,12 +320,15 @@ class ExtractionPipeline:
             'document_type': document.document_type.value,
             'classification_confidence': document.confidence,
             'classification_used': self.use_classification,
+            'ocr_enrichment_enabled': self.enable_ocr_enrichment,
+            'ocr_applied': bool(document.metadata.get('ocr_applied')),
         }
         result.metadata['document_support'] = assess_document_support(document)
         result.metadata['review_required'] = result.metadata['document_support']['needs_review']
         result.metadata['recommended_action'] = result.metadata['document_support']['recommended_action']
         result.metadata['stages'] = [
             'load',
+            'ocr_enrichment' if self.enable_ocr_enrichment else 'ocr_skipped',
             'classify' if self.use_classification else 'classify_skipped',
             'support_gate',
             'extract',
@@ -312,6 +363,8 @@ class ExtractionPipeline:
             'use_classification': self.use_classification,
             'classification_strategy': self.classification_strategy,
             'min_classification_confidence': self.min_classification_confidence,
+            'enable_ocr_enrichment': self.enable_ocr_enrichment,
+            'ocr_text_threshold': self.ocr_text_threshold,
             'available_classifiers': classifier_registry.list_classifiers() if self.use_classification else [],
             'available_extractors': list(ExtractorFactory.get_available_extractors().keys()),
         }

@@ -10,7 +10,7 @@ from ..interfaces.extractor import IExtractor
 from ..core.document import Document, DocumentType
 from ..core.schema import Metadata
 from ..models.extraction_result import ExtractionResult
-from ..parsers import PdfFieldParser, TableParser
+from ..parsers import PdfFieldParser
 from ..utils.canonical_output_builder import (
     SectionPayload,
     build_generic_canonical_output,
@@ -36,7 +36,6 @@ class ACORD130Extractor(IExtractor):
     def __init__(self):
         """Initialize ACORD 130 extractor."""
         self.pdf_parser = PdfFieldParser()
-        self.table_parser = TableParser()
         self.template_loader = VersionedTemplateLoader()
         self.template_recognizer = TemplateRecognizer(
             base_dir=self.template_loader.base_dir
@@ -67,7 +66,7 @@ class ACORD130Extractor(IExtractor):
                 if result.success:
                     return result
             
-            # Extract from tables
+            # Extract from reader-populated table data
             if document.tables:
                 result = self._extract_from_tables(document)
                 return result
@@ -122,7 +121,7 @@ class ACORD130Extractor(IExtractor):
         return ExtractionResult(success=True, data=canonical.to_dict(), confidence=0.8)
     
     def _extract_from_tables(self, document: Document) -> ExtractionResult:
-        """Extract classification codes and payroll from tables."""
+        """Extract classification codes and payroll from reader-populated tables."""
         classifications = []
         
         for table in document.tables:

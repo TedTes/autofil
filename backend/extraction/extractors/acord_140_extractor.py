@@ -10,7 +10,7 @@ from ..interfaces.extractor import IExtractor
 from ..core.document import Document, DocumentType
 from ..core.schema import Metadata
 from ..models.extraction_result import ExtractionResult
-from ..parsers import PdfFieldParser, TableParser
+from ..parsers import PdfFieldParser
 from ..utils.canonical_output_builder import (
     SectionPayload,
     build_generic_canonical_output,
@@ -52,7 +52,6 @@ class ACORD140Extractor(IExtractor):
     def __init__(self):
         """Initialize ACORD 140 extractor."""
         self.pdf_parser = PdfFieldParser()
-        self.table_parser = TableParser()
         self.template_loader = VersionedTemplateLoader()
         self.template_recognizer = TemplateRecognizer(
             base_dir=self.template_loader.base_dir
@@ -166,7 +165,7 @@ class ACORD140Extractor(IExtractor):
         )
     
     def _extract_locations_from_tables(self, document: Document) -> List[Dict[str, Any]]:
-        """Extract location summary rows from tables."""
+        """Extract location summary rows from reader-populated tables."""
         locations: List[Dict[str, Any]] = []
 
         if not document.tables:

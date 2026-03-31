@@ -84,8 +84,10 @@ export function TemplatesView({ onTemplateClick, onDownloadTemplate }: Templates
               <FileText className="w-6 h-6 text-green-600" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Templates & Forms</h1>
-              <p className="text-sm text-gray-600">Access ACORD forms and blank templates</p>
+              <h1 className="text-2xl font-bold text-gray-900">Form Library</h1>
+              <p className="text-sm text-gray-600">
+                Preview supported output forms before generating them
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -117,7 +119,7 @@ export function TemplatesView({ onTemplateClick, onDownloadTemplate }: Templates
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
             type="text"
-            placeholder="Search forms by name or type..."
+            placeholder="Search forms by name, ACORD number, or output type..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
@@ -129,9 +131,9 @@ export function TemplatesView({ onTemplateClick, onDownloadTemplate }: Templates
       <div className="flex-1 overflow-y-auto p-6">
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="mb-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Available ACORD Forms</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Available Forms</h3>
             <p className="text-sm text-gray-600">
-              Preview of forms that are currently configured for auto-filling
+              Browse supported forms and exports that can be generated from submissions
             </p>
           </div>
 

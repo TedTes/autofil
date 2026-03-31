@@ -72,7 +72,7 @@ const NAV_ITEMS: Array<{
   { id: 'submissions', label: 'Submissions', icon: FileStack, route: 'submissions' },
   { id: 'clients', label: 'Accounts', icon: Users, route: 'clients' },
   { id: 'documents', label: 'Documents', icon: FolderOpen, route: 'documents' },
-  { id: 'templates', label: 'Templates & Forms', icon: FileText, route: 'templates' },
+  { id: 'templates', label: 'Form Library', icon: FileText, route: 'templates' },
   { id: 'reports', label: 'Reports', icon: BarChart3, route: 'reports' },
 ]
 
@@ -574,7 +574,7 @@ const handleMobileSidebarClose = () => {
   desktopSidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'
 }`}>
         {/* Header */}
-        <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
+        <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-30">
           <div className="px-4 sm:px-6 lg:px-8">
             {currentView.type === 'client-detail' ? (
               <div className="flex h-16 items-center gap-4 min-w-0">
@@ -621,7 +621,7 @@ const handleMobileSidebarClose = () => {
                 )}
 
                 {/* Divider */}
-                <div className="h-6 w-px bg-gray-200 flex-shrink-0" />
+                <div className="h-5 w-px bg-gray-200 flex-shrink-0 mx-2" />
 
                 {/* Right: avatar menu */}
                 <AvatarMenu
@@ -852,7 +852,7 @@ function AvatarMenu({
     <div ref={ref} className="relative flex-shrink-0">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-white text-sm font-semibold hover:bg-gray-700 transition-colors"
+        className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-white text-sm font-semibold hover:bg-gray-700 active:scale-95 transition-all duration-100"
         aria-label="User menu"
       >
         {avatarInitial}
@@ -910,34 +910,37 @@ function AvatarMenu({
 
 function ClientDetailHeaderActions({ actions }: { actions: ClientDetailActions }) {
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1.5">
+      {/* Secondary: ghost buttons — icon primary, label secondary */}
       <button
         onClick={actions.openNewSubmission}
         title="New Submission"
-        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+        className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 rounded-lg hover:bg-gray-100 active:scale-95 active:bg-gray-200 transition-all duration-100"
       >
         <FileStack className="w-4 h-4 flex-shrink-0" />
-        <span className="hidden sm:inline text-xs">New Submission</span>
+        <span className="hidden sm:inline text-xs font-medium">New Submission</span>
       </button>
       <button
         onClick={actions.openAddFiles}
         disabled={actions.isUploading}
         title="Add Files"
-        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium text-gray-600 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 rounded-lg hover:bg-gray-100 active:scale-95 active:bg-gray-200 transition-all duration-100 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
       >
         <FolderOpen className="w-4 h-4 flex-shrink-0" />
-        <span className="hidden sm:inline text-xs">Add Files</span>
+        <span className="hidden sm:inline text-xs font-medium">Add Files</span>
       </button>
+
+      {/* Primary: Generate — filled, weighted */}
       <button
         onClick={actions.openGenerate}
         disabled={!actions.canGenerate}
-        title={!actions.canGenerate ? 'Generate becomes available once merged review data is ready.' : 'Generate forms'}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors disabled:cursor-not-allowed bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400"
+        title={!actions.canGenerate ? 'Select files to enable generation' : undefined}
+        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-all duration-100 active:scale-95 disabled:cursor-not-allowed bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800 disabled:bg-gray-100 disabled:text-gray-400 disabled:active:scale-100"
       >
         <FileText className="w-4 h-4 flex-shrink-0" />
-        <span className="text-xs font-semibold">Generate</span>
+        <span className="text-xs">Generate</span>
         {actions.selectedTemplateCount > 0 && (
-          <span className="rounded-full bg-white/25 px-1.5 py-0.5 text-xs font-bold leading-none">
+          <span className="rounded-full bg-white/25 px-1.5 py-0.5 text-[11px] font-bold leading-none tabular-nums">
             {actions.selectedTemplateCount}
           </span>
         )}

@@ -2,13 +2,11 @@
 
 import React, { useRef, useState, useEffect,useCallback, useMemo } from 'react'
 import { useClientSubmissions,useTemplateLibrary } from '@/hooks'
-import { fillPdf, downloadPDF} from '@/lib/api-client'
+import { fillPdf, downloadPDF, updateSubmissionData} from '@/lib/api-client'
 import {GenerateOutputsModal,UploadOrMergedDataPanel} from "@/components/client"
-import type { ClientSubmissionPackage,UploadedRow  } from '@/types'
+import type { ClientSubmissionPackage,UploadedRow, MergedData, ClientDetailActions  } from '@/types'
 import { CreateSubmissionModal,DeleteConfirmationModal } from '@/components'
 import {
-  ArrowLeft,
-  Building2,
   Calendar,
   FileText,
   Upload,
@@ -26,7 +24,6 @@ import {
   Table,
   FolderOpen,
   Folder,
-  FolderPlus,
   Combine,
   Plus,
   Trash2
@@ -92,6 +89,16 @@ type StatusBadgeConfig = {
   label: string
   color: string
   icon: typeof Upload
+}
+
+function hasRenderableMergedData(
+  mergedData: { semantic_sections?: Array<{ fields?: Array<{ values?: unknown[] }> }> } | null | undefined
+): boolean {
+  return Boolean(
+    mergedData?.semantic_sections?.some(
+      (section) => section.fields?.some((field) => Array.isArray(field.values) && field.values.length > 0)
+    )
+  )
 }
 
 // ============================================================================
@@ -541,7 +548,7 @@ function CompactFolderList({
         }}
         className="text-xs text-blue-600 hover:text-blue-700 font-medium hover:underline"
       >
-        {selectedInputFilenames.length === totalInputs ? 'Deselect All' : 'Select All'}
+        {selectedInputFilenames.length === totalInputs ? 'Exclude All' : 'Include All'}
       </button>
     </div>
 
@@ -556,12 +563,13 @@ function CompactFolderList({
             className={`flex items-center gap-2 p-2 rounded-lg border transition-colors ${
               isSelected
                 ? 'bg-blue-50 border-blue-200'
-                : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                : 'bg-gray-50 border-gray-200 hover:bg-gray-100 opacity-80'
             }`}
           >
             <label 
               className="flex items-center cursor-pointer"
               onClick={(e) => e.stopPropagation()}
+              title={isSelected ? 'Included in merged review data' : 'Excluded from merged review data'}
             >
               <input
                 type="checkbox"
@@ -585,11 +593,18 @@ function CompactFolderList({
               <p className="text-xs font-medium text-gray-900 truncate">
                 {input.filename}
               </p>
-              {input.confidence !== undefined && (
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Confidence: {Math.round(input.confidence * 100)}%
-                </p>
-              )}
+              <div className="flex items-center gap-2 mt-0.5">
+                {input.confidence !== undefined && (
+                  <p className="text-xs text-gray-500">
+                    Confidence: {Math.round(input.confidence * 100)}%
+                  </p>
+                )}
+                {!isSelected && (
+                  <span className="text-[11px] font-medium text-gray-400">
+                    Excluded
+                  </span>
+                )}
+              </div>
             </button>
             {inputKey && (
               <button
@@ -646,16 +661,16 @@ interface ClientDetailViewProps {
   clientId: string
   clientName?: string
   initialSubmissionId?: string
-  onNavigateBack?: () => void
   onFileClick?: (submissionId: string, filename?: string, inputId?: string) => void
+  onActionsReady?: (actions: ClientDetailActions | null) => void
 }
 
 export function ClientDetailView({
   clientId,
   clientName,
   initialSubmissionId,
-  onNavigateBack,
   onFileClick,
+  onActionsReady,
 }: ClientDetailViewProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -687,6 +702,7 @@ export function ClientDetailView({
     mergedData,
     isMergedDataLoading,
     mergedDataError,
+    loadMergedData,
 
     availableTemplates,
     selectedTemplateIds,
@@ -821,12 +837,41 @@ const [isCreating, setIsCreating] = useState(false)
       setTemplates(libraryTemplates)
     }
   }, [libraryTemplates, setTemplates])
-  const handleEditMergedField = useCallback((fieldPath: string, value: unknown) => {
-    console.log('Edit merged field:', fieldPath, value)
-  }, [])
+  const handleSaveMergedData = useCallback(async (nextMergedData: MergedData) => {
+    if (!activePackageId) return
+    await updateSubmissionData(activePackageId, nextMergedData as unknown as Record<string, unknown>)
+    await refreshClient()
+    await loadMergedData(activePackageId)
+  }, [activePackageId, refreshClient, loadMergedData])
   const hasExtractedFiles = activePackage?.inputs?.some(
     input => input.extraction_status === 'extracted' || input.extraction_status === 'ready'
   ) || false
+  const reviewDataReady = hasRenderableMergedData(mergedData)
+
+  const workflowState = useMemo(() => {
+    if (!activePackage) return null
+    const inputs = activePackage.inputs || []
+    const outputs = activePackage.outputs || []
+    if (outputs.length > 0) {
+      return { label: 'Forms Generated', className: 'bg-green-100 text-green-700 border-green-200' }
+    }
+    if (inputs.some(i => i.extraction_status === 'error')) {
+      return { label: 'Needs Review', className: 'bg-red-100 text-red-700 border-red-200' }
+    }
+    if (hasExtractedFiles && reviewDataReady) {
+      return { label: 'Ready to Generate', className: 'bg-purple-100 text-purple-700 border-purple-200' }
+    }
+    if (hasExtractedFiles) {
+      return { label: 'Review Data Pending', className: 'bg-amber-100 text-amber-700 border-amber-200' }
+    }
+    if (inputs.some(i => i.extraction_status === 'extracting')) {
+      return { label: 'Extracting...', className: 'bg-blue-100 text-blue-700 border-blue-200' }
+    }
+    if (inputs.length > 0) {
+      return { label: 'Review Required', className: 'bg-yellow-100 text-yellow-700 border-yellow-200' }
+    }
+    return null
+  }, [activePackage, hasExtractedFiles, reviewDataReady])
 
 
   const handleGenerateOutputs = useCallback(async () => {
@@ -868,7 +913,9 @@ const [isCreating, setIsCreating] = useState(false)
     packageId: null,
   })
 
-  const triggerFileUpload = () => fileInputRef.current?.click()
+  const triggerFileUpload = useCallback(() => {
+    fileInputRef.current?.click()
+  }, [])
 
   const handleFileInputChange: React.ChangeEventHandler<HTMLInputElement> = (event) => {
     const files = Array.from(event.target.files ?? [])
@@ -876,9 +923,9 @@ const [isCreating, setIsCreating] = useState(false)
     event.target.value = ''
   }
 
-  const handleCreateSubmissionClick = () => {
+  const handleCreateSubmissionClick = useCallback(() => {
     setIsCreateModalOpen(true)
-  }
+  }, [])
   
   const handleConfirmCreateSubmission = async (name: string) => {
     setIsCreating(true)
@@ -893,11 +940,33 @@ const [isCreating, setIsCreating] = useState(false)
     }
   }
   
-  const handleCloseCreateModal = () => {
+  const handleCloseCreateModal = useCallback(() => {
     if (!isCreating) {
       setIsCreateModalOpen(false)
     }
-  }
+  }, [isCreating])
+
+  useEffect(() => {
+    if (!onActionsReady) return
+    onActionsReady({
+      canGenerate: Boolean(availableTemplates.length > 0 && !isMergedDataLoading && reviewDataReady),
+      selectedTemplateCount: selectedTemplateIds.length,
+      isUploading,
+      openNewSubmission: handleCreateSubmissionClick,
+      openGenerate: () => setIsGenerateModalOpen(true),
+      openAddFiles: triggerFileUpload,
+    })
+    return () => onActionsReady(null)
+  }, [
+    onActionsReady,
+    availableTemplates.length,
+    isMergedDataLoading,
+    reviewDataReady,
+    selectedTemplateIds.length,
+    isUploading,
+    handleCreateSubmissionClick,
+    triggerFileUpload,
+  ])
 
   const handleViewFile = (submissionId: string, filename?: string, inputId?: string) => {
     if (filename) {
@@ -952,59 +1021,6 @@ const [isCreating, setIsCreating] = useState(false)
         className="hidden"
       />
 
-      {/* Top Bar*/}
-     {/* SPLIT HEADER - Client info on left, Package info on right */}
-<div className="bg-white border-b border-gray-200 px-4 py-2.5 flex-shrink-0">
-  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-    {/* LEFT: Client Stats */}
-    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-      <button
-        onClick={onNavigateBack}
-        className="p-1.5 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100 transition-colors flex-shrink-0"
-        title="Back to clients"
-      >
-        <ArrowLeft className="w-5 h-5" />
-      </button>
-      
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:text-sm text-gray-600">
-        <Building2 className="w-4 h-4 flex-shrink-0" />
-        <span className="font-medium text-gray-700">{clientName || 'Client'}</span>
-        <span className="text-gray-400">•</span>
-        <span>{stats.totalFiles} files</span>
-        <span className="text-gray-400">•</span>
-        <span className="text-emerald-600 font-medium">
-          {stats.extractedFiles}/{stats.totalFiles} extracted
-        </span>
-        <span className="text-gray-400">•</span>
-        <span>{stats.totalPackages} packages</span>
-      </div>
-    </div>
-
-    {/* RIGHT: Active Package Info (if merged data is shown) */}
-    {hasExtractedFiles && activePackage && (
-  <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
-    <button
-      onClick={() => setIsGenerateModalOpen(true)}
-      disabled={availableTemplates.length === 0 || isMergedDataLoading}
-      className="inline-flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-xs sm:text-sm font-semibold rounded-lg hover:bg-blue-700 transition-all shadow-sm disabled:bg-gray-300 disabled:cursor-not-allowed active:scale-95 active:shadow-inner cursor-pointer"
-    >
-      <FileText className="w-4 h-4" />
-      <span>Generate</span>
-      <span className="text-xs opacity-90">({selectedTemplateIds.length})</span>
-    </button>
-    <button
-      onClick={triggerFileUpload}
-      disabled={isUploading}
-      className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-gray-700 text-xs sm:text-sm font-medium rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 active:bg-gray-100 active:border-gray-500 cursor-pointer"
-    >
-      <Plus className="w-3.5 h-3.5" />
-      <span>Add Files</span>
-    </button>
-  </div>
-)}
-  </div>
-</div>
-
       {/* Main Content - TWO COLUMN LAYOUT WITH PROPER SCROLLING */}
       <div className="flex-1 min-h-0 overflow-hidden">
         <div className="h-full grid grid-cols-1 lg:grid-cols-3 gap-4 p-4">
@@ -1015,14 +1031,6 @@ const [isCreating, setIsCreating] = useState(false)
     {/* Submissions content with "New Submission" button at top */}
     <div className="flex-1 min-h-0 overflow-y-auto">
       <div className="p-3 space-y-2">
-        {/* New Package Button - Dashed style */}
-        <button
-  onClick={handleCreateSubmissionClick}
-            className="w-full py-3 px-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 text-sm text-gray-600 hover:text-blue-600 transition-all flex items-center justify-center gap-2 group"
->
-  <FolderPlus className="w-4 h-4 group-hover:scale-110 transition-transform" />
-  <span className="font-medium">New Submission</span>  
-</button>
         {packagesToRender.length === 0 ? (
           initialSubmissionId ? (
             <div className="text-center py-12">
@@ -1089,6 +1097,9 @@ const [isCreating, setIsCreating] = useState(false)
   <div className="h-full flex-1 min-h-0">
     <UploadOrMergedDataPanel
       hasExtractedFiles={hasExtractedFiles}
+      includedInputCount={
+        activePackage?.inputs?.filter((input) => input.included_in_merge !== false).length || 0
+      }
       mergedData={mergedData}
       isMergedDataLoading={isMergedDataLoading}
       uploadedRows={uploadedRows}
@@ -1100,7 +1111,7 @@ const [isCreating, setIsCreating] = useState(false)
       onUploadMore={triggerFileUpload}
       onRemoveRow={removeRow}
       onViewFile={handleViewFile}
-      onEditMergedField={handleEditMergedField}
+      onSaveMergedData={handleSaveMergedData}
       FileUploadDropZoneComponent={FileUploadDropZone}
     />
     {outputState.packageId === activePackageId && (outputState.message || outputState.error) && (

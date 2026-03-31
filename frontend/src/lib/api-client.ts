@@ -449,6 +449,24 @@ export async function getSubmissionPackage(submissionId: string): Promise<Client
   }
 }
 
+export async function updateSubmissionInputInclusion(
+  submissionId: string,
+  inputId: string,
+  included: boolean
+): Promise<ClientSubmissionPackage> {
+  try {
+    const response = await api.patch(`/submissions/${submissionId}/inputs/${inputId}/include`, {
+      included,
+    })
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to update input inclusion')
+    }
+    return response.data.data as ClientSubmissionPackage
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
 export interface SubmissionTemplateSummary {
   template_id: string
   name: string

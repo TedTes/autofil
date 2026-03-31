@@ -72,6 +72,7 @@ export interface Submission {
     extraction_status?: 'extracted' | 'extracting' | 'error' | 'ready'
     uploaded_at: string
     confidence?: number
+    included_in_merge?: boolean
   }
 
   export interface SubmissionOutputFile {

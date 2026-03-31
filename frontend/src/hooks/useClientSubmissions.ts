@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Client, ClientSubmissionPackage,OutputTemplate, TemplateSelection, GenerateOutputsResponse } from '@/types'
-import {deleteInput, deleteOutput, deleteSubmission, generateOutputs as generateOutputsAPI, getClientById, getClientSubmissions, createClientSubmission, uploadPdf, getMergedData,calculateTemplateReadiness, getSubmissionPackage} from '@/lib'
+import {deleteInput, deleteOutput, deleteSubmission, generateOutputs as generateOutputsAPI, getClientById, getClientSubmissions, createClientSubmission, uploadPdf, getMergedData,calculateTemplateReadiness, getSubmissionPackage, updateSubmissionInputInclusion} from '@/lib'
 import useToast from '@/hooks/useToast' 
 import type { MergedData,UploadedRow } from '@/types'
 
@@ -289,28 +289,59 @@ useEffect(() => {
     setUploadedRows(prev => prev.filter(row => row.submissionId !== submissionId))
   }
 
-  // ---- INPUT selection management ----
-  const toggleInputSelection = (submissionId: string, inputId?: string) => {
+  // ---- INPUT inclusion management ----
+  const toggleInputSelection = async (submissionId: string, inputId?: string) => {
     if (!submissionId || !inputId) return
-    setSelectedInputsByPackage(prev => {
-      const current = prev[submissionId] || []
-      const exists = current.includes(inputId)
-      const nextSelections = exists
-        ? current.filter(id => id !== inputId)
-        : [...current, inputId]
-      return { ...prev, [submissionId]: nextSelections }
-    })
+    const current = selectedInputsByPackage[submissionId] || []
+    const nextIncluded = !current.includes(inputId)
+    const nextSelections = nextIncluded
+      ? [...current, inputId]
+      : current.filter(id => id !== inputId)
+
+    setSelectedInputsByPackage(prev => ({ ...prev, [submissionId]: nextSelections }))
+    setMergedDataError(null)
+
+    try {
+      await updateSubmissionInputInclusion(submissionId, inputId, nextIncluded)
+      await loadClientData({ silent: true })
+      if (activePackageId === submissionId) {
+        await loadMergedData(submissionId)
+      }
+    } catch (err) {
+      setSelectedInputsByPackage(prev => ({ ...prev, [submissionId]: current }))
+      const errorMsg = err instanceof Error ? err.message : 'Failed to update file inclusion'
+      setWorkflowError(errorMsg)
+      toast.error(errorMsg)
+    }
   }
 
-  const selectAllInputs = (submissionId: string, inputIds: (string | undefined)[]) => {
+  const selectAllInputs = async (submissionId: string, inputIds: (string | undefined)[]) => {
     if (!submissionId) return
     const available = inputIds.filter((id): id is string => Boolean(id))
     if (!available.length) return
-    setSelectedInputsByPackage(prev => {
-      const current = prev[submissionId] || []
-      const allSelected = available.every(id => current.includes(id))
-      return { ...prev, [submissionId]: allSelected ? [] : available }
-    })
+    const current = selectedInputsByPackage[submissionId] || []
+    const targetIncluded = !available.every(id => current.includes(id))
+    const nextSelections = targetIncluded ? available : []
+
+    setSelectedInputsByPackage(prev => ({ ...prev, [submissionId]: nextSelections }))
+    setMergedDataError(null)
+
+    try {
+      await Promise.all(
+        available.map((inputId) =>
+          updateSubmissionInputInclusion(submissionId, inputId, targetIncluded)
+        )
+      )
+      await loadClientData({ silent: true })
+      if (activePackageId === submissionId) {
+        await loadMergedData(submissionId)
+      }
+    } catch (err) {
+      setSelectedInputsByPackage(prev => ({ ...prev, [submissionId]: current }))
+      const errorMsg = err instanceof Error ? err.message : 'Failed to update file inclusion'
+      setWorkflowError(errorMsg)
+      toast.error(errorMsg)
+    }
   }
 
   const clearInputSelection = (submissionId: string) => {
@@ -424,15 +455,15 @@ useEffect(() => {
     })
   }, [resolvedPackages, initialSubmissionId])
 
-  // Clean up invalid selections when packages change
+  // Sync included-input state from package metadata and clean up invalid selections
   useEffect(() => {
-    setSelectedInputsByPackage(prev => {
-      const validIds = new Set(resolvedPackages.map(pkg => pkg.submission_id))
+    setSelectedInputsByPackage(() => {
       const next: Record<string, string[]> = {}
-      for (const [pkgId, selections] of Object.entries(prev)) {
-        if (validIds.has(pkgId)) {
-          next[pkgId] = selections
-        }
+      for (const pkg of resolvedPackages) {
+        next[pkg.submission_id] = (pkg.inputs || [])
+          .filter(input => input.included_in_merge !== false)
+          .map(input => input.input_id || input.filename)
+          .filter((id): id is string => Boolean(id))
       }
       return next
     })

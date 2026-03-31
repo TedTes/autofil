@@ -4,10 +4,20 @@ import React from 'react'
 import MergedDataView from '@/components/views/MergedDataView'
 import type { MergedData,UploadedRow } from '@/types'
 
+function hasRenderableMergedData(mergedData: MergedData | null | undefined): boolean {
+  return Boolean(
+    mergedData &&
+      Array.isArray(mergedData.semantic_sections) &&
+      mergedData.semantic_sections.some(
+        (section) => Array.isArray(section.fields) && section.fields.some((field) => field.values?.length)
+      )
+  )
+}
 
 interface UploadOrMergedDataPanelProps {
   // Condition check
   hasExtractedFiles: boolean
+  includedInputCount?: number
   
   // Merged data (shown when hasExtractedFiles = true)
   mergedData: MergedData | null
@@ -25,7 +35,7 @@ interface UploadOrMergedDataPanelProps {
   onUploadMore: () => void
   onRemoveRow: (id: string) => void
   onViewFile: (submissionId: string, filename?: string, inputId?: string) => void
-  onEditMergedField?: (fieldPath: string, value: unknown) => void
+  onSaveMergedData?: (data: MergedData) => Promise<void> | void
 
   // Reference to the FileUploadDropZone component
   FileUploadDropZoneComponent: React.ComponentType<{
@@ -50,6 +60,7 @@ interface UploadOrMergedDataPanelProps {
  */
 export default function UploadOrMergedDataPanel({
   hasExtractedFiles,
+  includedInputCount = 0,
   mergedData,
   isMergedDataLoading,
   uploadedRows,
@@ -61,28 +72,53 @@ export default function UploadOrMergedDataPanel({
   onUploadMore,
   onRemoveRow,
   onViewFile,
-  onEditMergedField,
+  onSaveMergedData,
   FileUploadDropZoneComponent,
 
 }: UploadOrMergedDataPanelProps) {
-  // Show existing dropzone if no extracted files yet
-  if (!hasExtractedFiles) {
+  const shouldShowMergedData = hasExtractedFiles && (isMergedDataLoading || hasRenderableMergedData(mergedData))
+  const hasIncludedInputs = includedInputCount > 0
+
+  if (!shouldShowMergedData) {
     return (
-      <FileUploadDropZoneComponent
-        rows={uploadedRows}
-        isUploading={isUploading}
-        uploadStatus={uploadStatus}
-        message={message}
-        error={error}
-        onUploadMore={onUploadMore}
-        onRemove={onRemoveRow}
-        onView={onViewFile}
-        activePackageName={activePackageName}
-      />
+      <div className="h-full flex flex-col min-h-0 gap-3">
+        {hasExtractedFiles && !isMergedDataLoading && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+            {hasIncludedInputs ? (
+              <>
+                <p className="text-sm font-medium text-amber-900">Merged review data is not available yet.</p>
+                <p className="text-xs text-amber-700 mt-1">
+                  Your extracted files are still being assembled into submission review data.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-medium text-amber-900">No files are currently included in review.</p>
+                <p className="text-xs text-amber-700 mt-1">
+                  Include one or more files on the left to rebuild merged review data for this submission.
+                </p>
+              </>
+            )}
+          </div>
+        )}
+
+        <div className="flex-1 min-h-0">
+          <FileUploadDropZoneComponent
+            rows={uploadedRows}
+            isUploading={isUploading}
+            uploadStatus={uploadStatus}
+            message={message}
+            error={error}
+            onUploadMore={onUploadMore}
+            onRemove={onRemoveRow}
+            onView={onViewFile}
+            activePackageName={activePackageName}
+          />
+        </div>
+      </div>
     )
   }
 
-  // Show merged data view with "Add More Files" button
   return (
     <div className="h-full flex flex-col min-h-0 bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden relative">
       {/* Header with "Add More Files" button */}
@@ -90,7 +126,7 @@ export default function UploadOrMergedDataPanel({
       <div className="flex-1 overflow-y-auto min-h-0">
         <MergedDataView
           mergedData={mergedData}
-          onEditField={onEditMergedField}
+          onSaveData={onSaveMergedData}
           isLoading={isMergedDataLoading}
         />
       </div>

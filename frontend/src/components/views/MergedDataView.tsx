@@ -1,24 +1,37 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   ChevronDown,
   ChevronRight,
+  Pencil,
+  Check,
+  X,
   Info,
 } from 'lucide-react'
 import type { MergedData, SemanticField, SemanticSection } from '@/types'
 
 interface MergedDataViewProps {
   mergedData: MergedData | null
-  onEditField?: (fieldPath: string, value: unknown) => void
+  onSaveData?: (data: MergedData) => Promise<void> | void
   isLoading?: boolean
 }
 
 export default function MergedDataView({
   mergedData,
+  onSaveData,
   isLoading = false,
 }: MergedDataViewProps) {
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
+  const [isEditing, setIsEditing] = useState(false)
+  const [draftData, setDraftData] = useState<MergedData | null>(mergedData)
+  const [isSaving, setIsSaving] = useState(false)
+
+  useEffect(() => {
+    if (!isEditing) {
+      setDraftData(mergedData)
+    }
+  }, [mergedData, isEditing])
 
   if (isLoading) {
     return <LoadingSkeleton />
@@ -29,7 +42,8 @@ export default function MergedDataView({
     return <EmptyState />
   }
 
-  const orderedSections = [...sections].sort(
+  const displayData = isEditing ? draftData : mergedData
+  const orderedSections = [...(displayData?.semantic_sections ?? [])].sort(
     (a, b) => (a.priority ?? 0) - (b.priority ?? 0)
   )
 
@@ -45,8 +59,106 @@ export default function MergedDataView({
     })
   }
 
+  const updateFieldValue = (sectionKey: string, fieldId: string, value: unknown) => {
+    setDraftData((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        semantic_sections: (prev.semantic_sections || []).map((section) => {
+          if (section.key !== sectionKey) return section
+          return {
+            ...section,
+            fields: (section.fields || []).map((field) => {
+              if (field.id !== fieldId) return field
+              const values = field.values || []
+              if (!values.length) return field
+              return {
+                ...field,
+                values: [
+                  {
+                    ...values[0],
+                    value,
+                    confidence: Math.min(values[0].confidence ?? 1, 1),
+                    source: {
+                      ...(values[0].source || {}),
+                      extraction_rule: 'manual_edit',
+                    },
+                    tags: Array.from(new Set([...(values[0].tags || []), 'manual_edit'])),
+                  },
+                  ...values.slice(1),
+                ],
+              }
+            }),
+          }
+        }),
+      }
+    })
+  }
+
+  const handleCancel = () => {
+    setDraftData(mergedData)
+    setIsEditing(false)
+  }
+
+  const handleSave = async () => {
+    if (!draftData || !onSaveData) {
+      setIsEditing(false)
+      return
+    }
+    setIsSaving(true)
+    try {
+      await onSaveData(draftData)
+      setIsEditing(false)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   return (
     <div className="h-full flex flex-col bg-gray-50">
+      <div className="border-b border-gray-200 bg-white px-4 py-3 sm:px-5">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900">Merged Review Data</h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Review and refine the submission data used for generation.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {isEditing ? (
+              <>
+                <button
+                  type="button"
+                  onClick={handleCancel}
+                  disabled={isSaving}
+                  className="inline-flex items-center rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                >
+                  <X className="w-4 h-4 mr-1.5" />
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+                >
+                  <Check className="w-4 h-4 mr-1.5" />
+                  {isSaving ? 'Saving...' : 'Save'}
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsEditing(true)}
+                className="inline-flex items-center rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                <Pencil className="w-4 h-4 mr-1.5" />
+                Edit
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
       <div className="flex-1 overflow-y-auto px-3 py-4 sm:px-5 sm:py-6 lg:px-6">
         <div className="max-w-5xl mx-auto space-y-3 sm:space-y-4">
           {orderedSections.map((section) => (
@@ -55,6 +167,8 @@ export default function MergedDataView({
               section={section}
               isCollapsed={collapsedSections.has(section.key)}
               onToggle={() => toggleSection(section.key)}
+              isEditing={isEditing}
+              onChangeFieldValue={updateFieldValue}
             />
           ))}
         </div>
@@ -67,9 +181,17 @@ interface SemanticSectionCardProps {
   section: SemanticSection
   isCollapsed: boolean
   onToggle: () => void
+  isEditing: boolean
+  onChangeFieldValue: (sectionKey: string, fieldId: string, value: unknown) => void
 }
 
-function SemanticSectionCard({ section, isCollapsed, onToggle }: SemanticSectionCardProps) {
+function SemanticSectionCard({
+  section,
+  isCollapsed,
+  onToggle,
+  isEditing,
+  onChangeFieldValue,
+}: SemanticSectionCardProps) {
   const visibleFields = (section.fields || []).filter(
     (field) => field.values && field.values.length > 0
   )
@@ -111,7 +233,13 @@ function SemanticSectionCard({ section, isCollapsed, onToggle }: SemanticSection
       {!isCollapsed && (
         <div className="px-4 sm:px-5 pb-4 space-y-3">
           {visibleFields.map((field) => (
-            <SemanticFieldRow key={field.id} field={field} />
+            <SemanticFieldRow
+              key={field.id}
+              sectionKey={section.key}
+              field={field}
+              isEditing={isEditing}
+              onChangeFieldValue={onChangeFieldValue}
+            />
           ))}
         </div>
       )}
@@ -119,7 +247,17 @@ function SemanticSectionCard({ section, isCollapsed, onToggle }: SemanticSection
   )
 }
 
-function SemanticFieldRow({ field }: { field: SemanticField }) {
+function SemanticFieldRow({
+  sectionKey,
+  field,
+  isEditing,
+  onChangeFieldValue,
+}: {
+  sectionKey: string
+  field: SemanticField
+  isEditing: boolean
+  onChangeFieldValue: (sectionKey: string, fieldId: string, value: unknown) => void
+}) {
   const [showAllValues, setShowAllValues] = useState(false)
   
   if (!field.values || field.values.length === 0) {
@@ -146,7 +284,13 @@ function SemanticFieldRow({ field }: { field: SemanticField }) {
         )}
       </div>
 
-      <ValueCard entry={primaryValue} type={field.type} indexLabel="Primary" />
+      <ValueCard
+        entry={primaryValue}
+        type={field.type}
+        indexLabel="Primary"
+        editable={isEditing && isEditablePrimitive(primaryValue.value)}
+        onChangeValue={(nextValue) => onChangeFieldValue(sectionKey, field.id, nextValue)}
+      />
 
       {showAllValues && hasMultipleValues && (
         <div className="space-y-2">
@@ -170,10 +314,14 @@ function ValueCard({
   entry,
   type,
   indexLabel,
+  editable = false,
+  onChangeValue,
 }: {
   entry: SemanticFieldValueEntry
   type?: string
   indexLabel?: string
+  editable?: boolean
+  onChangeValue?: (value: unknown) => void
 }) {
   const confidence = entry.confidence
   const shouldShowConfidence = confidence !== undefined && confidence < 0.8
@@ -185,7 +333,15 @@ function ValueCard({
           {indexLabel}
         </p>
       )}
-      <StructuredValue value={entry.value} type={type} />
+      {editable ? (
+        <EditableValueInput
+          value={formatEditableValue(entry.value)}
+          type={type}
+          onChange={(nextRaw) => onChangeValue?.(parseEditableValue(nextRaw, entry.value, type))}
+        />
+      ) : (
+        <StructuredValue value={entry.value} type={type} />
+      )}
       {shouldShowConfidence && confidence !== undefined && (
         <span
           className={`inline-flex items-center text-[11px] px-2 py-0.5 rounded-full font-medium ${getConfidenceBadgeColor(
@@ -196,6 +352,68 @@ function ValueCard({
         </span>
       )}
     </div>
+  )
+}
+
+function isEditablePrimitive(value: unknown): boolean {
+  return (
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  )
+}
+
+function formatEditableValue(value: unknown): string {
+  if (typeof value === 'boolean') return value ? 'true' : 'false'
+  if (value === null || value === undefined) return ''
+  return String(value)
+}
+
+function parseEditableValue(raw: string, originalValue: unknown, type?: string): unknown {
+  if (typeof originalValue === 'boolean') {
+    return raw.trim().toLowerCase() === 'true'
+  }
+
+  if (typeof originalValue === 'number') {
+    const numeric = Number(raw)
+    return Number.isNaN(numeric) ? originalValue : numeric
+  }
+
+  if (type === 'number' || type === 'money') {
+    const numeric = Number(raw)
+    if (!Number.isNaN(numeric)) return numeric
+  }
+
+  return raw
+}
+
+function EditableValueInput({
+  value,
+  type,
+  onChange,
+}: {
+  value: string
+  type?: string
+  onChange: (value: string) => void
+}) {
+  if (type === 'date') {
+    return (
+      <input
+        type="date"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-lg border border-blue-200 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+      />
+    )
+  }
+
+  return (
+    <input
+      type="text"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full rounded-lg border border-blue-200 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+    />
   )
 }
 

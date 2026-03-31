@@ -6,7 +6,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, type ReactElement } from 'react'
-import { ChevronDown, ChevronUp, Edit3 } from 'lucide-react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import { ClickableFieldValue } from './InlineFieldEditor'
 
 interface CleanDataDisplayProps {
@@ -227,6 +227,32 @@ function normalizeSemanticSections(raw: unknown): SemanticSection[] {
     )
 }
 
+function resolveDisplayRoot(data: Record<string, unknown>): Record<string, unknown> {
+  if ('semantic_sections' in data || 'semanticSections' in data || 'entities' in data) {
+    return data
+  }
+
+  const nested = data.data
+  if (
+    nested &&
+    typeof nested === 'object' &&
+    !Array.isArray(nested) &&
+    ('semantic_sections' in nested || 'semanticSections' in nested || 'entities' in nested)
+  ) {
+    return nested as Record<string, unknown>
+  }
+
+  return data
+}
+
+function isEditablePrimitive(value: unknown): value is string | number | boolean {
+  return (
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  )
+}
+
 function formatValueForDisplay(value: unknown): ReactElement {
   return <StructuredValue value={value} />
 }
@@ -237,17 +263,16 @@ export function CleanDataDisplay({
   isEditable = false,
   onFieldChange,
 }: CleanDataDisplayProps) {
-  
+  const displayRoot = useMemo(() => resolveDisplayRoot(data as Record<string, unknown>), [data])
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
   const [expandedSemanticSections, setExpandedSemanticSections] = useState<Set<string>>(
     new Set()
   )
 
-  const semanticSections = useMemo(() => normalizeSemanticSections(data), [data])
-  const rawData = (data as Record<string, unknown>)?.raw
+  const semanticSections = useMemo(() => normalizeSemanticSections(displayRoot), [displayRoot])
   
   // Flatten the data structure
-  const flatData = flattenEntities(data as Record<string, unknown>)
+  const flatData = flattenEntities(displayRoot)
   const hiddenKeys = new Set([
     'raw',
     'job_id',
@@ -261,6 +286,11 @@ export function CleanDataDisplay({
     'name',
     'status',
     'filename',
+    'entities',
+    'data',
+    'confidence',
+    'warnings',
+    'errors',
   ])
   Object.keys(flatData).forEach((key) => {
     if (hiddenKeys.has(key)) {
@@ -308,7 +338,7 @@ export function CleanDataDisplay({
     if (semanticSections.length === 0 && sections.length > 0 && expandedSections.size === 0) {
       setExpandedSections(new Set([sections[0]]))
     }
-  }, [sections.length, semanticSections.length, expandedSections.size])
+  }, [sections, semanticSections.length, expandedSections.size])
   
   if (Object.keys(flatData).length === 0 && semanticSections.length === 0) {
     return (
@@ -321,7 +351,7 @@ export function CleanDataDisplay({
   if (semanticSections.length > 0) {
     return (
       <div className="space-y-4 max-h-[calc(100vh-220px)] overflow-y-auto pr-1">
-        {semanticSections.map((section) => {
+        {semanticSections.map((section, sectionIndex) => {
           const sectionKey = section.displayName || section.key || 'section'
           const isExpanded = expandedSemanticSections.has(sectionKey)
 
@@ -359,7 +389,7 @@ export function CleanDataDisplay({
 
               {isExpanded && (
                 <div className="border-t border-gray-100 divide-y divide-gray-100">
-                  {section.fields.map((field) => {
+                  {section.fields.map((field, fieldIndex) => {
                     const confidenceOverride = fieldConfidence[field.id]
                     const fieldValues = field.values && field.values.length > 0 ? field.values : null
                     const tableData = fieldValues ? buildTabularFromFieldValues(fieldValues) : null
@@ -411,7 +441,33 @@ export function CleanDataDisplay({
                                   key={`${field.id}-${index}`}
                                   className="flex flex-col gap-1 bg-gray-50 rounded-lg p-3 border border-gray-100"
                                 >
-                                  {formatValueForDisplay(entry.value)}
+                                  {isEditable &&
+                                  onFieldChange &&
+                                  isEditablePrimitive(entry.value) ? (
+                                    <ClickableFieldValue
+                                      fieldPath={`semantic_sections.${sectionIndex}.fields.${fieldIndex}.values.${index}.value`}
+                                      label={field.label}
+                                      value={String(entry.value)}
+                                      fieldType={
+                                        field.type === 'date'
+                                          ? 'date'
+                                          : typeof entry.value === 'number'
+                                          ? 'number'
+                                          : 'text'
+                                      }
+                                      onEdit={(newValue) =>
+                                        onFieldChange(
+                                          `semantic_sections.${sectionIndex}.fields.${fieldIndex}.values.${index}.value`,
+                                          field.type === 'number' && typeof entry.value === 'number'
+                                            ? Number(newValue)
+                                            : newValue
+                                        )
+                                      }
+                                      className="text-sm text-gray-900"
+                                    />
+                                  ) : (
+                                    formatValueForDisplay(entry.value)
+                                  )}
                                   {(entry.confidence ?? confidenceOverride) !== undefined &&
                                     (entry.confidence ?? confidenceOverride)! < 0.8 && (
                                       <span
@@ -445,7 +501,6 @@ export function CleanDataDisplay({
 
   return (
     <div className="space-y-3 max-h-[calc(100vh-220px)] overflow-y-auto pr-1">
-      {rawData ? <RawDataPreview data={rawData} /> : null}
       {sections.map((section) => {
         const sectionData = groupedData[section]
         const isExpanded = expandedSections.has(section)
@@ -680,28 +735,6 @@ function formatPrimitive(value: unknown): string {
   return String(value)
 }
 
-function RawDataPreview({ data }: { data: unknown }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-      <button
-        onClick={() => setOpen((prev) => !prev)}
-        className="w-full px-4 py-2 flex items-center justify-between text-left hover:bg-gray-50"
-      >
-        <span className="text-sm font-semibold text-gray-900">Raw Extracted Data</span>
-        {open ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
-      </button>
-      {open && (
-        <div className="border-t border-gray-100 bg-gray-50 p-3">
-          <pre className="text-xs text-gray-800 overflow-x-auto whitespace-pre-wrap">
-            {JSON.stringify(data, null, 2)}
-          </pre>
-        </div>
-      )}
-    </div>
-  )
-}
-
 type TabularData = {
   columns: string[]
   rows: Array<Record<string, unknown>>
@@ -786,8 +819,6 @@ function parseStructuredString(value: unknown): unknown {
 }
 
 function buildTabularFromFieldValues(values: SemanticFieldValue[]): TabularData | null {
-  console.log("values")
-  console.log(values)
   if (values.length === 0) return null
   const parsed = values.map((entry) => parseStructuredString(entry.value))
   if (

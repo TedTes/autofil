@@ -17,6 +17,9 @@ interface AuthContextValue {
   isLoading: boolean
   isConfigured: boolean
   signIn: (email: string, password: string) => Promise<void>
+  signUp: (email: string, password: string) => Promise<{ needsEmailConfirmation: boolean }>
+  resetPassword: (email: string) => Promise<void>
+  updatePassword: (password: string) => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -66,6 +69,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  const signUp = useCallback(async (email: string, password: string) => {
+    if (!supabase) {
+      throw new Error('Supabase auth is not configured')
+    }
+    const { data, error } = await supabase.auth.signUp({ email, password })
+    if (error) {
+      throw error
+    }
+
+    if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      throw new Error('An account with this email already exists')
+    }
+
+    return {
+      needsEmailConfirmation: !data.session,
+    }
+  }, [])
+
+  const resetPassword = useCallback(async (email: string) => {
+    if (!supabase) {
+      throw new Error('Supabase auth is not configured')
+    }
+
+    const redirectTo =
+      typeof window !== 'undefined'
+        ? `${window.location.origin}/reset-password`
+        : undefined
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo,
+    })
+
+    if (error) {
+      throw error
+    }
+  }, [])
+
+  const updatePassword = useCallback(async (password: string) => {
+    if (!supabase) {
+      throw new Error('Supabase auth is not configured')
+    }
+
+    const { error } = await supabase.auth.updateUser({ password })
+    if (error) {
+      throw error
+    }
+  }, [])
+
   const signOut = useCallback(async () => {
     if (!supabase) return
     const { error } = await supabase.auth.signOut()
@@ -81,9 +132,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isLoading,
       isConfigured: isSupabaseConfigured,
       signIn,
+      signUp,
+      resetPassword,
+      updatePassword,
       signOut,
     }),
-    [user, session, isLoading, signIn, signOut]
+    [user, session, isLoading, signIn, signUp, resetPassword, updatePassword, signOut]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

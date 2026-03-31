@@ -46,7 +46,7 @@ def create_app():
         r"/api/*": {
             "origins": os.environ.get("CORS_ORIGINS","http://localhost:3000").split(","), 
             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS","PATCH"],
-            "allow_headers": ["Content-Type"]
+            "allow_headers": ["Content-Type", "Authorization"]
         }
     })
     # Configuration

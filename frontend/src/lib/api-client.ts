@@ -31,6 +31,7 @@ import type { MergedData } from '@/types/merged-data'
 
 import { transformEntities } from './entity-transformer'
 import {isCanonicalOutput} from "../lib/utils";
+import { supabase } from './supabase'
 
 
 
@@ -42,6 +43,21 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
   timeout: 30000, // 30 second timeout
+})
+
+api.interceptors.request.use(async (config) => {
+  if (supabase) {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (session?.access_token) {
+      config.headers = config.headers ?? {}
+      config.headers.Authorization = `Bearer ${session.access_token}`
+    }
+  }
+
+  return config
 })
 
 /**

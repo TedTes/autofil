@@ -163,6 +163,36 @@ class SupabaseDatabaseService:
         owner_user_id = metadata.get("owner_user_id")
         return owner_user_id is None or owner_user_id == user_id
 
+    def _claim_submission_if_unowned(
+        self,
+        metadata: Optional[Dict[str, Any]],
+        user_id: Optional[str],
+    ) -> Optional[Dict[str, Any]]:
+        if metadata and user_id and not metadata.get("owner_user_id"):
+            self.save_submission_metadata(metadata, user_id=user_id)
+            metadata["owner_user_id"] = user_id
+        return metadata
+
+    def _claim_client_if_unowned(
+        self,
+        metadata: Optional[Dict[str, Any]],
+        user_id: Optional[str],
+    ) -> Optional[Dict[str, Any]]:
+        if metadata and user_id and not metadata.get("owner_user_id"):
+            self.save_client_metadata(metadata, user_id=user_id)
+            metadata["owner_user_id"] = user_id
+        return metadata
+
+    def _claim_folder_if_unowned(
+        self,
+        metadata: Optional[Dict[str, Any]],
+        user_id: Optional[str],
+    ) -> Optional[Dict[str, Any]]:
+        if metadata and user_id and not metadata.get("owner_user_id"):
+            self.save_folder_metadata(metadata, user_id=user_id)
+            metadata["owner_user_id"] = user_id
+        return metadata
+
     # ---------------------------------------------------------------- submissions
     def save_submission_metadata(self, metadata: Dict[str, Any], user_id: Optional[str] = None) -> None:
         submission_id = metadata.get("submission_id")
@@ -194,6 +224,7 @@ class SupabaseDatabaseService:
     def get_submission_metadata(self, submission_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         if not self.remote_enabled or not self._client:
             metadata = self._local_get("submissions", submission_id)
+            metadata = self._claim_submission_if_unowned(metadata, user_id)
             return metadata if self._is_visible_to_user(metadata, user_id) else None
         for attempt in range(2):
             try:
@@ -205,6 +236,7 @@ class SupabaseDatabaseService:
                 )
                 if data:
                     metadata = data.get("metadata")
+                    metadata = self._claim_submission_if_unowned(metadata, user_id)
                     return metadata if self._is_visible_to_user(metadata, user_id) else None
                 return None
             except Exception as exc:
@@ -228,7 +260,8 @@ class SupabaseDatabaseService:
     def list_submissions_metadata(self, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         if not self.remote_enabled or not self._client:
             return [
-                meta for meta in self._local_list("submissions")
+                self._claim_submission_if_unowned(meta, user_id)
+                for meta in self._local_list("submissions")
                 if meta and self._is_visible_to_user(meta, user_id) and (meta.get("file_count") or 0) > 0
             ]
         for attempt in range(2):
@@ -240,7 +273,8 @@ class SupabaseDatabaseService:
                 if not rows:
                     return []
                 return [
-                    meta for meta in
+                    self._claim_submission_if_unowned(meta, user_id)
+                    for meta in
                     (row.get("metadata") for row in rows)
                     if meta and self._is_visible_to_user(meta, user_id) and (meta.get("file_count") or 0) > 0
                 ]
@@ -282,6 +316,7 @@ class SupabaseDatabaseService:
     def get_client_metadata(self, client_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         if not self.remote_enabled or not self._client:
             metadata = self._local_get("clients", client_id)
+            metadata = self._claim_client_if_unowned(metadata, user_id)
             return metadata if self._is_visible_to_user(metadata, user_id) else None
         for attempt in range(2):
             try:
@@ -293,6 +328,7 @@ class SupabaseDatabaseService:
                 )
                 if data:
                     metadata = data.get("metadata")
+                    metadata = self._claim_client_if_unowned(metadata, user_id)
                     return metadata if self._is_visible_to_user(metadata, user_id) else None
                 return None
             except Exception as exc:
@@ -305,6 +341,7 @@ class SupabaseDatabaseService:
     def list_clients_metadata(self, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         if not self.remote_enabled or not self._client:
             rows = self._local_list("clients")
+            rows = [self._claim_client_if_unowned(row, user_id) for row in rows]
             visible = [row for row in rows if self._is_visible_to_user(row, user_id)]
             return sorted(visible, key=lambda row: (row or {}).get("name", "").lower())
         for attempt in range(2):
@@ -317,7 +354,8 @@ class SupabaseDatabaseService:
                 if not rows:
                     return []
                 return [
-                    metadata for metadata in
+                    self._claim_client_if_unowned(metadata, user_id)
+                    for metadata in
                     (row.get("metadata") for row in rows)
                     if self._is_visible_to_user(metadata, user_id)
                 ]
@@ -365,6 +403,7 @@ class SupabaseDatabaseService:
     def get_folder_metadata(self, folder_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         if not self.remote_enabled or not self._client:
             metadata = self._local_get("folders", folder_id)
+            metadata = self._claim_folder_if_unowned(metadata, user_id)
             return metadata if self._is_visible_to_user(metadata, user_id) else None
         try:
             data = self._execute(
@@ -375,6 +414,7 @@ class SupabaseDatabaseService:
             )
             if data:
                 metadata = data.get("metadata")
+                metadata = self._claim_folder_if_unowned(metadata, user_id)
                 return metadata if self._is_visible_to_user(metadata, user_id) else None
         except Exception as exc:
             logger.warning("supabase-db failed to fetch folder %s: %s", folder_id, exc)
@@ -382,7 +422,8 @@ class SupabaseDatabaseService:
 
     def list_folders_metadata(self, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         if not self.remote_enabled or not self._client:
-            return [row for row in self._local_list("folders") if self._is_visible_to_user(row, user_id)]
+            rows = [self._claim_folder_if_unowned(row, user_id) for row in self._local_list("folders")]
+            return [row for row in rows if self._is_visible_to_user(row, user_id)]
         try:
             rows = self._execute(
                 self._client.table("folders_metadata")
@@ -392,7 +433,8 @@ class SupabaseDatabaseService:
             if not rows:
                 return []
             return [
-                metadata for metadata in
+                self._claim_folder_if_unowned(metadata, user_id)
+                for metadata in
                 (row.get("metadata") for row in rows)
                 if self._is_visible_to_user(metadata, user_id)
             ]

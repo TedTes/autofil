@@ -8,6 +8,7 @@ update, PDF fill, versioning, comparisons, and stats.
 import io
 import os
 import json
+import logging
 from datetime import datetime
 from flask import Blueprint, request, jsonify, send_file, Response
 from services.submission_service import SubmissionService
@@ -16,6 +17,7 @@ from services.merged_data_service import MergedDataService
 submission_bp = Blueprint("submissions", __name__)
 submission_service = SubmissionService()
 merged_data_service = MergedDataService(submission_service)
+logger = logging.getLogger(__name__)
 
 @submission_bp.route("/upload", methods=["POST"])
 def upload_pdf():
@@ -45,6 +47,7 @@ def upload_pdf():
             return jsonify({"error": "Cannot upload multiple files to the same submission package at once"}), 400
 
         success_count, errors = 0, []
+        successful_results = []
 
         for idx, file in enumerate(files):
             if not file or not file.filename:
@@ -64,6 +67,7 @@ def upload_pdf():
                 )
                 if result:
                     success_count += 1
+                    successful_results.append(result)
             except Exception as e:
                 errors.append({
                     "index": idx,
@@ -75,8 +79,35 @@ def upload_pdf():
             message = f"Processed {len(files)} file(s): {success_count} succeeded"
             if errors:
                 message += f", {len(errors)} failed"
+
+            if len(files) == 1 and successful_results:
+                result = successful_results[0]
+                submission_id = result.get("submission_id")
+                submission = submission_service.get_submission(submission_id) if submission_id else None
+                payload = {
+                    "submission_id": submission_id,
+                    "data": result.get("data") or (submission or {}).get("data") or {},
+                    "filename": (submission or {}).get("filename") or files[0].filename,
+                    "status": (submission or {}).get("status") or "extracted",
+                    "uploaded_at": (submission or {}).get("uploaded_at"),
+                    "confidence": (submission or {}).get("confidence"),
+                    "warnings": (submission or {}).get("warnings", []),
+                }
+                return jsonify({
+                    "success": True,
+                    "data": payload,
+                    "message": message,
+                }), 200
+
             return jsonify({
                 "success": True,
+                "data": {
+                    "files": successful_results,
+                    "errors": errors,
+                    "total_files": len(files),
+                    "successful_uploads": success_count,
+                    "failed_uploads": len(errors),
+                },
                 "message": message,
             }), 200
 
@@ -84,7 +115,7 @@ def upload_pdf():
         return jsonify({"success": False, "error": first_error}), 400
 
     except Exception as e:
-        print("error from upload pdf method",str(e))
+        logger.exception("submission upload failed")
         return jsonify({"error": f"Upload failed: {str(e)}"}), 500
 
 
@@ -178,6 +209,30 @@ def delete_submission_input(submission_id, input_id):
         if not deleted:
             return jsonify({"error": "Input file not found"}), 404
         return jsonify({"success": True, "message": "Input file deleted"}), 200
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@submission_bp.route("/<submission_id>/inputs/<input_id>/include", methods=["PATCH"])
+def update_submission_input_inclusion(submission_id, input_id):
+    """Include or exclude a submission input from merged review data."""
+    try:
+        payload = request.get_json(silent=True) or {}
+        if "included" not in payload:
+            return jsonify({"error": "included is required"}), 400
+
+        updated = submission_service.set_input_included(
+            submission_id,
+            input_id,
+            bool(payload.get("included")),
+        )
+        return jsonify({
+            "success": True,
+            "data": updated,
+            "message": "Input inclusion updated",
+        }), 200
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 404
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
@@ -293,7 +348,7 @@ def download_pdf(submission_id):
             download_name=filename,
         )
     except Exception as e:
-        print(f"Download error: {str(e)}")
+        logger.exception("download output failed for submission_id=%s", submission_id)
         return jsonify({"error": str(e)}), 500
 
 
@@ -320,9 +375,7 @@ def preview_input_pdf(submission_id):
 
         return jsonify({"error": "File not found"}), 404
     except Exception as e:
-        print(f"❌ Preview error: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("preview input failed for submission_id=%s", submission_id)
         return jsonify({"error": str(e)}), 500
 
 
@@ -346,9 +399,7 @@ def preview_output_pdf(submission_id):
 
         return jsonify({"error": "File not found"}), 404
     except Exception as e:
-        print(f"❌ Preview error: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("preview output failed for submission_id=%s", submission_id)
         return jsonify({"error": str(e)}), 500
 
 

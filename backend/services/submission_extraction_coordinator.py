@@ -7,6 +7,7 @@ import os
 import shutil
 import tempfile
 import uuid
+import hashlib
 from datetime import datetime
 from typing import Any, Callable, Dict, Optional
 
@@ -94,6 +95,8 @@ class SubmissionExtractionCoordinator:
             filename = secure_filename(file.filename or f"{submission_id}.pdf")
             upload_path = os.path.join(temp_upload_dir, filename)
             file.save(upload_path)
+            file_hash = self._compute_file_hash(upload_path)
+            file_size = os.path.getsize(upload_path)
 
             self._emit_progress(progress_callback, submission_id, 30, "uploaded", "File saved successfully")
 
@@ -143,8 +146,9 @@ class SubmissionExtractionCoordinator:
                 if hasattr(extraction_result, "to_dict")
                 else extraction_result
             )
+            canonical_payload = self._extract_canonical_payload(raw_result)
             json_data = self.merge_coordinator.clean_entities(
-                self.merge_coordinator.dedupe_entity_values(raw_result)
+                self.merge_coordinator.dedupe_entity_values(canonical_payload)
             )
             timestamp = datetime.utcnow().isoformat()
             version_notes = "Re-extraction" if is_existing_submission else "Initial extraction"
@@ -167,6 +171,17 @@ class SubmissionExtractionCoordinator:
 
             duplicate_entry = None
             for entry in inputs_meta:
+                if "file_hash" not in entry:
+                    existing_hash = self._resolve_existing_file_hash(entry)
+                    if existing_hash:
+                        entry["file_hash"] = existing_hash
+                if "file_size" not in entry:
+                    existing_size = self._resolve_existing_file_size(entry)
+                    if existing_size is not None:
+                        entry["file_size"] = existing_size
+                if entry.get("file_hash") == file_hash:
+                    duplicate_entry = entry
+                    break
                 if "extraction_hash" not in entry:
                     existing_data = entry.get("data")
                     if existing_data:
@@ -200,6 +215,9 @@ class SubmissionExtractionCoordinator:
                 "filename": filename,
                 "uploaded_at": timestamp,
                 "extraction_status": "extracted",
+                "included_in_merge": True,
+                "file_hash": file_hash,
+                "file_size": file_size,
                 "confidence": extraction_confidence,
                 "url": remote_input.get("public_url") if remote_input else None,
                 "storage": remote_input,
@@ -238,7 +256,44 @@ class SubmissionExtractionCoordinator:
             if temp_upload_dir:
                 shutil.rmtree(temp_upload_dir, ignore_errors=True)
 
+    def _compute_file_hash(self, path: str) -> str:
+        digest = hashlib.sha256()
+        with open(path, "rb") as handle:
+            while True:
+                chunk = handle.read(1024 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    def _resolve_existing_file_hash(self, entry: Dict[str, Any]) -> Optional[str]:
+        storage_info = entry.get("storage") or entry.get("upload_storage")
+        blob = self.file_store.download(storage_info)
+        if not blob:
+            return None
+        return hashlib.sha256(blob).hexdigest()
+
+    def _resolve_existing_file_size(self, entry: Dict[str, Any]) -> Optional[int]:
+        storage_info = entry.get("storage") or entry.get("upload_storage")
+        blob = self.file_store.download(storage_info)
+        if blob is None:
+            return None
+        return len(blob)
+
     @staticmethod
     def _emit_progress(progress_callback, submission_id: str, percent: int, stage: str, message: str) -> None:
         if progress_callback:
             progress_callback(submission_id, percent, stage, message)
+
+    @staticmethod
+    def _extract_canonical_payload(raw_result: Any) -> Dict[str, Any]:
+        if isinstance(raw_result, dict):
+            nested = raw_result.get("data")
+            if isinstance(nested, dict):
+                if (
+                    "semantic_sections" in nested
+                    or "semanticSections" in nested
+                    or "entities" in nested
+                ):
+                    return nested
+        return raw_result if isinstance(raw_result, dict) else {}

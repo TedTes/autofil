@@ -29,12 +29,27 @@ class MergedDataService:
         if not metadata:
             raise ValueError("Submission not found")
 
-        canonical = metadata.get("data") or {}
+        canonical = self._resolve_canonical_payload(metadata.get("data") or {})
         semantic_sections_raw = canonical.get("semantic_sections") or canonical.get("semanticSections")
         semantic_sections = self._normalize_semantic_sections(semantic_sections_raw)
         return {
             "semantic_sections": semantic_sections,
         }
+
+    def _resolve_canonical_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        if not isinstance(payload, dict):
+            return {}
+
+        if "semantic_sections" in payload or "semanticSections" in payload:
+            return payload
+
+        nested = payload.get("data")
+        if isinstance(nested, dict) and (
+            "semantic_sections" in nested or "semanticSections" in nested
+        ):
+            return nested
+
+        return payload
 
     def _normalize_semantic_sections(
         self, sections: Optional[List[Dict[str, Any]]]

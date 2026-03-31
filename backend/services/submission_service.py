@@ -511,6 +511,9 @@ class SubmissionService:
         if not metadata:
             return None
 
+        if self._prune_duplicate_inputs(metadata):
+            self._persist_submission_metadata(metadata)
+
         inputs = metadata.get('inputs') or []
         outputs = metadata.get('outputs') or []
         uploaded_at = metadata.get('uploaded_at') or metadata.get('created_at')
@@ -541,6 +544,64 @@ class SubmissionService:
             'inputs': inputs,
             'outputs': outputs,
         }
+
+    def _prune_duplicate_inputs(self, metadata: Dict[str, Any]) -> bool:
+        inputs = metadata.get("inputs") or []
+        if len(inputs) < 2:
+            return False
+
+        changed = False
+        seen_keys = set()
+        deduped_inputs: List[Dict[str, Any]] = []
+
+        for entry in inputs:
+            duplicate_key = self._input_duplicate_key(entry)
+            if duplicate_key in seen_keys:
+                changed = True
+                continue
+            seen_keys.add(duplicate_key)
+            deduped_inputs.append(entry)
+
+        if not changed:
+            return False
+
+        metadata["inputs"] = deduped_inputs
+        metadata["file_count"] = len(deduped_inputs)
+        metadata["updated_at"] = datetime.utcnow().isoformat()
+        metadata["data"] = self._merge_input_data(deduped_inputs) if deduped_inputs else {}
+
+        outputs = metadata.get("outputs") or []
+        if outputs:
+            metadata["status"] = "filled"
+        elif metadata["data"]:
+            metadata["status"] = "ready"
+        elif deduped_inputs:
+            metadata["status"] = "extracted"
+        else:
+            metadata["status"] = "created"
+
+        return True
+
+    def _input_duplicate_key(self, entry: Dict[str, Any]) -> str:
+        file_hash = entry.get("file_hash")
+        if file_hash:
+            return f"file:{file_hash}"
+
+        extraction_hash = entry.get("extraction_hash")
+        if extraction_hash:
+            return f"extract:{extraction_hash}"
+
+        filename = (entry.get("filename") or "").strip().lower()
+        file_size = entry.get("file_size")
+        if filename and file_size is not None:
+            return f"name-size:{filename}:{file_size}"
+
+        data = entry.get("data")
+        if data:
+            payload = json.dumps(data, sort_keys=True, separators=(",", ":"))
+            return f"data:{hashlib.sha256(payload.encode('utf-8')).hexdigest()}"
+
+        return f"id:{entry.get('input_id') or filename}"
     
     def update_data(
         self,
@@ -751,7 +812,44 @@ class SubmissionService:
 
     def _merge_input_data(self, inputs: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Deterministically merge multiple extracted inputs into one canonical payload."""
-        return self.merge_coordinator.merge_inputs(inputs)
+        included_inputs = [
+            entry for entry in inputs
+            if entry.get("included_in_merge", True)
+        ]
+        return self.merge_coordinator.merge_inputs(included_inputs)
+
+    def set_input_included(
+        self,
+        submission_id: str,
+        input_id: str,
+        included: bool,
+    ) -> Dict[str, Any]:
+        metadata = self.get_submission_metadata(submission_id)
+        if not metadata:
+            raise ValueError("Submission not found")
+
+        inputs = metadata.get("inputs") or []
+        target = next((entry for entry in inputs if entry.get("input_id") == input_id), None)
+        if not target:
+            raise ValueError("Input file not found")
+
+        target["included_in_merge"] = bool(included)
+        metadata["updated_at"] = datetime.utcnow().isoformat()
+        merged_data = self._merge_input_data(inputs)
+        metadata["data"] = merged_data
+
+        outputs = metadata.get("outputs") or []
+        if outputs:
+            metadata["status"] = "filled"
+        elif merged_data:
+            metadata["status"] = "ready"
+        elif inputs:
+            metadata["status"] = "extracted"
+        else:
+            metadata["status"] = "created"
+
+        self._persist_submission_metadata(metadata)
+        return self.get_submission_package(submission_id) or metadata
 
     def delete_input(self, submission_id: str, input_id: str) -> bool:
         metadata = self.get_submission_metadata(submission_id)

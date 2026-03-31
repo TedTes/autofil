@@ -9,14 +9,20 @@ from flask import g, jsonify, request
 
 from services.auth_service import AuthService
 
-auth_service = AuthService()
-
 
 def _extract_bearer_token() -> Optional[str]:
     header = request.headers.get("Authorization", "").strip()
     if not header.lower().startswith("bearer "):
       return None
     return header[7:].strip() or None
+
+
+def _get_auth_service() -> AuthService:
+    """
+    Build the auth service at request time so backend restarts/env edits do not
+    leave a stale singleton holding missing or outdated Supabase config.
+    """
+    return AuthService()
 
 
 def require_auth(view: Callable[..., Any]) -> Callable[..., Any]:
@@ -26,7 +32,7 @@ def require_auth(view: Callable[..., Any]) -> Callable[..., Any]:
         if not token:
             return jsonify({"error": "Authentication required"}), 401
 
-        identity = auth_service.verify_token(token)
+        identity = _get_auth_service().verify_token(token)
         if not identity:
             return jsonify({"error": "Invalid or expired session"}), 401
 

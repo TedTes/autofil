@@ -44,8 +44,16 @@ class TemplateLibraryService:
         return self._to_library_dict(config)
 
     def _discover_template_ids(self) -> List[str]:
-        template_ids = set()
+        if getattr(self.storage, "enabled", False):
+            template_ids = set()
+            for entry in self.storage.list_objects(self.templates_root):
+                name = entry.get("name")
+                if not name or entry.get("metadata"):
+                    continue
+                template_ids.add(name)
+            return sorted(template_ids)
 
+        template_ids = set()
         local_dir = getattr(TemplateLoader, "local_template_dir", None)
         if isinstance(local_dir, Path) and local_dir.exists():
             for candidate in local_dir.iterdir():
@@ -55,13 +63,6 @@ class TemplateLibraryService:
                     template_ids.add(candidate.stem)
                 elif candidate.is_dir():
                     template_ids.add(candidate.name)
-
-        if getattr(self.storage, "enabled", False):
-            for entry in self.storage.list_objects(self.templates_root):
-                name = entry.get("name")
-                if not name or entry.get("metadata"):
-                    continue
-                template_ids.add(name)
 
         return sorted(template_ids)
 

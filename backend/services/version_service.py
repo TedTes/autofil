@@ -16,21 +16,22 @@ class VersionService:
     Stores version history alongside submission metadata in Supabase.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, current_user_id: Optional[str] = None) -> None:
         self.db = SupabaseDatabaseService()
+        self.current_user_id = current_user_id
         if not self.db.enabled:
             raise RuntimeError("Supabase database must be configured for version storage.")
 
     # ------------------------------------------------------------------ helpers
     def _load_metadata(self, submission_id: str) -> Dict[str, Any]:
-        metadata = self.db.get_submission_metadata(submission_id)
+        metadata = self.db.get_submission_metadata(submission_id, user_id=self.current_user_id)
         if not metadata:
             raise ValueError("Submission not found")
         metadata.setdefault("versions", [])
         return metadata
 
     def _persist(self, metadata: Dict[str, Any]) -> None:
-        self.db.save_submission_metadata(metadata)
+        self.db.save_submission_metadata(metadata, user_id=self.current_user_id)
 
     # ---------------------------------------------------------------- versions
     def create_version(

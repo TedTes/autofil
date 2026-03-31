@@ -12,17 +12,18 @@ from services.supabase_db_service import SupabaseDatabaseService
 class FolderService:
     """Service for managing logical folders without touching local disk."""
 
-    def __init__(self) -> None:
+    def __init__(self, current_user_id: Optional[str] = None) -> None:
         self.db = SupabaseDatabaseService()
+        self.current_user_id = current_user_id
         if not self.db.enabled:
             raise RuntimeError("Supabase database must be configured for folder metadata storage.")
 
     # ------------------------------------------------------------------ helpers
     def _persist(self, metadata: Dict[str, Any]) -> None:
-        self.db.save_folder_metadata(metadata)
+        self.db.save_folder_metadata(metadata, user_id=self.current_user_id)
 
     def _load(self, folder_id: str) -> Optional[Dict[str, Any]]:
-        metadata = self.db.get_folder_metadata(folder_id)
+        metadata = self.db.get_folder_metadata(folder_id, user_id=self.current_user_id)
         if metadata:
             metadata.setdefault("submissions", [])
             metadata["file_count"] = metadata.get("file_count") or len(metadata["submissions"])
@@ -35,6 +36,7 @@ class FolderService:
         metadata = {
             "folder_id": folder_id,
             "name": name,
+            "owner_user_id": self.current_user_id,
             "created_at": timestamp,
             "updated_at": timestamp,
             "file_count": 0,
@@ -47,7 +49,7 @@ class FolderService:
         return self._load(folder_id)
 
     def list_folders(self) -> List[Dict[str, Any]]:
-        folders = self.db.list_folders_metadata()
+        folders = self.db.list_folders_metadata(user_id=self.current_user_id)
         for folder in folders:
             folder.setdefault("submissions", [])
             folder["file_count"] = folder.get("file_count") or len(folder["submissions"])
@@ -66,7 +68,7 @@ class FolderService:
         metadata = self._load(folder_id)
         if not metadata:
             return False
-        self.db.delete_folder_metadata(folder_id)
+        self.db.delete_folder_metadata(folder_id, user_id=self.current_user_id)
         return True
 
     # ----------------------------------------------------------- submissions ---

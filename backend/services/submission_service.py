@@ -354,12 +354,13 @@ class SubmissionService:
     """
 
     
-    def __init__(self):
+    def __init__(self, current_user_id: Optional[str] = None):
         """Initialize service dependencies."""
-        self.client_service = ClientService()
+        self.current_user_id = current_user_id
+        self.client_service = ClientService(current_user_id=current_user_id)
         self.filler_cache: Dict[str, BaseFiller] = {}
 
-        self.version_service = VersionService()
+        self.version_service = VersionService(current_user_id=current_user_id)
         self.comparison_service = ComparisonService()
         self.export_service = ExportService(self)
 
@@ -371,7 +372,7 @@ class SubmissionService:
         self.remote_storage = self.file_store.storage
         if not self.file_store.enabled:
             raise RuntimeError("Supabase storage must be configured for file storage.")
-        self.repository = SubmissionRepository()
+        self.repository = SubmissionRepository(current_user_id=current_user_id)
         self.db = self.repository.db
         self.fill_coordinator = SubmissionFillCoordinator(
             repository=self.repository,

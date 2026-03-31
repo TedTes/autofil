@@ -5,17 +5,28 @@ Endpoints for client management.
 """
 
 from flask import Blueprint, request, jsonify
+from api.auth import require_auth, get_current_user_id
 from services.client_service import ClientService
 from services.submission_service import SubmissionService
 from services.template_library_service import TemplateLibraryService
 
 client_bp = Blueprint('clients', __name__)
-client_service = ClientService()
-submission_service = SubmissionService()
-template_library = TemplateLibraryService()
+
+
+def _client_service() -> ClientService:
+    return ClientService(current_user_id=get_current_user_id())
+
+
+def _submission_service() -> SubmissionService:
+    return SubmissionService(current_user_id=get_current_user_id())
+
+
+def _template_library() -> TemplateLibraryService:
+    return TemplateLibraryService()
 
 
 @client_bp.route('/', methods=['GET'])
+@require_auth
 def list_clients():
     """
     List all clients with their submissions.
@@ -24,7 +35,7 @@ def list_clients():
         JSON with list of clients and nested submissions
     """
     try:
-        clients = client_service.list_clients()
+        clients = _client_service().list_clients()
         
         return jsonify({
             'success': True,
@@ -37,6 +48,7 @@ def list_clients():
 
 
 @client_bp.route('/', methods=['POST'])
+@require_auth
 def create_client():
     """
     Create a new client.
@@ -60,7 +72,7 @@ def create_client():
         if not name:
             return jsonify({'error': 'Client name cannot be empty'}), 400
         
-        client = client_service.create_client(name)
+        client = _client_service().create_client(name)
         
         return jsonify({
             'success': True,
@@ -73,6 +85,7 @@ def create_client():
 
 
 @client_bp.route('/<client_id>', methods=['GET'])
+@require_auth
 def get_client(client_id):
     """
     Get client by ID with metadata only.
@@ -84,7 +97,7 @@ def get_client(client_id):
         JSON with client metadata and submissions
     """
     try:
-        client = client_service.get_client(client_id)
+        client = _client_service().get_client(client_id)
         
         if not client:
             return jsonify({'error': 'Client not found'}), 404
@@ -99,12 +112,13 @@ def get_client(client_id):
         return jsonify({'error': str(e)}), 500
 
 @client_bp.route('/<client_id>/submissions', methods=['GET'])
+@require_auth
 def list_client_submissions(client_id):
     """
     List submissions/packages for a given client.
     """
     try:
-        packages = client_service.list_client_packages(client_id)
+        packages = _client_service().list_client_packages(client_id)
         if packages is None:
             return jsonify({'error': 'Client not found'}), 404
 
@@ -117,6 +131,7 @@ def list_client_submissions(client_id):
 
 
 @client_bp.route('/<client_id>', methods=['PUT'])
+@require_auth
 def update_client(client_id):
     """
     Update client name.
@@ -143,7 +158,7 @@ def update_client(client_id):
         if not name:
             return jsonify({'error': 'Client name cannot be empty'}), 400
         
-        client = client_service.update_client(client_id, name)
+        client = _client_service().update_client(client_id, name)
         
         if not client:
             return jsonify({'error': 'Client not found'}), 404
@@ -159,6 +174,7 @@ def update_client(client_id):
 
 
 @client_bp.route('/<client_id>', methods=['DELETE'])
+@require_auth
 def delete_client(client_id):
     """
     Delete a client and all its submissions.
@@ -170,7 +186,7 @@ def delete_client(client_id):
         JSON with success status
     """
     try:
-        deleted = client_service.delete_client(client_id)
+        deleted = _client_service().delete_client(client_id)
         
         if not deleted:
             return jsonify({'error': 'Client not found'}), 404
@@ -185,6 +201,7 @@ def delete_client(client_id):
 
 
 @client_bp.route('/<client_id>/submissions', methods=['POST'])
+@require_auth
 def create_submission(client_id):
     """
     Create a submission under a client.
@@ -203,6 +220,7 @@ def create_submission(client_id):
     """
     try:
         # Check if client exists
+        client_service = _client_service()
         client = client_service.get_client(client_id)
         if not client:
             return jsonify({'error': 'Client not found'}), 404
@@ -219,7 +237,7 @@ def create_submission(client_id):
         
         template_type = data.get('template_type')
         
-        submission = submission_service.create_submission(
+        submission = _submission_service().create_submission(
             client_id=client_id,
             name=name,
             template_type=template_type
@@ -236,6 +254,7 @@ def create_submission(client_id):
 
 
 @client_bp.route('/templates', methods=['GET'])
+@require_auth
 def list_templates():
     """
     List all available submission templates.
@@ -244,7 +263,7 @@ def list_templates():
         JSON with list of templates
     """
     try:
-        templates = template_library.list_templates()
+        templates = _template_library().list_templates()
         
         return jsonify({
             'success': True,

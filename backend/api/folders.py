@@ -5,15 +5,23 @@ Endpoints for folder management.
 """
 
 from flask import Blueprint, request, jsonify
+from api.auth import require_auth, get_current_user_id
 from services.folder_service import FolderService
 from services.submission_service import SubmissionService
 
 folder_bp = Blueprint('folders', __name__)
-folder_service = FolderService()
-submission_service = SubmissionService()
+
+
+def _folder_service() -> FolderService:
+    return FolderService(current_user_id=get_current_user_id())
+
+
+def _submission_service() -> SubmissionService:
+    return SubmissionService(current_user_id=get_current_user_id())
 
 
 @folder_bp.route('/', methods=['GET'])
+@require_auth
 def list_folders():
     """
     List all folders.
@@ -22,7 +30,7 @@ def list_folders():
         JSON with list of folders
     """
     try:
-        folders = folder_service.list_folders()
+        folders = _folder_service().list_folders()
         
         return jsonify({
             'success': True,
@@ -35,6 +43,7 @@ def list_folders():
 
 
 @folder_bp.route('/', methods=['POST'])
+@require_auth
 def create_folder():
     """
     Create a new folder.
@@ -58,7 +67,7 @@ def create_folder():
         if not name:
             return jsonify({'error': 'Folder name cannot be empty'}), 400
         
-        folder = folder_service.create_folder(name)
+        folder = _folder_service().create_folder(name)
         
         return jsonify({
             'success': True,
@@ -70,6 +79,7 @@ def create_folder():
 
 
 @folder_bp.route('/<folder_id>', methods=['GET'])
+@require_auth
 def get_folder(folder_id):
     """
     Get folder by ID with all submissions.
@@ -81,7 +91,7 @@ def get_folder(folder_id):
         JSON with folder metadata and submissions
     """
     try:
-        folder = folder_service.get_folder(folder_id)
+        folder = _folder_service().get_folder(folder_id)
         
         if not folder:
             return jsonify({'error': 'Folder not found'}), 404
@@ -90,7 +100,7 @@ def get_folder(folder_id):
         submissions = []
         for sub_entry in folder.get('submissions', []):
             submission_id = sub_entry['submission_id']
-            submission = submission_service.get_submission(submission_id)
+            submission = _submission_service().get_submission(submission_id)
             if submission:
                 submissions.append(submission)
         
@@ -107,6 +117,7 @@ def get_folder(folder_id):
 
 
 @folder_bp.route('/<folder_id>', methods=['PUT'])
+@require_auth
 def update_folder(folder_id):
     """
     Update folder name.
@@ -133,7 +144,7 @@ def update_folder(folder_id):
         if not name:
             return jsonify({'error': 'Folder name cannot be empty'}), 400
         
-        folder = folder_service.update_folder(folder_id, name)
+        folder = _folder_service().update_folder(folder_id, name)
         
         if not folder:
             return jsonify({'error': 'Folder not found'}), 404
@@ -149,6 +160,7 @@ def update_folder(folder_id):
 
 
 @folder_bp.route('/<folder_id>', methods=['DELETE'])
+@require_auth
 def delete_folder(folder_id):
     """
     Delete a folder.
@@ -160,7 +172,7 @@ def delete_folder(folder_id):
         JSON with success status
     """
     try:
-        deleted = folder_service.delete_folder(folder_id)
+        deleted = _folder_service().delete_folder(folder_id)
         
         if not deleted:
             return jsonify({'error': 'Folder not found'}), 404

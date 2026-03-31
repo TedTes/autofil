@@ -18,17 +18,18 @@ class ClientService:
     Each client is a top-level entity that contains submissions stored remotely.
     """
     
-    def __init__(self):
+    def __init__(self, current_user_id: Optional[str] = None):
         """Initialize service with Supabase metadata store."""
         self.db = SupabaseDatabaseService()
+        self.current_user_id = current_user_id
         if not self.db.enabled:
             raise RuntimeError("Supabase database must be configured for client metadata storage.")
 
     def _persist_client_metadata(self, metadata: Dict[str, Any]) -> None:
-        self.db.save_client_metadata(metadata)
+        self.db.save_client_metadata(metadata, user_id=self.current_user_id)
 
     def _require_client_metadata(self, client_id: str) -> Dict[str, Any]:
-        metadata = self.db.get_client_metadata(client_id)
+        metadata = self.db.get_client_metadata(client_id, user_id=self.current_user_id)
         if not metadata:
             raise ValueError("Client not found")
         return metadata
@@ -49,6 +50,7 @@ class ClientService:
         metadata = {
             'client_id': client_id,
             'name': name,
+            'owner_user_id': self.current_user_id,
             'created_at': datetime.utcnow().isoformat(),
             'updated_at': datetime.utcnow().isoformat(),
             'submission_count': 0,
@@ -62,7 +64,7 @@ class ClientService:
         """
         Get client by ID (metadata only)
         """
-        metadata = self.db.get_client_metadata(client_id)
+        metadata = self.db.get_client_metadata(client_id, user_id=self.current_user_id)
         if metadata is None:
             return None
         
@@ -77,7 +79,7 @@ class ClientService:
         Returns:
             List of client metadata dictionaries
         """
-        clients = self.db.list_clients_metadata()
+        clients = self.db.list_clients_metadata(user_id=self.current_user_id)
         for metadata in clients:
             metadata.setdefault('submissions', [])
             metadata['submissions_detailed'] = self._build_submission_packages(metadata)
@@ -118,16 +120,16 @@ class ClientService:
         Returns:
             True if deleted, False if not found
         """
-        metadata = self.db.get_client_metadata(client_id)
+        metadata = self.db.get_client_metadata(client_id, user_id=self.current_user_id)
         if metadata is None:
             return False
 
         for submission_id in metadata.get('submissions', []):
             try:
-                self.db.delete_submission_metadata(submission_id)
+                self.db.delete_submission_metadata(submission_id, user_id=self.current_user_id)
             except Exception:
                 pass
-        self.db.delete_client_metadata(client_id)
+        self.db.delete_client_metadata(client_id, user_id=self.current_user_id)
         return True
     
     def add_submission(self, client_id: str, submission_id: str) -> bool:
@@ -165,7 +167,7 @@ class ClientService:
         client_metadata: Dict[str, Any],
         submission_id: str,
     ) -> Optional[Dict[str, Any]]:
-        metadata = self.db.get_submission_metadata(submission_id)
+        metadata = self.db.get_submission_metadata(submission_id, user_id=self.current_user_id)
         if not metadata:
             return None
 
@@ -196,7 +198,7 @@ class ClientService:
         """
         Return all submission packages for a client.
         """
-        metadata = self.db.get_client_metadata(client_id)
+        metadata = self.db.get_client_metadata(client_id, user_id=self.current_user_id)
         if metadata is None:
             return None
         metadata.setdefault('submissions', [])

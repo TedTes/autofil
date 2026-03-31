@@ -18,10 +18,11 @@ class BulkExportService:
 
     def __init__(
         self,
+        current_user_id: str | None = None,
         max_files_per_zip: int = 100,
         timeout_seconds: int = 5 * 60,
     ):
-        self.submission_service = SubmissionService()
+        self.submission_service = SubmissionService(current_user_id=current_user_id)
         self.max_files_per_zip = max_files_per_zip
         self.timeout_seconds = timeout_seconds
 

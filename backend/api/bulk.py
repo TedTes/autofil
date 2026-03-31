@@ -8,16 +8,23 @@ import os
 from datetime import datetime
 from flask import Blueprint, request, jsonify, send_file, after_this_request
 
+from api.auth import require_auth, get_current_user_id
 from services.submission_service import SubmissionService
 from services.bulk_export_service import BulkExportService
 
 bulk_bp = Blueprint("bulk", __name__)
 
-submission_service = SubmissionService()
-bulk_export_service = BulkExportService()
+
+def _submission_service() -> SubmissionService:
+    return SubmissionService(current_user_id=get_current_user_id())
+
+
+def _bulk_export_service() -> BulkExportService:
+    return BulkExportService(current_user_id=get_current_user_id())
 
 
 @bulk_bp.route("/fill", methods=["POST"])
+@require_auth
 def bulk_fill():
     """
     Fill multiple submissions.
@@ -29,6 +36,7 @@ def bulk_fill():
         200 with per-item results
     """
     try:
+        submission_service = _submission_service()
         data = request.get_json() or {}
         ids = data.get("submission_ids", [])
         template_id = data.get("template_id") or data.get("templateId")
@@ -75,6 +83,7 @@ def bulk_fill():
 
 
 @bulk_bp.route("/download", methods=["POST"])
+@require_auth
 def bulk_download_zip():
     """
     Download multiple filled PDFs as a ZIP.
@@ -86,6 +95,7 @@ def bulk_download_zip():
         application/zip (200 if all available, 207 if partial)
     """
     try:
+        submission_service = _submission_service()
         data = request.get_json() or {}
         ids = data.get("submission_ids", [])
         if not isinstance(ids, list) or not ids:
@@ -125,6 +135,7 @@ def bulk_download_zip():
 
 
 @bulk_bp.route("/export-zip", methods=["POST"])
+@require_auth
 def bulk_export_zip():
     """
     Export multiple filled PDFs as a single ZIP via BulkExportService.
@@ -139,6 +150,7 @@ def bulk_export_zip():
         - 400 if none succeeded
     """
     try:
+        bulk_export_service = _bulk_export_service()
         payload = request.get_json() or {}
         ids = payload.get("submission_ids")
 
@@ -182,6 +194,7 @@ def bulk_export_zip():
 
 
 @bulk_bp.route("/export/csv", methods=["POST"])
+@require_auth
 def bulk_export_csv():
     """
     Export submissions to CSV.
@@ -193,6 +206,7 @@ def bulk_export_csv():
         }
     """
     try:
+        submission_service = _submission_service()
         data = request.get_json() or {}
 
         submissions = (
@@ -213,6 +227,7 @@ def bulk_export_csv():
 
 
 @bulk_bp.route("/export/json", methods=["POST"])
+@require_auth
 def bulk_export_json():
     """
     Export submissions to JSON.
@@ -224,6 +239,7 @@ def bulk_export_json():
         }
     """
     try:
+        submission_service = _submission_service()
         data = request.get_json() or {}
 
         submissions = (
@@ -244,6 +260,7 @@ def bulk_export_json():
 
 
 @bulk_bp.route("/export/package", methods=["POST"])
+@require_auth
 def bulk_export_package():
     """
     Export a complete package (PDFs, JSON, CSV) as a ZIP.
@@ -257,6 +274,7 @@ def bulk_export_package():
         }
     """
     try:
+        submission_service = _submission_service()
         data = request.get_json() or {}
 
         submissions = (
@@ -281,6 +299,7 @@ def bulk_export_package():
 
 
 @bulk_bp.route("/export/webhook", methods=["POST"])
+@require_auth
 def bulk_send_webhook():
     """
     Send multiple submissions to a webhook.
@@ -294,6 +313,7 @@ def bulk_send_webhook():
         }
     """
     try:
+        submission_service = _submission_service()
         data = request.get_json() or {}
         webhook_url = data.get("webhook_url")
         if not webhook_url:
@@ -324,6 +344,7 @@ def bulk_send_webhook():
 
 
 @bulk_bp.route("/delete", methods=["DELETE"])
+@require_auth
 def bulk_delete():
     """
     Delete multiple submissions.
@@ -335,6 +356,7 @@ def bulk_delete():
         { "success": true, "results": [{ id, success, error? }, ...] }
     """
     try:
+        submission_service = _submission_service()
         data = request.get_json() or {}
         ids = data.get("submission_ids", [])
         if not isinstance(ids, list) or not ids:

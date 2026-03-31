@@ -11,21 +11,30 @@ import json
 import logging
 from datetime import datetime
 from flask import Blueprint, request, jsonify, send_file, Response
+from api.auth import require_auth, get_current_user_id
 from services.submission_service import SubmissionService
 from services.merged_data_service import MergedDataService
 # Blueprint for submission-specific routes
 submission_bp = Blueprint("submissions", __name__)
-submission_service = SubmissionService()
-merged_data_service = MergedDataService(submission_service)
 logger = logging.getLogger(__name__)
 
+
+def _submission_service() -> SubmissionService:
+    return SubmissionService(current_user_id=get_current_user_id())
+
+
+def _merged_data_service(submission_service: SubmissionService) -> MergedDataService:
+    return MergedDataService(submission_service)
+
 @submission_bp.route("/upload", methods=["POST"])
+@require_auth
 def upload_pdf():
     """
     Upload one or more documents and extract data.
     Supports PDF (native/scanned), images, CSV/Excel, DOCX, TXT.
     """
     try:
+        submission_service = _submission_service()
         folder_id = request.form.get("folder_id")
         client_id = request.form.get("client_id")
         submission_id = request.form.get("submission_id")
@@ -120,9 +129,11 @@ def upload_pdf():
 
 
 @submission_bp.route("/<submission_id>", methods=["GET"])
+@require_auth
 def get_submission(submission_id):
     """Retrieve submission data with field-level confidence/hints."""
     try:
+        submission_service = _submission_service()
         input_id = request.args.get("input_id")
         submission = submission_service.get_submission(submission_id, input_id=input_id)
         if not submission:
@@ -150,9 +161,12 @@ def get_submission(submission_id):
 
 
 @submission_bp.route("/<submission_id>/merged-data", methods=["GET"])
+@require_auth
 def get_submission_merged_data(submission_id: str):
     """Return merged view data for a submission package."""
     try:
+        submission_service = _submission_service()
+        merged_data_service = _merged_data_service(submission_service)
         merged_data = merged_data_service.get_merged_data(submission_id)
         return jsonify({
             "success": True,
@@ -165,9 +179,11 @@ def get_submission_merged_data(submission_id: str):
 
 
 @submission_bp.route("/<submission_id>/package", methods=["GET"])
+@require_auth
 def get_submission_package(submission_id: str):
     """Return submission package metadata (inputs, outputs, status)."""
     try:
+        submission_service = _submission_service()
         package = submission_service.get_submission_package(submission_id)
         if not package:
             return jsonify({"error": "Submission not found"}), 404
@@ -181,9 +197,11 @@ def get_submission_package(submission_id: str):
 
 
 @submission_bp.route("/<submission_id>", methods=["PUT"])
+@require_auth
 def update_submission(submission_id):
     """Update a submission's JSON data (full replacement)."""
     try:
+        submission_service = _submission_service()
         data = request.get_json()
         if not data:
             return jsonify({"error": "No data provided"}), 400
@@ -202,9 +220,11 @@ def update_submission(submission_id):
 
 
 @submission_bp.route("/<submission_id>/inputs/<input_id>", methods=["DELETE"])
+@require_auth
 def delete_submission_input(submission_id, input_id):
     """Delete a single uploaded input file from a submission."""
     try:
+        submission_service = _submission_service()
         deleted = submission_service.delete_input(submission_id, input_id)
         if not deleted:
             return jsonify({"error": "Input file not found"}), 404
@@ -214,9 +234,11 @@ def delete_submission_input(submission_id, input_id):
 
 
 @submission_bp.route("/<submission_id>/inputs/<input_id>/include", methods=["PATCH"])
+@require_auth
 def update_submission_input_inclusion(submission_id, input_id):
     """Include or exclude a submission input from merged review data."""
     try:
+        submission_service = _submission_service()
         payload = request.get_json(silent=True) or {}
         if "included" not in payload:
             return jsonify({"error": "included is required"}), 400
@@ -238,9 +260,11 @@ def update_submission_input_inclusion(submission_id, input_id):
 
 
 @submission_bp.route("/<submission_id>/outputs/<output_id>", methods=["DELETE"])
+@require_auth
 def delete_submission_output(submission_id, output_id):
     """Delete a generated output file from a submission."""
     try:
+        submission_service = _submission_service()
         deleted = submission_service.delete_output(submission_id, output_id)
         if not deleted:
             return jsonify({"error": "Output file not found"}), 404
@@ -250,9 +274,11 @@ def delete_submission_output(submission_id, output_id):
 
 
 @submission_bp.route("/<submission_id>", methods=["DELETE"])
+@require_auth
 def delete_submission(submission_id):
     """Delete a submission and all its files."""
     try:
+        submission_service = _submission_service()
         deleted = submission_service.delete_submission(submission_id)
         if not deleted:
             return jsonify({"error": "Submission not found"}), 404
@@ -266,9 +292,11 @@ def delete_submission(submission_id):
 
 
 @submission_bp.route("/<submission_id>/fill", methods=["POST"])
+@require_auth
 def fill_pdf(submission_id):
     """Fill a single submission's PDF with extracted data."""
     try:
+        submission_service = _submission_service()
         payload = request.get_json(silent=True) or {}
         input_ids = payload.get("input_ids")
         template_ids = payload.get("templateIds") or payload.get("template_ids")
@@ -323,9 +351,11 @@ def fill_pdf(submission_id):
 
 
 @submission_bp.route("/<submission_id>/download", methods=["GET"])
+@require_auth
 def download_pdf(submission_id):
     """Download the filled PDF for a submission."""
     try:
+        submission_service = _submission_service()
         metadata = submission_service.get_submission_metadata(submission_id)
         if not metadata:
             return jsonify({"error": "Submission not found"}), 404
@@ -355,9 +385,11 @@ def download_pdf(submission_id):
 
 
 @submission_bp.route("/<submission_id>/preview-input", methods=["GET"])
+@require_auth
 def preview_input_pdf(submission_id):
     """Preview the original input file inline (for iframes)."""
     try:
+        submission_service = _submission_service()
         metadata = submission_service.get_submission_metadata(submission_id)
         if not metadata:
             return jsonify({"error": "Submission metadata not found"}), 404
@@ -380,9 +412,11 @@ def preview_input_pdf(submission_id):
 
 
 @submission_bp.route("/<submission_id>/preview-output", methods=["GET"])
+@require_auth
 def preview_output_pdf(submission_id):
     """Preview the filled PDF inline (for iframes)."""
     try:
+        submission_service = _submission_service()
         metadata = submission_service.get_submission_metadata(submission_id)
         if not metadata:
             return jsonify({"error": "Submission metadata not found"}), 404
@@ -404,9 +438,11 @@ def preview_output_pdf(submission_id):
 
 
 @submission_bp.route("/<submission_id>/versions", methods=["GET"])
+@require_auth
 def get_version_history(submission_id):
     """Get the version history for a submission."""
     try:
+        submission_service = _submission_service()
         versions = submission_service.get_version_history(submission_id)
         return jsonify({
             "success": True,
@@ -422,9 +458,11 @@ def get_version_history(submission_id):
 
 
 @submission_bp.route("/<submission_id>/versions/<version_id>", methods=["GET"])
+@require_auth
 def get_specific_version(submission_id, version_id):
     """Get a specific version's data for a submission."""
     try:
+        submission_service = _submission_service()
         version = submission_service.version_service.get_version(
             submission_id, version_id
         )
@@ -441,9 +479,11 @@ def get_specific_version(submission_id, version_id):
 
 @submission_bp.route("/<submission_id>/versions/<version_id>/rollback",
                      methods=["POST"])
+@require_auth
 def rollback_to_version(submission_id, version_id):
     """Roll back a submission to a specific version."""
     try:
+        submission_service = _submission_service()
         data = request.get_json() or {}
         user = data.get("user", "user")
         notes = data.get("notes", "")
@@ -483,9 +523,11 @@ def rollback_to_version(submission_id, version_id):
 
 
 @submission_bp.route("/<submission_id>/versions/compare", methods=["POST"])
+@require_auth
 def compare_versions(submission_id):
     """Compare two versions of a submission."""
     try:
+        submission_service = _submission_service()
         data = request.get_json()
         version_id_1 = data.get("version_id_1")
         version_id_2 = data.get("version_id_2")
@@ -509,9 +551,11 @@ def compare_versions(submission_id):
 
 
 @submission_bp.route("/<submission_id>/compare", methods=["POST"])
+@require_auth
 def compare_data(submission_id):
     """Compare two arbitrary data snapshots for a submission."""
     try:
+        submission_service = _submission_service()
         data = request.get_json()
         source_a = data.get("source_a")
         source_b = data.get("source_b")
@@ -538,9 +582,11 @@ def compare_data(submission_id):
 
 
 @submission_bp.route("/<submission_id>/compare-with-original", methods=["GET"])
+@require_auth
 def compare_with_original(submission_id):
     """Compare the current data with the original extraction."""
     try:
+        submission_service = _submission_service()
         comparison = submission_service.compare_with_original(submission_id)
         return jsonify({
             "success": True,
@@ -555,9 +601,11 @@ def compare_with_original(submission_id):
 
 @submission_bp.route("/<submission_id>/conflicts/<field>/suggest",
                      methods=["POST"])
+@require_auth
 def suggest_resolution(submission_id, field):
     """Get a resolution suggestion for a specific conflict field."""
     try:
+        submission_service = _submission_service()
         data = request.get_json()
         conflict = data.get("conflict")
         context = data.get("context", {})
@@ -578,9 +626,11 @@ def suggest_resolution(submission_id, field):
 
 
 @submission_bp.route("/<submission_id>/conflicts/resolve", methods=["POST"])
+@require_auth
 def resolve_conflicts(submission_id):
     """Apply conflict resolutions to a submission's data."""
     try:
+        submission_service = _submission_service()
         data = request.get_json()
         comparison_id = data.get("comparison_id")
         resolutions = data.get("resolutions", [])
@@ -627,9 +677,11 @@ def resolve_conflicts(submission_id):
 
 
 @submission_bp.route("/<submission_id>/form", methods=["GET"])
+@require_auth
 def get_submission_form(submission_id):
     """Get a dynamic form definition for a submission."""
     try:
+        submission_service = _submission_service()
         include_optional = request.args.get("include_optional", "true").lower() == "true"
         form = submission_service.generate_form(
             submission_id=submission_id,
@@ -647,9 +699,11 @@ def get_submission_form(submission_id):
 
 
 @submission_bp.route("/<submission_id>/data", methods=["PATCH"])
+@require_auth
 def patch_submission_data(submission_id):
     """Patch a submission's data without changing its workflow status."""
     try:
+        submission_service = _submission_service()
         payload = request.get_json() or {}
         new_data = payload.get("data")
 
@@ -679,12 +733,14 @@ def patch_submission_data(submission_id):
 
 
 @submission_bp.route("/<submission_id>/status", methods=["PATCH"])
+@require_auth
 def update_submission_status(submission_id):
     """
     Update the workflow status for a submission.
     Expects JSON body with "workflow_status".
     """
     try:
+        submission_service = _submission_service()
         payload = request.get_json() or {}
         new_status = payload.get("workflow_status")
         if not new_status:
@@ -711,9 +767,11 @@ def update_submission_status(submission_id):
 
 
 @submission_bp.route("/list", methods=["GET"])
+@require_auth
 def list_all_submissions():
     """List submissions with pagination and optional status filter."""
     try:
+        submission_service = _submission_service()
   
         limit = int(request.args.get("limit", 100))
         offset = int(request.args.get("offset", 0))
@@ -760,9 +818,11 @@ def list_all_submissions():
 
 
 @submission_bp.route("/stats", methods=["GET"])
+@require_auth
 def get_submissions_stats():
     """Get aggregate statistics about submissions."""
     try:
+        submission_service = _submission_service()
         all_subs = submission_service.get_all_submissions()
         total = len(all_subs)
         by_status = {}
@@ -793,9 +853,11 @@ def get_submissions_stats():
 
 
 @submission_bp.route("/reports/summary", methods=["GET"])
+@require_auth
 def get_reports_summary():
     """Return aggregated metrics for the reports dashboard."""
     try:
+        submission_service = _submission_service()
         range_days = int(request.args.get("range_days", 30))
         summary = submission_service.get_reports_summary(range_days=range_days)
         return jsonify({
@@ -808,6 +870,7 @@ def get_reports_summary():
 
 
 @submission_bp.route('/recent', methods=['GET'])
+@require_auth
 def list_recent_submissions():
     """
     List recent submissions by last activity (uploaded/edited/filled/updated).
@@ -820,6 +883,7 @@ def list_recent_submissions():
       - since (ISO datetime, optional) -> only items with activity >= since
     """
     try:
+        submission_service = _submission_service()
         limit = int(request.args.get('limit', 20))
         offset = int(request.args.get('offset', 0))
         status_param = request.args.get('status')

@@ -150,11 +150,25 @@ class SupabaseDatabaseService:
             logger.warning("failed to repair malformed local metadata file %s: %s", path, repair_exc)
             return None
 
+    def _stamp_owner(self, metadata: Dict[str, Any], user_id: Optional[str]) -> Dict[str, Any]:
+        if user_id and not metadata.get("owner_user_id"):
+            metadata["owner_user_id"] = user_id
+        return metadata
+
+    def _is_visible_to_user(self, metadata: Optional[Dict[str, Any]], user_id: Optional[str]) -> bool:
+        if not metadata:
+            return False
+        if not user_id:
+            return True
+        owner_user_id = metadata.get("owner_user_id")
+        return owner_user_id is None or owner_user_id == user_id
+
     # ---------------------------------------------------------------- submissions
-    def save_submission_metadata(self, metadata: Dict[str, Any]) -> None:
+    def save_submission_metadata(self, metadata: Dict[str, Any], user_id: Optional[str] = None) -> None:
         submission_id = metadata.get("submission_id")
         if not submission_id:
             return
+        metadata = self._stamp_owner(metadata, user_id)
         if not self.remote_enabled or not self._client:
             self._local_save("submissions", submission_id, metadata)
             return
@@ -177,9 +191,10 @@ class SupabaseDatabaseService:
                     continue
                 break
 
-    def get_submission_metadata(self, submission_id: str) -> Optional[Dict[str, Any]]:
+    def get_submission_metadata(self, submission_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         if not self.remote_enabled or not self._client:
-            return self._local_get("submissions", submission_id)
+            metadata = self._local_get("submissions", submission_id)
+            return metadata if self._is_visible_to_user(metadata, user_id) else None
         for attempt in range(2):
             try:
                 data = self._execute(
@@ -189,7 +204,8 @@ class SupabaseDatabaseService:
                     .maybe_single()
                 )
                 if data:
-                    return data.get("metadata")
+                    metadata = data.get("metadata")
+                    return metadata if self._is_visible_to_user(metadata, user_id) else None
                 return None
             except Exception as exc:
                 logger.warning("supabase-db failed to fetch submission %s: %s", submission_id, exc)
@@ -198,7 +214,9 @@ class SupabaseDatabaseService:
                 break
         return None
 
-    def delete_submission_metadata(self, submission_id: str) -> None:
+    def delete_submission_metadata(self, submission_id: str, user_id: Optional[str] = None) -> None:
+        if user_id and not self.get_submission_metadata(submission_id, user_id=user_id):
+            return
         if not self.remote_enabled or not self._client:
             self._local_delete("submissions", submission_id)
             return
@@ -207,11 +225,11 @@ class SupabaseDatabaseService:
         except Exception as exc:
             logger.warning("supabase-db failed to delete submission %s: %s", submission_id, exc)
 
-    def list_submissions_metadata(self) -> List[Dict[str, Any]]:
+    def list_submissions_metadata(self, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         if not self.remote_enabled or not self._client:
             return [
                 meta for meta in self._local_list("submissions")
-                if meta and (meta.get("file_count") or 0) > 0
+                if meta and self._is_visible_to_user(meta, user_id) and (meta.get("file_count") or 0) > 0
             ]
         for attempt in range(2):
             try:
@@ -224,7 +242,7 @@ class SupabaseDatabaseService:
                 return [
                     meta for meta in
                     (row.get("metadata") for row in rows)
-                    if meta and (meta.get("file_count") or 0) > 0
+                    if meta and self._is_visible_to_user(meta, user_id) and (meta.get("file_count") or 0) > 0
                 ]
             except Exception as exc:
                 logger.warning("supabase-db failed to list submissions: %s", exc)
@@ -234,10 +252,11 @@ class SupabaseDatabaseService:
         return []
 
     # -------------------------------------------------------------------- clients
-    def save_client_metadata(self, metadata: Dict[str, Any]) -> None:
+    def save_client_metadata(self, metadata: Dict[str, Any], user_id: Optional[str] = None) -> None:
         client_id = metadata.get("client_id")
         if not client_id:
             return
+        metadata = self._stamp_owner(metadata, user_id)
         if not self.remote_enabled or not self._client:
             self._local_save("clients", client_id, metadata)
             return
@@ -260,9 +279,10 @@ class SupabaseDatabaseService:
                     continue
                 break
 
-    def get_client_metadata(self, client_id: str) -> Optional[Dict[str, Any]]:
+    def get_client_metadata(self, client_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         if not self.remote_enabled or not self._client:
-            return self._local_get("clients", client_id)
+            metadata = self._local_get("clients", client_id)
+            return metadata if self._is_visible_to_user(metadata, user_id) else None
         for attempt in range(2):
             try:
                 data = self._execute(
@@ -272,7 +292,8 @@ class SupabaseDatabaseService:
                     .single()
                 )
                 if data:
-                    return data.get("metadata")
+                    metadata = data.get("metadata")
+                    return metadata if self._is_visible_to_user(metadata, user_id) else None
                 return None
             except Exception as exc:
                 logger.warning("supabase-db failed to fetch client %s: %s", client_id, exc)
@@ -281,10 +302,11 @@ class SupabaseDatabaseService:
                 break
         return None
 
-    def list_clients_metadata(self) -> List[Dict[str, Any]]:
+    def list_clients_metadata(self, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         if not self.remote_enabled or not self._client:
             rows = self._local_list("clients")
-            return sorted(rows, key=lambda row: (row or {}).get("name", "").lower())
+            visible = [row for row in rows if self._is_visible_to_user(row, user_id)]
+            return sorted(visible, key=lambda row: (row or {}).get("name", "").lower())
         for attempt in range(2):
             try:
                 rows = self._execute(
@@ -294,7 +316,11 @@ class SupabaseDatabaseService:
                 )
                 if not rows:
                     return []
-                return [row.get("metadata") for row in rows if row.get("metadata")]
+                return [
+                    metadata for metadata in
+                    (row.get("metadata") for row in rows)
+                    if self._is_visible_to_user(metadata, user_id)
+                ]
             except Exception as exc:
                 logger.warning("supabase-db failed to list clients: %s", exc)
                 if attempt == 0 and self._should_retry(exc) and self._reset_client():
@@ -302,7 +328,9 @@ class SupabaseDatabaseService:
                 break
         return []
 
-    def delete_client_metadata(self, client_id: str) -> None:
+    def delete_client_metadata(self, client_id: str, user_id: Optional[str] = None) -> None:
+        if user_id and not self.get_client_metadata(client_id, user_id=user_id):
+            return
         if not self.remote_enabled or not self._client:
             self._local_delete("clients", client_id)
             return
@@ -312,10 +340,11 @@ class SupabaseDatabaseService:
             logger.warning("supabase-db failed to delete client %s: %s", client_id, exc)
 
     # -------------------------------------------------------------------- folders
-    def save_folder_metadata(self, metadata: Dict[str, Any]) -> None:
+    def save_folder_metadata(self, metadata: Dict[str, Any], user_id: Optional[str] = None) -> None:
         folder_id = metadata.get("folder_id")
         if not folder_id:
             return
+        metadata = self._stamp_owner(metadata, user_id)
         if not self.remote_enabled or not self._client:
             self._local_save("folders", folder_id, metadata)
             return
@@ -333,9 +362,10 @@ class SupabaseDatabaseService:
         except Exception as exc:
             logger.warning("supabase-db failed to save folder %s: %s", folder_id, exc)
 
-    def get_folder_metadata(self, folder_id: str) -> Optional[Dict[str, Any]]:
+    def get_folder_metadata(self, folder_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         if not self.remote_enabled or not self._client:
-            return self._local_get("folders", folder_id)
+            metadata = self._local_get("folders", folder_id)
+            return metadata if self._is_visible_to_user(metadata, user_id) else None
         try:
             data = self._execute(
                 self._client.table("folders_metadata")
@@ -344,14 +374,15 @@ class SupabaseDatabaseService:
                 .single()
             )
             if data:
-                return data.get("metadata")
+                metadata = data.get("metadata")
+                return metadata if self._is_visible_to_user(metadata, user_id) else None
         except Exception as exc:
             logger.warning("supabase-db failed to fetch folder %s: %s", folder_id, exc)
         return None
 
-    def list_folders_metadata(self) -> List[Dict[str, Any]]:
+    def list_folders_metadata(self, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         if not self.remote_enabled or not self._client:
-            return self._local_list("folders")
+            return [row for row in self._local_list("folders") if self._is_visible_to_user(row, user_id)]
         try:
             rows = self._execute(
                 self._client.table("folders_metadata")
@@ -360,12 +391,18 @@ class SupabaseDatabaseService:
             )
             if not rows:
                 return []
-            return [row.get("metadata") for row in rows if row.get("metadata")]
+            return [
+                metadata for metadata in
+                (row.get("metadata") for row in rows)
+                if self._is_visible_to_user(metadata, user_id)
+            ]
         except Exception as exc:
             logger.warning("supabase-db failed to list folders: %s", exc)
             return []
 
-    def delete_folder_metadata(self, folder_id: str) -> None:
+    def delete_folder_metadata(self, folder_id: str, user_id: Optional[str] = None) -> None:
+        if user_id and not self.get_folder_metadata(folder_id, user_id=user_id):
+            return
         if not self.remote_enabled or not self._client:
             self._local_delete("folders", folder_id)
             return

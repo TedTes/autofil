@@ -13,6 +13,57 @@ interface TemplatesViewProps {
   onDownloadTemplate?: (templateId: string) => void
 }
 
+type LibraryItem = {
+  id: string
+  name: string
+  description: string
+  expectedDocuments: string[]
+  suggestedForms: string[]
+  url?: string | null
+  category: 'forms' | 'exports'
+  categoryLabel: string
+  outputTypeLabel: string
+}
+
+const TEMPLATE_OVERRIDES: Record<
+  string,
+  Partial<Pick<LibraryItem, 'name' | 'description' | 'category' | 'categoryLabel' | 'outputTypeLabel'>>
+> = {
+  loss_run_fields: {
+    name: 'Loss Run Worksheet',
+    description: 'Blank worksheet used to review or export claim history before carrier submission.',
+    category: 'exports',
+    categoryLabel: 'Loss Runs & Exports',
+    outputTypeLabel: 'Worksheet',
+  },
+  mfc: {
+    name: 'Supplemental Field Catalog',
+    description: 'Reference output for supplemental field mapping and coverage-specific data review.',
+    category: 'exports',
+    categoryLabel: 'Supplemental Outputs',
+    outputTypeLabel: 'Reference',
+  },
+}
+
+function normalizeTemplate(tpl: SubmissionTemplateSummary): LibraryItem {
+  const override = TEMPLATE_OVERRIDES[tpl.template_id] || {}
+  const isExport =
+    override.category === 'exports' ||
+    /export|csv|json|worksheet|catalog/i.test(`${tpl.name} ${tpl.description} ${tpl.template_id}`)
+
+  return {
+    id: tpl.template_id,
+    name: override.name || tpl.name,
+    description: override.description || tpl.description,
+    expectedDocuments: tpl.expected_documents || [],
+    suggestedForms: tpl.suggested_forms || [],
+    url: tpl.templateUrl,
+    category: isExport ? 'exports' : 'forms',
+    categoryLabel: override.categoryLabel || (isExport ? 'Exports & Worksheets' : 'ACORD & Carrier Forms'),
+    outputTypeLabel: override.outputTypeLabel || (isExport ? 'Export' : 'Blank form'),
+  }
+}
+
 export function TemplatesView({ onTemplateClick, onDownloadTemplate }: TemplatesViewProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
@@ -48,14 +99,7 @@ export function TemplatesView({ onTemplateClick, onDownloadTemplate }: Templates
   }, [])
 
   const displayTemplates = useMemo(() => {
-    const list = templates.map((tpl) => ({
-      id: tpl.template_id,
-      name: tpl.name,
-      description: tpl.description,
-      expectedDocuments: tpl.expected_documents || [],
-      suggestedForms: tpl.suggested_forms || [],
-      url: tpl.templateUrl,
-    }))
+    const list = templates.map(normalizeTemplate)
 
     if (!searchQuery.trim()) {
       return list
@@ -68,6 +112,24 @@ export function TemplatesView({ onTemplateClick, onDownloadTemplate }: Templates
         (item.suggestedForms || []).some((form) => form.toLowerCase().includes(q))
     )
   }, [templates, searchQuery])
+
+  const templateSections = useMemo(
+    () => [
+      {
+        key: 'forms',
+        title: 'Forms',
+        description: 'Blank ACORD and carrier forms users can preview before generating outputs.',
+        items: displayTemplates.filter((item) => item.category === 'forms'),
+      },
+      {
+        key: 'exports',
+        title: 'Exports',
+        description: 'Structured outputs and worksheets that support review and downstream processing.',
+        items: displayTemplates.filter((item) => item.category === 'exports'),
+      },
+    ].filter((section) => section.items.length > 0),
+    [displayTemplates]
+  )
 
   const openTemplate = (url?: string|undefined|null) => {
     if (!url) return
@@ -150,65 +212,86 @@ export function TemplatesView({ onTemplateClick, onDownloadTemplate }: Templates
               No templates available yet.
             </div>
           ) : (
-            <div
-              className={
-                viewMode === 'grid'
-                  ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8'
-                  : 'space-y-3 mb-8'
-              }
-            >
-              {displayTemplates.map((form) => (
-                <div
-                  key={form.id}
-                  className="border border-gray-200 rounded-lg p-4 hover:border-green-500 hover:shadow-md transition-all cursor-pointer group"
-                  onClick={() => openTemplate(form.url)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      openTemplate(form.url)
+            <div className="space-y-8 mb-8">
+              {templateSections.map((section) => (
+                <section key={section.key}>
+                  <div className="mb-4">
+                    <h4 className="text-base font-semibold text-gray-900">{section.title}</h4>
+                    <p className="text-sm text-gray-600">{section.description}</p>
+                  </div>
+
+                  <div
+                    className={
+                      viewMode === 'grid'
+                        ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'
+                        : 'space-y-3'
                     }
-                  }}
-                >
-                  <div className="flex items-start justify-between mb-3">
-                  <div className="w-12 h-12 bg-green-50 rounded-lg flex items-center justify-center group-hover:bg-green-100 transition-colors">
-                    <FileCheck className="w-6 h-6 text-green-600" />
+                  >
+                    {section.items.map((form) => (
+                      <div
+                        key={form.id}
+                        className="border border-gray-200 rounded-lg p-4 hover:border-green-500 hover:shadow-md transition-all cursor-pointer group"
+                        onClick={() => openTemplate(form.url)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            openTemplate(form.url)
+                          }
+                        }}
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="w-12 h-12 bg-green-50 rounded-lg flex items-center justify-center group-hover:bg-green-100 transition-colors">
+                            <FileCheck className="w-6 h-6 text-green-600" />
+                          </div>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                if (onDownloadTemplate) {
+                                  onDownloadTemplate(form.id)
+                                } else {
+                                  openTemplate(form.url)
+                                }
+                              }}
+                              className="p-1.5 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded"
+                              title="Download blank"
+                            >
+                              <Download className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                if (onTemplateClick) {
+                                  onTemplateClick(form.id)
+                                } else {
+                                  openTemplate(form.url)
+                                }
+                              }}
+                              className="p-1.5 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded"
+                              title="Preview"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="mb-2 flex items-center gap-2 text-xs">
+                          <span className="rounded-full bg-gray-100 px-2 py-1 font-medium text-gray-600">
+                            {form.categoryLabel}
+                          </span>
+                          <span className="rounded-full bg-green-50 px-2 py-1 font-medium text-green-700">
+                            {form.outputTypeLabel}
+                          </span>
+                        </div>
+
+                        <h5 className="font-semibold text-gray-900 mb-1">{form.name}</h5>
+                        <p className="text-xs text-gray-600">{form.description}</p>
+                      </div>
+                    ))}
                   </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        if (onDownloadTemplate) {
-                          onDownloadTemplate(form.id)
-                        } else {
-                          openTemplate(form.url)
-                        }
-                      }}
-                      className="p-1.5 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded"
-                      title="Download blank"
-                    >
-                      <Download className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        if (onTemplateClick) {
-                          onTemplateClick(form.id)
-                        } else {
-                          openTemplate(form.url)
-                        }
-                      }}
-                      className="p-1.5 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded"
-                      title="Preview"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-                <h4 className="font-semibold text-gray-900 mb-1">{form.name}</h4>
-                <p className="text-xs text-gray-600">{form.description}</p>
-                </div>
+                </section>
               ))}
             </div>
           )}

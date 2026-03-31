@@ -297,27 +297,10 @@ export function TemplatesView({ onTemplateClick, onDownloadTemplate }: Templates
             </div>
           )}
 
-          {/* Info Section */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <h4 className="font-semibold text-blue-900 mb-2">📋 How it works</h4>
-            <ul className="space-y-2 text-sm text-blue-800">
-              <li className="flex items-start gap-2">
-                <span className="text-blue-600 mt-0.5">•</span>
-                <span>Browse available ACORD forms and templates</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-600 mt-0.5">•</span>
-                <span>Download blank forms to see the structure</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-600 mt-0.5">•</span>
-                <span>Upload supporting documents and let AI auto-fill forms</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-600 mt-0.5">•</span>
-                <span>Review and export completed forms</span>
-              </li>
-            </ul>
+          <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+            <p className="text-sm text-gray-700">
+              Generate these forms from a submission once extracted review data is ready.
+            </p>
           </div>
         </div>
       </div>

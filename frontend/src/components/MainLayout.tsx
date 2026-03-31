@@ -31,6 +31,7 @@ import { FileDetailView, DocumentsView,  ClientsView,
 import {
   getSubmissionStats,
 } from '@/lib/api-client'
+import { useAuth } from '@/contexts/AuthContext'
 
 import type { ViewType,  FileDetailActions,ViewDataMap, SubmissionStats } from '@/types'
 import type { ClientDetailActions } from '@/types'
@@ -208,6 +209,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const [submissionStats, setSubmissionStats] = useState<SubmissionStats | null>(null)
 
   const router = useRouter()
+  const { user, signOut } = useAuth()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const currentView = useMemo(
@@ -222,6 +224,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
     currentView.type === 'client-detail' && currentView.data && 'clientName' in currentView.data
       ? currentView.data.clientName || 'Account'
       : null
+  const userLabel = user?.email || user?.user_metadata?.full_name || null
 
   // Measure sidebar state on mount to avoid flicker on laptop-sized screens
   useLayoutEffect(() => {
@@ -623,6 +626,11 @@ const handleMobileSidebarClose = () => {
                 {/* Right: avatar menu */}
                 <AvatarMenu
                   accountLabel={currentAccountLabel}
+                  userLabel={userLabel}
+                  onLogout={async () => {
+                    await signOut()
+                    router.push('/login')
+                  }}
                   onSettings={() => navigateTo('settings', undefined, ['Dashboard', 'Settings'])}
                   onHelp={() => navigateTo('help', undefined, ['Dashboard', 'Help'])}
                 />
@@ -673,6 +681,11 @@ const handleMobileSidebarClose = () => {
                   </>
                 )}
                 <AvatarMenu
+                  userLabel={userLabel}
+                  onLogout={async () => {
+                    await signOut()
+                    router.push('/login')
+                  }}
                   onSettings={() => navigateTo('settings', undefined, ['Dashboard', 'Settings'])}
                   onHelp={() => navigateTo('help', undefined, ['Dashboard', 'Help'])}
                 />
@@ -810,10 +823,14 @@ const handleMobileSidebarClose = () => {
 
 function AvatarMenu({
   accountLabel,
+  userLabel,
+  onLogout,
   onSettings,
   onHelp,
 }: {
   accountLabel?: string | null
+  userLabel?: string | null
+  onLogout: () => Promise<void> | void
   onSettings: () => void
   onHelp: () => void
 }) {
@@ -829,6 +846,8 @@ function AvatarMenu({
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
+  const avatarInitial = (userLabel || accountLabel || 'N').trim().charAt(0).toUpperCase()
+
   return (
     <div ref={ref} className="relative flex-shrink-0">
       <button
@@ -836,10 +855,19 @@ function AvatarMenu({
         className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-white text-sm font-semibold hover:bg-gray-700 transition-colors"
         aria-label="User menu"
       >
-        N
+        {avatarInitial}
       </button>
       {open && (
         <div className="absolute right-0 top-10 z-50 w-48 rounded-xl border border-gray-200 bg-white shadow-lg py-1 text-sm">
+          {userLabel && (
+            <>
+              <div className="px-3 py-2">
+                <p className="text-xs text-gray-400">Signed in as</p>
+                <p className="truncate font-medium text-gray-900">{userLabel}</p>
+              </div>
+              <div className="my-1 border-t border-gray-100" />
+            </>
+          )}
           {accountLabel && (
             <>
               <div className="px-3 py-2">
@@ -862,6 +890,17 @@ function AvatarMenu({
           >
             <HelpCircle className="h-4 w-4 text-gray-400" />
             Help & Support
+          </button>
+          <div className="my-1 border-t border-gray-100" />
+          <button
+            onClick={() => {
+              void onLogout()
+              setOpen(false)
+            }}
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-red-600 hover:bg-red-50 transition-colors"
+          >
+            <X className="h-4 w-4" />
+            Logout
           </button>
         </div>
       )}

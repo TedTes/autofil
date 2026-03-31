@@ -6,7 +6,7 @@ import AnimatedDemo from '@/components/landing/AnimatedDemo'
 
 export default function LandingPage() {
   const router = useRouter()
-  const handleGetStarted = () => router.push('/dashboard')
+  const handleGetStarted = () => router.push('/login')
 
   return (
     <div className="min-h-screen bg-white">

@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import { ToastProvider } from '@/contexts/ToastContext'
 import { FieldCatalogProvider } from '@/contexts/FieldCatalogContext'
+import { AuthProvider } from '@/contexts/AuthContext'
 import ToastContainer from '@/components/ToastContainer'
 import BackendStatusBanner from '@/components/BackendStatusBanner'
 
@@ -21,14 +22,16 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <FieldCatalogProvider>
-          <ToastProvider>
-            <div className="min-h-screen">
-              {children}
-            </div>
-            <ToastContainer />
-          </ToastProvider>
-        </FieldCatalogProvider>
+        <AuthProvider>
+          <FieldCatalogProvider>
+            <ToastProvider>
+              <div className="min-h-screen">
+                {children}
+              </div>
+              <ToastContainer />
+            </ToastProvider>
+          </FieldCatalogProvider>
+        </AuthProvider>
       </body>
     </html>
   )

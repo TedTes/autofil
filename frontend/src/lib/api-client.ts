@@ -726,6 +726,21 @@ export function getInputPreviewUrl(submissionId: string): string {
   return `${API_BASE_URL}/api/submissions/${submissionId}/preview-input`
 }
 
+export async function getInputPreviewBlob(
+  submissionId: string,
+  inputId?: string
+): Promise<Blob> {
+  try {
+    const response = await api.get(`/submissions/${submissionId}/preview-input`, {
+      params: inputId ? { input_id: inputId } : undefined,
+      responseType: 'blob',
+    })
+    return response.data
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
 export function getOutputPreviewUrl(submissionId: string): string {
   return `${API_BASE_URL}/api/submissions/${submissionId}/preview-output`
 }

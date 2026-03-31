@@ -14,6 +14,7 @@ import {
   downloadBlob,
   exportSingleSubmission,
   updateSubmissionData,
+  getInputPreviewBlob,
 } from '@/lib/api-client'
 import { transformFormFieldsToApi, fieldsToNestedObject } from '../../lib'
 import { ExportModal } from '../ExportModal'
@@ -74,6 +75,8 @@ export function FileDetailView({
   // Export state
   const [showExportModal, setShowExportModal] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false)
   const resolvedFilename = extractedData?.filename || filename
   const specializedView = useMemo(
     () => resolveSpecializedView(extractedData?.data),
@@ -212,14 +215,44 @@ export function FileDetailView({
     }
   }
 
-  const getInputPreviewUrl = (id: string, inputId?: string) => {
-    const base = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/submissions/${id}/preview-input`
-    if (inputId) {
-      const params = new URLSearchParams({ input_id: inputId })
-      return `${base}?${params.toString()}`
+  useEffect(() => {
+    let active = true
+    let objectUrl: string | null = null
+
+    const loadPreview = async () => {
+      if (!isPdfPreview) {
+        setPreviewUrl(null)
+        return
+      }
+
+      try {
+        setIsLoadingPreview(true)
+        const blob = await getInputPreviewBlob(submissionId, inputId)
+        objectUrl = URL.createObjectURL(blob)
+        if (active) {
+          setPreviewUrl(objectUrl)
+        }
+      } catch (err) {
+        if (active) {
+          setErrorMessage(err instanceof Error ? err.message : 'Failed to load preview')
+          setPreviewUrl(null)
+        }
+      } finally {
+        if (active) {
+          setIsLoadingPreview(false)
+        }
+      }
     }
-    return base
-  }
+
+    void loadPreview()
+
+    return () => {
+      active = false
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl)
+      }
+    }
+  }, [submissionId, inputId, isPdfPreview])
 
  
 
@@ -290,11 +323,20 @@ export function FileDetailView({
         {/* PDF Preview */}
         {isPdfPreview && (
           <div className="h-full overflow-hidden bg-gray-900 border-r border-gray-700">
-            <PdfPreview
-              fileUrl={getInputPreviewUrl(submissionId, inputId)}
-              filename={resolvedFilename}
-              onDownload={handleDownloadOriginal}
-            />
+            {isLoadingPreview || previewUrl ? (
+              <PdfPreview
+                fileUrl={previewUrl || 'about:blank'}
+                filename={resolvedFilename}
+                onDownload={handleDownloadOriginal}
+              />
+            ) : (
+              <div className="h-full flex items-center justify-center bg-gray-900">
+                <div className="text-center">
+                  <Loader2 className="w-10 h-10 text-blue-500 animate-spin mx-auto mb-3" />
+                  <p className="text-sm text-gray-300">Loading preview...</p>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

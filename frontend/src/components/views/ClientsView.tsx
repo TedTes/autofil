@@ -7,11 +7,11 @@ import { getClients, createClient as createClientApi } from '@/lib/api-client'
 import { CreateSubmissionModal } from '@/components'
 
 interface ClientsViewProps {
-  onClientClick?: (clientId: string, clientName: string) => void
-  onCreateClient?: () => void
+  onAccountClick?: (clientId: string, clientName: string) => void
+  onCreateAccount?: () => void
 }
 
-export function ClientsView({ onClientClick, onCreateClient }: ClientsViewProps) {
+export function ClientsView({ onAccountClick, onCreateAccount }: ClientsViewProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [clients, setClients] = useState<Client[]>([])
   const [filteredClients, setFilteredClients] = useState<Client[]>([])
@@ -30,7 +30,7 @@ export function ClientsView({ onClientClick, onCreateClient }: ClientsViewProps)
         setFilteredClients(data)
         setError(null)
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load clients')
+        setError(err instanceof Error ? err.message : 'Failed to load accounts')
       } finally {
         setLoading(false)
       }
@@ -53,36 +53,35 @@ export function ClientsView({ onClientClick, onCreateClient }: ClientsViewProps)
     )
   }, [searchQuery, clients])
 
-  const handleCreateClient = () => {
+  const handleCreateAccount = () => {
     if (isCreating) return
     setIsCreateModalOpen(true)
   }
 
-  const handleConfirmCreateClient = async (name: string) => {
+  const handleConfirmCreateAccount = async (name: string) => {
     if (isCreating) return
     try {
       setIsCreating(true)
       const newClient = await createClientApi(name)
       setClients((prev) => [newClient, ...prev])
       setFilteredClients((prev) => [newClient, ...prev])
-      onCreateClient?.()
+      onCreateAccount?.()
       setIsCreateModalOpen(false)
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to create client')
+      alert(err instanceof Error ? err.message : 'Failed to create account')
     } finally {
       setIsCreating(false)
     }
   }
 
-  const handleCloseCreateClientModal = () => {
+  const handleCloseCreateAccountModal = () => {
     if (!isCreating) {
       setIsCreateModalOpen(false)
     }
   }
 
-  const handleClientClick = (client: Client) => {
-    // Pass both clientId and clientName to navigation
-    onClientClick?.(client.client_id, client.name)
+  const handleAccountClick = (client: Client) => {
+    onAccountClick?.(client.client_id, client.name)
   }
 
   const hasClients = filteredClients.length > 0
@@ -97,17 +96,17 @@ export function ClientsView({ onClientClick, onCreateClient }: ClientsViewProps)
               <Users className="w-6 h-6 text-blue-600" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Clients</h1>
-              <p className="text-sm text-gray-600">Manage your clients and their submissions</p>
+              <h1 className="text-2xl font-bold text-gray-900">Accounts</h1>
+              <p className="text-sm text-gray-600">Insureds and clients — each with their own submissions</p>
             </div>
           </div>
           <button 
-            onClick={handleCreateClient}
+            onClick={handleCreateAccount}
             className="flex w-full items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm md:w-auto"
             disabled={isCreating}
           >
             {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            {isCreating ? 'Creating...' : 'New Client'}
+            {isCreating ? 'Creating...' : 'New Account'}
           </button>
         </div>
 
@@ -117,7 +116,7 @@ export function ClientsView({ onClientClick, onCreateClient }: ClientsViewProps)
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Search clients by name or ID..."
+              placeholder="Search accounts by name or ID..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -131,13 +130,13 @@ export function ClientsView({ onClientClick, onCreateClient }: ClientsViewProps)
         {loading ? (
           <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
             <Loader2 className="w-8 h-8 text-gray-400 mx-auto mb-4 animate-spin" />
-            <p className="text-gray-600">Loading clients...</p>
+            <p className="text-gray-600">Loading accounts...</p>
           </div>
         ) : error ? (
           <div className="bg-white rounded-xl border border-red-200 p-8 text-center space-y-4">
             <AlertCircle className="w-10 h-10 text-red-500 mx-auto" />
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Unable to load clients</h3>
+              <h3 className="text-lg font-semibold text-gray-900">Unable to load accounts</h3>
               <p className="text-gray-600">{error}</p>
             </div>
             <button
@@ -150,7 +149,7 @@ export function ClientsView({ onClientClick, onCreateClient }: ClientsViewProps)
                   setFilteredClients(data)
                   setLoading(false)
                 }).catch((err) => {
-                  setError(err instanceof Error ? err.message : 'Failed to load clients')
+                  setError(err instanceof Error ? err.message : 'Failed to load accounts')
                   setLoading(false)
                 })
               }}
@@ -164,7 +163,7 @@ export function ClientsView({ onClientClick, onCreateClient }: ClientsViewProps)
             {filteredClients.map((client) => (
               <button
                 key={client.client_id}
-                onClick={() => handleClientClick(client)}
+                onClick={() => handleAccountClick(client)}
                 className="bg-white border border-gray-200 rounded-xl p-6 text-left hover:border-blue-300 hover:shadow-md transition-all duration-200 group"
               >
                 <div className="flex items-center justify-between">
@@ -204,18 +203,17 @@ export function ClientsView({ onClientClick, onCreateClient }: ClientsViewProps)
             <Building2 className="w-8 h-8 text-gray-400" />
           </div>
           <h3 className="text-lg font-semibold text-gray-900 mb-2">
-            No Clients Yet
+            No Accounts Yet
           </h3>
           <p className="text-gray-600 mb-6 max-w-md mx-auto">
-            Get started by adding your first client. You&apos;ll be able to manage their submissions, 
-            track documents, and generate reports all in one place.
+            Add your first account to start organizing submissions. Each account holds submissions, input documents, and generated forms.
           </p>
-          <button 
-            onClick={handleCreateClient}
+          <button
+            onClick={handleCreateAccount}
             className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
           >
             <Plus className="w-4 h-4" />
-            Add Your First Client
+            Add Your First Account
           </button>
 
           {/* Feature List */}
@@ -223,9 +221,9 @@ export function ClientsView({ onClientClick, onCreateClient }: ClientsViewProps)
             <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg">
               <Building2 className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
               <div>
-                <h4 className="font-medium text-gray-900 text-sm">Client Profiles</h4>
+                <h4 className="font-medium text-gray-900 text-sm">Account Profiles</h4>
                 <p className="text-xs text-gray-600 mt-1">
-                  Store contact info, policies, and notes
+                  Store insured info, policies, and notes
                 </p>
               </div>
             </div>
@@ -234,7 +232,7 @@ export function ClientsView({ onClientClick, onCreateClient }: ClientsViewProps)
               <div>
                 <h4 className="font-medium text-gray-900 text-sm">Track Submissions</h4>
                 <p className="text-xs text-gray-600 mt-1">
-                  See all documents per client
+                  See all submissions per account
                 </p>
               </div>
             </div>
@@ -243,7 +241,7 @@ export function ClientsView({ onClientClick, onCreateClient }: ClientsViewProps)
               <div>
                 <h4 className="font-medium text-gray-900 text-sm">Quick Access</h4>
                 <p className="text-xs text-gray-600 mt-1">
-                  Find client info instantly
+                  Find account info quickly
                 </p>
               </div>
             </div>
@@ -253,13 +251,13 @@ export function ClientsView({ onClientClick, onCreateClient }: ClientsViewProps)
       </div>
       <CreateSubmissionModal
         isOpen={isCreateModalOpen}
-        onClose={handleCloseCreateClientModal}
-        onConfirm={handleConfirmCreateClient}
+        onClose={handleCloseCreateAccountModal}
+        onConfirm={handleConfirmCreateAccount}
         isCreating={isCreating}
         existingNames={clients.map((client) => client.name)}
-        title="New Client"
-        confirmButtonText="Create Client"
-        inputLabel="Client Name"
+        title="New Account"
+        confirmButtonText="Create Account"
+        inputLabel="Account Name"
         icon={
           <div className="p-2 bg-blue-100 rounded-lg">
             <Users className="w-5 h-5 text-blue-600" />

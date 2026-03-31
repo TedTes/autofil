@@ -6,7 +6,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { Clock, AlertCircle, ChevronRight, Loader2 } from 'lucide-react'
+import { Clock, AlertCircle, ChevronRight, Loader2, FileStack } from 'lucide-react'
 import { getRecentSubmissions } from '@/lib/api-client'
 import type { RecentSubmission } from '@/types'
 import RecentSubmissionItem from './RecentSubmissionItem'
@@ -59,11 +59,6 @@ export default function RecentSubmissionsCard({
     }
   }
 
-  // Empty state - no submissions yet
-  if (!loading && submissions.length === 0) {
-    return null // Don't show the card if there are no submissions
-  }
-
   return (
     <div className={`bg-white rounded-xl border border-gray-200 shadow-sm ${className}`}>
       {/* Header */}
@@ -71,10 +66,10 @@ export default function RecentSubmissionsCard({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Clock className="w-5 h-5 text-gray-600" />
-            <h3 className="text-lg font-semibold text-gray-900">Recently Saved</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Recent Submissions</h3>
           </div>
           <span className="text-sm text-gray-500">
-            Last {limit} submissions
+            Last {limit}
           </span>
         </div>
       </div>
@@ -101,6 +96,17 @@ export default function RecentSubmissionsCard({
               Try again
             </button>
           </div>
+        ) : submissions.length === 0 ? (
+          // Empty state
+          <div className="px-6 py-10 flex flex-col items-center justify-center text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 mb-3">
+              <FileStack className="w-6 h-6 text-gray-400" />
+            </div>
+            <p className="text-sm font-medium text-gray-600">No submissions yet</p>
+            <p className="mt-1 text-xs text-gray-400">
+              Create a submission to get started
+            </p>
+          </div>
         ) : (
           // Submissions list
           <>
@@ -122,7 +128,7 @@ export default function RecentSubmissionsCard({
             onClick={onViewAll}
             className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 font-medium"
           >
-            <span>View all submissions</span>
+            <span>View all</span>
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>

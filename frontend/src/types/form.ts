@@ -70,3 +70,12 @@ export interface FormField {
     handleExport?: () => Promise<void>
     handleFill: () => void 
   }
+
+  export interface ClientDetailActions {
+    canGenerate: boolean
+    selectedTemplateCount: number
+    isUploading: boolean
+    openNewSubmission: () => void
+    openGenerate: () => void
+    openAddFiles: () => void
+  }

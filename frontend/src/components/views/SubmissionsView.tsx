@@ -5,17 +5,53 @@
 'use client'
 
 import React, { useMemo, useEffect, useState } from 'react'
-import { FileStack, Filter, Download, Eye, Search, AlertCircle, Loader2 } from 'lucide-react'
+import { FileStack, Eye, Search, AlertCircle, Loader2, AlertTriangle, CheckCircle2, Clock } from 'lucide-react'
 import type { SubmissionListItem, SubmissionStats } from '@/types'
 import { listSubmissions, getSubmissionStats } from '@/lib/api-client'
 
+// Maps each filter option value to the raw backend statuses it should include
+const STATUS_GROUPS: Record<string, string[]> = {
+  pending:    ['pending', 'uploading', 'uploaded', 'created'],
+  extracting: ['extracting'],
+  ready:      ['ready', 'extracted'],
+  filled:     ['filled'],
+  error:      ['error'],
+}
+
+const STATUS_SUMMARY_STYLES: Record<
+  string,
+  { card: string; icon: string; value: string }
+> = {
+  blue: {
+    card: 'bg-blue-50',
+    icon: 'text-blue-600',
+    value: 'text-blue-700',
+  },
+  red: {
+    card: 'bg-red-50',
+    icon: 'text-red-600',
+    value: 'text-red-700',
+  },
+  purple: {
+    card: 'bg-purple-50',
+    icon: 'text-purple-600',
+    value: 'text-purple-700',
+  },
+  green: {
+    card: 'bg-green-50',
+    icon: 'text-green-600',
+    value: 'text-green-700',
+  },
+}
+
 interface SubmissionsViewProps {
+  initialStatusFilter?: string
   onSubmissionClick?: (submission: SubmissionListItem) => void
 }
 
-export function SubmissionsView({ onSubmissionClick }: SubmissionsViewProps) {
+export function SubmissionsView({ initialStatusFilter, onSubmissionClick }: SubmissionsViewProps) {
   const [searchQuery, setSearchQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [statusFilter, setStatusFilter] = useState<string>(initialStatusFilter || 'all')
   const [submissions, setSubmissions] = useState<SubmissionListItem[]>([])
   const [stats, setStats] = useState<SubmissionStats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -42,10 +78,15 @@ export function SubmissionsView({ onSubmissionClick }: SubmissionsViewProps) {
     void fetchData()
   }, [refreshKey])
 
+  useEffect(() => {
+    setStatusFilter(initialStatusFilter || 'all')
+  }, [initialStatusFilter])
+
   const filteredSubmissions = useMemo(() => {
     let filtered = submissions
     if (statusFilter !== 'all') {
-      filtered = filtered.filter((sub) => sub.status === statusFilter)
+      const allowed = STATUS_GROUPS[statusFilter] ?? [statusFilter]
+      filtered = filtered.filter((sub) => allowed.includes((sub.status || '').toLowerCase()))
     }
     if (searchQuery) {
       const lower = searchQuery.toLowerCase()
@@ -53,65 +94,99 @@ export function SubmissionsView({ onSubmissionClick }: SubmissionsViewProps) {
         (sub) =>
           (sub.name && sub.name.toLowerCase().includes(lower)) ||
           sub.filename.toLowerCase().includes(lower) ||
-          sub.submission_id.toLowerCase().includes(lower)
+          sub.submission_id.toLowerCase().includes(lower) ||
+          (sub.client_name && sub.client_name.toLowerCase().includes(lower))
       )
     }
     return filtered
   }, [submissions, statusFilter, searchQuery])
 
+  const byStatus = stats?.by_status || {}
   const statusSummary = [
-    { label: 'Total', value: stats?.total_submissions ?? submissions.length, color: 'blue' },
-    { label: 'Pending', value: stats?.by_status?.pending ?? 0, color: 'yellow' },
-    { label: 'Completed', value: stats?.by_status?.filled ?? stats?.by_status?.ready ?? 0, color: 'green' },
-    { label: 'Errors', value: stats?.by_status?.error ?? 0, color: 'red' },
+    {
+      label: 'Active',
+      value: (byStatus.uploading ?? 0) + (byStatus.extracting ?? 0) + (byStatus.ready ?? 0) ||
+        submissions.filter(s => ['uploading','extracting','uploaded','ready'].includes(s.status)).length,
+      color: 'blue',
+      icon: Clock,
+    },
+    {
+      label: 'Needs Review',
+      value: byStatus.error ?? submissions.filter(s => s.status === 'error').length,
+      color: 'red',
+      icon: AlertTriangle,
+    },
+    {
+      label: 'Ready to Generate',
+      value: (byStatus.ready ?? 0) + (byStatus.extracted ?? 0) ||
+        submissions.filter(s => s.status === 'ready' || s.status === 'extracted').length,
+      color: 'purple',
+      icon: FileStack,
+    },
+    {
+      label: 'Generated',
+      value: byStatus.filled ?? submissions.filter(s => s.status === 'filled').length,
+      color: 'green',
+      icon: CheckCircle2,
+    },
   ]
 
   return (
     <div className="h-full flex flex-col bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-4 py-3 sm:px-6">
-        <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-end">
-          <button className="flex w-full items-center justify-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors sm:w-auto">
-            <Filter className="w-4 h-4" />
-            Filters
-          </button>
-          <button className="flex w-full items-center justify-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors sm:w-auto">
-            <Download className="w-4 h-4" />
-            Export
-          </button>
-        </div>
-        {/* Stats Row */}
-        <div className="grid grid-cols-2 gap-3 mt-3 sm:grid-cols-4 xl:grid-cols-4">
-          {statusSummary.map((stat) => (
-            <div key={stat.label} className="bg-gray-50 rounded-lg p-2.5">
-              <p className="text-xs text-gray-600 mb-1">{stat.label}</p>
-              <p className={`text-2xl font-bold text-${stat.color}-600`}>{stat.value}</p>
+      <div className="bg-white border-b border-gray-200 px-4 py-4 sm:px-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+              <FileStack className="w-6 h-6 text-blue-600" />
             </div>
-          ))}
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Submission Queue</h1>
+              <p className="text-sm text-gray-600">Review, extract, and generate forms for all submissions</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Workflow Stats Row */}
+        <div className="grid grid-cols-2 gap-3 mt-4 sm:grid-cols-4">
+          {statusSummary.map((stat) => {
+            const Icon = stat.icon
+            const styles = STATUS_SUMMARY_STYLES[stat.color] || STATUS_SUMMARY_STYLES.blue
+            return (
+              <div key={stat.label} className={`${styles.card} rounded-lg p-3 flex items-center gap-3`}>
+                <Icon className={`w-5 h-5 flex-shrink-0 ${styles.icon}`} />
+                <div>
+                  <p className={`text-xl font-bold ${styles.value}`}>{stat.value}</p>
+                  <p className="text-xs text-gray-600">{stat.label}</p>
+                </div>
+              </div>
+            )
+          })}
         </div>
 
         {/* Search & Filter Bar */}
-        <div className="flex flex-col gap-2 mt-3 md:flex-row">
+        <div className="flex flex-col gap-2 mt-4 md:flex-row">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Search submissions..."
+              placeholder="Search by account, submission name, or ID..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent md:w-40"
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent md:w-48"
           >
-            <option value="all">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="processing">Processing</option>
-            <option value="completed">Completed</option>
-            <option value="error">Error</option>
+            <option value="all">All Submissions</option>
+            <option value="pending">Uploaded / Pending</option>
+            <option value="extracting">Extracting</option>
+            <option value="ready">Ready to Generate</option>
+            <option value="filled">Generated</option>
+            <option value="error">Needs Review</option>
           </select>
         </div>
       </div>
@@ -162,7 +237,7 @@ export function SubmissionsView({ onSubmissionClick }: SubmissionsViewProps) {
                     </p>
                     <p className="text-xs text-gray-500 break-all">{sub.submission_id}</p>
                     {sub.client_name && (
-                      <p className="text-xs text-gray-400 mt-0.5">Client: {sub.client_name}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">Account: {sub.client_name}</p>
                     )}
                   </div>
                   <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
@@ -193,13 +268,13 @@ export function SubmissionsView({ onSubmissionClick }: SubmissionsViewProps) {
                       Submission
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Account
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Uploaded
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Confidence
+                      Updated
                     </th>
                   </tr>
                 </thead>
@@ -223,18 +298,16 @@ export function SubmissionsView({ onSubmissionClick }: SubmissionsViewProps) {
                           <FileStack className="w-4 h-4 text-gray-400" />
                           <span>{sub.name || sub.filename || 'Untitled Submission'}</span>
                         </div>
-                        <div className="text-xs text-gray-500 truncate mt-0.5">
-                          {sub.client_name ? `${sub.client_name} • ` : ''}{sub.submission_id}
-                        </div>
+                        <div className="text-xs text-gray-400 truncate mt-0.5">{sub.submission_id}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {sub.client_name || <span className="text-gray-400">—</span>}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <StatusBadge status={sub.status} />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {new Date(sub.uploaded_at).toLocaleString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {sub.confidence != null ? `${(sub.confidence * 100).toFixed(2)}%` : '—'}
                       </td>
                     </tr>
                   ))}
@@ -251,16 +324,22 @@ export function SubmissionsView({ onSubmissionClick }: SubmissionsViewProps) {
 function StatusBadge({ status }: { status: string }) {
   const normalized = (status || '').toLowerCase()
   let label = status || 'Unknown'
-  let className = 'bg-gray-100 text-gray-800'
+  let className = 'bg-gray-100 text-gray-700'
 
-  if (normalized === 'filled' || normalized === 'ready') {
-    label = 'Completed'
+  if (normalized === 'filled') {
+    label = 'Generated'
     className = 'bg-green-100 text-green-800'
+  } else if (normalized === 'ready' || normalized === 'extracted') {
+    label = 'Ready to Generate'
+    className = 'bg-purple-100 text-purple-800'
   } else if (normalized === 'error') {
-    label = 'Error'
+    label = 'Needs Review'
     className = 'bg-red-100 text-red-800'
-  } else if (normalized === 'pending' || normalized === 'processing') {
-    label = 'In Progress'
+  } else if (normalized === 'extracting') {
+    label = 'Extracting'
+    className = 'bg-blue-100 text-blue-800'
+  } else if (normalized === 'pending' || normalized === 'uploading' || normalized === 'uploaded') {
+    label = 'Uploaded'
     className = 'bg-yellow-100 text-yellow-800'
   }
 

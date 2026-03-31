@@ -3,20 +3,20 @@
 import { useState, useCallback, useEffect, useMemo, useRef, useLayoutEffect } from 'react'
 import React from 'react'
 import {
-  Download,
   Settings,
   HelpCircle,
   Menu,
   X,
- Save,  Loader2 ,
+  Save,
+  Loader2,
   TrendingUp,
   FileText,
   LayoutDashboard,
-  Users,  
+  Users,
   FileStack,
   FolderOpen,
   BarChart3,
-  ChevronRight
+  ChevronRight,
 } from 'lucide-react'
 import {
   UploadView,
@@ -33,6 +33,7 @@ import {
 } from '@/lib/api-client'
 
 import type { ViewType,  FileDetailActions,ViewDataMap, SubmissionStats } from '@/types'
+import type { ClientDetailActions } from '@/types'
 import { usePathname, useRouter, useSearchParams, type ReadonlyURLSearchParams } from 'next/navigation'
 
 type ViewState = {
@@ -51,7 +52,7 @@ const breadcrumbViewMap: Record<string, ViewType> = {
   Dashboard: 'dashboard',
   Documents: 'documents',
   Upload: 'upload',
-  Clients: 'clients',
+  Accounts: 'clients',
   Submissions: 'submissions',
   Templates: 'templates',
   Reports: 'reports',
@@ -67,9 +68,9 @@ const NAV_ITEMS: Array<{
   badge?: string
 }> = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, route: 'dashboard' },
-  { id: 'documents', label: 'Documents', icon: FolderOpen, route: 'documents' },
-  { id: 'clients', label: 'Clients', icon: Users, route: 'clients' },
   { id: 'submissions', label: 'Submissions', icon: FileStack, route: 'submissions' },
+  { id: 'clients', label: 'Accounts', icon: Users, route: 'clients' },
+  { id: 'documents', label: 'Documents', icon: FolderOpen, route: 'documents' },
   { id: 'templates', label: 'Templates & Forms', icon: FileText, route: 'templates' },
   { id: 'reports', label: 'Reports', icon: BarChart3, route: 'reports' },
 ]
@@ -109,7 +110,14 @@ function buildPathFromView(type: ViewType, data?: ViewStateData): string {
       return `/dashboard/clients/${clientId}${query ? `?${query}` : ''}`
     }
     case 'submissions':
-      return '/dashboard/submissions'
+      {
+        const detail = data as ViewDataMap['submissions'] | undefined
+        const params = new URLSearchParams()
+        if (detail?.status) params.set('status', detail.status)
+        if (detail?.clientId) params.set('clientId', detail.clientId)
+        const query = params.toString()
+        return `/dashboard/submissions${query ? `?${query}` : ''}`
+      }
     case 'templates':
       return '/dashboard/templates'
     case 'reports':
@@ -160,13 +168,20 @@ function mapPathToView(pathname: string, searchParams: URLSearchParams | Readonl
         return {
           type: 'client-detail',
           data: { clientId: rest[0], clientName: name, initialSubmissionId },
-          breadcrumbs: ['Dashboard', 'Clients', name || 'Client'],
+          breadcrumbs: ['Dashboard', 'Accounts', name || 'Account'],
         }
       }
-      return { type: 'clients', breadcrumbs: ['Dashboard', 'Clients'] }
+      return { type: 'clients', breadcrumbs: ['Dashboard', 'Accounts'] }
     }
     case 'submissions':
-      return { type: 'submissions', breadcrumbs: ['Dashboard', 'Submissions'] }
+      return {
+        type: 'submissions',
+        data: {
+          status: searchParams.get('status') || undefined,
+          clientId: searchParams.get('clientId') || undefined,
+        },
+        breadcrumbs: ['Dashboard', 'Submissions'],
+      }
     case 'templates':
       return { type: 'templates', breadcrumbs: ['Dashboard', 'Templates'] }
     case 'reports':
@@ -184,6 +199,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(false)
   const [fileDetailActions, setFileDetailActions] = useState<FileDetailActions | null>(null)
+  const [clientDetailActions, setClientDetailActions] = useState<ClientDetailActions | null>(null)
   const [sidebarTransitionsEnabled, setSidebarTransitionsEnabled] = useState(false)
 
   //state to track closing animation
@@ -200,6 +216,12 @@ export default function MainLayout({ children }: MainLayoutProps) {
   )
   const autoCollapsedRef = useRef(false)
   const widthCollapsedRef = useRef(false)
+  const shouldForceWorkspaceCollapse =
+    currentView.type === 'file-detail' || currentView.type === 'client-detail'
+  const currentAccountLabel =
+    currentView.type === 'client-detail' && currentView.data && 'clientName' in currentView.data
+      ? currentView.data.clientName || 'Account'
+      : null
 
   // Measure sidebar state on mount to avoid flicker on laptop-sized screens
   useLayoutEffect(() => {
@@ -212,6 +234,8 @@ export default function MainLayout({ children }: MainLayoutProps) {
   useEffect(() => {
     void (async () => {
       try {
+        const stats = await getSubmissionStats()
+        setSubmissionStats(stats)
       } catch (err) {
         console.warn('Failed to load submission stats', err)
       }
@@ -231,7 +255,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
   }, [mobileSidebarOpen])
 
   useEffect(() => {
-    if (currentView.type === 'file-detail') {
+    if (shouldForceWorkspaceCollapse) {
       if (!desktopSidebarCollapsed) {
         setSidebarTransitionsEnabled(false)
         setDesktopSidebarCollapsed(true)
@@ -245,7 +269,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
       }
       autoCollapsedRef.current = false
     }
-  }, [currentView.type, desktopSidebarCollapsed])
+  }, [shouldForceWorkspaceCollapse, desktopSidebarCollapsed])
 
   useEffect(() => {
     const handleResize = () => {
@@ -289,7 +313,7 @@ const handleMobileSidebarClose = () => {
   const handleBreadcrumbClick = useCallback((index: number, crumb: string) => {
     const breadcrumbMap: Record<string, ViewType> = {
       'Dashboard': 'dashboard',
-      'Clients': 'clients',
+      'Accounts': 'clients',
       'Submissions': 'submissions',
       'Templates': 'templates',
       'Documents': 'documents',
@@ -408,7 +432,9 @@ const handleMobileSidebarClose = () => {
                 `}
                 title={desktopSidebarCollapsed ? item.label : undefined}
               >
-                <Icon className={`w-[18px] h-[18px] flex-shrink-0 ${
+                <Icon className={`flex-shrink-0 ${
+                  desktopSidebarCollapsed && shouldForceWorkspaceCollapse ? 'w-5 h-5' : 'w-[18px] h-[18px]'
+                } ${
                   isActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
                 }`} />
                 <span className={`
@@ -438,67 +464,6 @@ const handleMobileSidebarClose = () => {
     <div className="flex-1"></div>
   </div>
 
-  {/* Footer - Fixed at bottom */}
-  <div className="border-t border-gray-100 p-4 flex-shrink-0">
-  <div className="space-y-1">
-  {!desktopSidebarCollapsed && (
-    <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3 px-3 flex items-center gap-2">
-      <span className="w-4 h-px bg-gray-300"></span>
-      SUPPORT
-    </h3>
-  )}
-    
-    {/* Settings Button */}
-    <button
-      onClick={() => navigateTo('settings', undefined, ['Dashboard', 'Settings'])}
-      className={`
-        w-full flex items-center gap-3 py-2.5 rounded-lg 
-        transition-all duration-200 group
-        ${desktopSidebarCollapsed ? 'justify-center px-0' : 'px-3'}
-        ${currentView.type === 'settings'
-          ? 'bg-blue-50 text-blue-700 shadow-sm'
-          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-        }
-      `}
-    >
-      <Settings className={`w-[18px] h-[18px] flex-shrink-0 ${
-        currentView.type === 'settings' ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
-      }`} />
-      <span className={`text-[13px] font-medium ${desktopSidebarCollapsed ? 'sr-only' : 'inline'}`}>
-        Settings
-      </span>
-      
-      {!desktopSidebarCollapsed && currentView.type === 'settings' && (
-        <div className="ml-auto w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
-      )}
-    </button>
-
-    {/* Help Button */}
-    <button
-      onClick={() => navigateTo('help', undefined, ['Dashboard', 'Help'])}
-      className={`
-        w-full flex items-center gap-3 py-2.5 rounded-lg 
-        transition-all duration-200 group
-        ${desktopSidebarCollapsed ? 'justify-center px-0' : 'px-3'}
-        ${currentView.type === 'help'
-          ? 'bg-blue-50 text-blue-700 shadow-sm'
-          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-        }
-      `}
-    >
-      <HelpCircle className={`w-[18px] h-[18px] flex-shrink-0 ${
-        currentView.type === 'help' ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
-      }`} />
-      <span className={`text-[13px] font-medium ${desktopSidebarCollapsed ? 'sr-only' : 'inline'}`}>
-        Help & Support
-      </span>
-      
-      {!desktopSidebarCollapsed && currentView.type === 'help' && (
-        <div className="ml-auto w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
-      )}
-    </button>
-  </div>
-</div>
 </aside>
 
   {/* Mobile Sidebar Overlay */}
@@ -595,59 +560,6 @@ const handleMobileSidebarClose = () => {
         </div>
       </div>
 
-      {/* Mobile Footer*/}
-      <div className="border-t border-gray-100 p-4 flex-shrink-0">
-  <div className="space-y-1">
-  <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3 px-3 flex items-center gap-2">
-  <span className="w-4 h-px bg-gray-300"></span>
-  SUPPORT
-</h3>
-    
-    {/* Settings Button */}
-    <button
-      onClick={() => navigateTo('settings', undefined, ['Dashboard', 'Settings'])}
-      className={`
-        w-full flex items-center gap-3 px-3 py-3.5 rounded-lg 
-        transition-all duration-200 group
-        ${currentView.type === 'settings'
-          ? 'bg-blue-50 text-blue-700 shadow-sm'
-          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-        }
-      `}
-    >
-      <Settings className={`w-[18px] h-[18px] flex-shrink-0 ${
-        currentView.type === 'settings' ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
-      }`} />
-      <span className="text-[13px] font-medium">Settings</span>
-      
-      {currentView.type === 'settings' && (
-        <div className="ml-auto w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
-      )}
-    </button>
-
-    {/* Help Button */}
-    <button
-      onClick={() => navigateTo('help', undefined, ['Dashboard', 'Help'])}
-      className={`
-        w-full flex items-center gap-3 px-3 py-3.5 rounded-lg 
-        transition-all duration-200 group
-        ${currentView.type === 'help'
-          ? 'bg-blue-50 text-blue-700 shadow-sm'
-          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-        }
-      `}
-    >
-      <HelpCircle className={`w-[18px] h-[18px] flex-shrink-0 ${
-        currentView.type === 'help' ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
-      }`} />
-      <span className="text-[13px] font-medium">Help & Support</span>
-      
-      {currentView.type === 'help' && (
-        <div className="ml-auto w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
-      )}
-    </button>
-  </div>
-</div>
     </aside>
   </div>
 )}
@@ -661,6 +573,61 @@ const handleMobileSidebarClose = () => {
         {/* Header */}
         <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
           <div className="px-4 sm:px-6 lg:px-8">
+            {currentView.type === 'client-detail' ? (
+              <div className="flex h-16 items-center gap-4 min-w-0">
+                {/* Mobile menu */}
+                <button
+                  onClick={() => {
+                    setMobileSidebarOpen(true)
+                    setIsMobileOpening(true)
+                    setTimeout(() => setIsMobileOpening(false), 50)
+                  }}
+                  className="lg:hidden flex-shrink-0 p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <Menu className="w-5 h-5" />
+                </button>
+
+                {/* Left: breadcrumb */}
+                <nav className="flex min-w-0 items-center gap-1.5 text-sm">
+                  {currentView.breadcrumbs.map((crumb, i) => (
+                    <React.Fragment key={i}>
+                      {i > 0 && <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 text-gray-300" />}
+                      <button
+                        onClick={() => {
+                          const targetView = breadcrumbViewMap[crumb]
+                          if (targetView) navigateTo(targetView)
+                        }}
+                        className={`truncate transition-colors ${
+                          i === currentView.breadcrumbs.length - 1
+                            ? 'text-gray-900 font-semibold'
+                            : 'text-gray-400 hover:text-gray-700'
+                        }`}
+                      >
+                        {crumb}
+                      </button>
+                    </React.Fragment>
+                  ))}
+                </nav>
+
+                {/* Spacer */}
+                <div className="flex-1" />
+
+                {/* Center-right: primary actions */}
+                {clientDetailActions && (
+                  <ClientDetailHeaderActions actions={clientDetailActions} />
+                )}
+
+                {/* Divider */}
+                <div className="h-6 w-px bg-gray-200 flex-shrink-0" />
+
+                {/* Right: avatar menu */}
+                <AvatarMenu
+                  accountLabel={currentAccountLabel}
+                  onSettings={() => navigateTo('settings', undefined, ['Dashboard', 'Settings'])}
+                  onHelp={() => navigateTo('help', undefined, ['Dashboard', 'Help'])}
+                />
+              </div>
+            ) : (
             <div className="flex items-center justify-between h-16">
               <div className="flex items-center gap-3">
                 <button
@@ -699,19 +666,19 @@ const handleMobileSidebarClose = () => {
               </div>
 
               <div className="flex items-center gap-2">
-                {/* Show action buttons when in FileDetailView */}
                 {currentView.type === 'file-detail' && fileDetailActions && (
-                  <FileDetailActions actions={fileDetailActions} />
+                  <>
+                    <FileDetailActions actions={fileDetailActions} />
+                    <div className="h-6 w-px bg-gray-200 flex-shrink-0" />
+                  </>
                 )}
-                
-                <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
-                  <Settings className="w-5 h-5" />
-                </button>
-                <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
-                  <HelpCircle className="w-5 h-5" />
-                </button>
+                <AvatarMenu
+                  onSettings={() => navigateTo('settings', undefined, ['Dashboard', 'Settings'])}
+                  onHelp={() => navigateTo('help', undefined, ['Dashboard', 'Help'])}
+                />
               </div>
             </div>
+            )}
           </div>
         </header>
 
@@ -721,12 +688,15 @@ const handleMobileSidebarClose = () => {
             
             {/* Home View */}
             {currentView.type === 'dashboard' && (
-  <HomeView 
-    totalSubmissions={submissionStats?.total_submissions ?? 0}
+  <HomeView
     submissionStats={submissionStats}
     onGoToFile={handleFileClick}
-    onNavigateToDocuments={() => navigateTo('documents', undefined, ['Dashboard', 'Documents'])}
-    onNavigateToClients={() => navigateTo('clients', undefined, ['Dashboard', 'Clients'])}
+    onNavigateToClients={() => navigateTo('clients', undefined, ['Dashboard', 'Accounts'])}
+    onNavigateToUpload={() => navigateTo('upload', undefined, ['Dashboard', 'Upload'])}
+    onNavigateToSubmissions={() => navigateTo('submissions', undefined, ['Dashboard', 'Submissions'])}
+    onNavigateToNeedsReview={() => navigateTo('submissions', { status: 'error' }, ['Dashboard', 'Submissions'])}
+    onNavigateToReadyToGenerate={() => navigateTo('submissions', { status: 'ready' }, ['Dashboard', 'Submissions'])}
+    onNavigateToTemplates={() => navigateTo('templates', undefined, ['Dashboard', 'Templates'])}
   />
 )}
 
@@ -762,13 +732,11 @@ const handleMobileSidebarClose = () => {
 )}
 {currentView.type === 'clients' && (
   <ClientsView
-    onClientClick={(clientId) => {
-      // Navigate to client detail view
-      navigateTo('client-detail', { clientId, clientName: 'Client' }, ['Dashboard', 'Clients', 'Client'])
+    onAccountClick={(clientId, clientName) => {
+      navigateTo('client-detail', { clientId, clientName }, ['Dashboard', 'Accounts', clientName])
     }}
-    onCreateClient={() => {
-      // TODO: Open create client modal
-      console.log('Create new client')
+    onCreateAccount={() => {
+      console.log('Create new account')
     }}
   />
 )}
@@ -777,23 +745,26 @@ const handleMobileSidebarClose = () => {
     clientId={currentView.data.clientId}
     clientName={('clientName' in currentView.data ? currentView.data.clientName : undefined)}
     initialSubmissionId={('initialSubmissionId' in currentView.data ? currentView.data.initialSubmissionId : undefined)}
-    onNavigateBack={() => navigateTo('clients', undefined, ['Dashboard', 'Clients'])}
     onFileClick={handleFileClick}
+    onActionsReady={setClientDetailActions}
   />
 )}
 
 {currentView.type === 'submissions' && (
   <SubmissionsView
+    initialStatusFilter={
+      currentView.data && 'status' in currentView.data ? currentView.data.status : undefined
+    }
     onSubmissionClick={(submission) => {
       if (submission.client_id) {
         navigateTo(
           'client-detail',
           {
             clientId: submission.client_id,
-            clientName: submission.client_name || 'Client',
+            clientName: submission.client_name || 'Account',
             initialSubmissionId: submission.submission_id,
           },
-          ['Dashboard', 'Clients', submission.client_name || 'Client']
+          ['Dashboard', 'Accounts', submission.client_name || 'Account']
         )
         return
       }
@@ -833,6 +804,105 @@ const handleMobileSidebarClose = () => {
         </main>
       </div>
 
+    </div>
+  )
+}
+
+function AvatarMenu({
+  accountLabel,
+  onSettings,
+  onHelp,
+}: {
+  accountLabel?: string | null
+  onSettings: () => void
+  onHelp: () => void
+}) {
+  const [open, setOpen] = React.useState(false)
+  const ref = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  return (
+    <div ref={ref} className="relative flex-shrink-0">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-white text-sm font-semibold hover:bg-gray-700 transition-colors"
+        aria-label="User menu"
+      >
+        N
+      </button>
+      {open && (
+        <div className="absolute right-0 top-10 z-50 w-48 rounded-xl border border-gray-200 bg-white shadow-lg py-1 text-sm">
+          {accountLabel && (
+            <>
+              <div className="px-3 py-2">
+                <p className="text-xs text-gray-400">Account workspace</p>
+                <p className="truncate font-medium text-gray-900">{accountLabel}</p>
+              </div>
+              <div className="my-1 border-t border-gray-100" />
+            </>
+          )}
+          <button
+            onClick={() => { onSettings(); setOpen(false) }}
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <Settings className="h-4 w-4 text-gray-400" />
+            Settings
+          </button>
+          <button
+            onClick={() => { onHelp(); setOpen(false) }}
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <HelpCircle className="h-4 w-4 text-gray-400" />
+            Help & Support
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ClientDetailHeaderActions({ actions }: { actions: ClientDetailActions }) {
+  return (
+    <div className="flex items-center gap-1">
+      <button
+        onClick={actions.openNewSubmission}
+        title="New Submission"
+        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+      >
+        <FileStack className="w-4 h-4 flex-shrink-0" />
+        <span className="hidden sm:inline text-xs">New Submission</span>
+      </button>
+      <button
+        onClick={actions.openAddFiles}
+        disabled={actions.isUploading}
+        title="Add Files"
+        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium text-gray-600 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        <FolderOpen className="w-4 h-4 flex-shrink-0" />
+        <span className="hidden sm:inline text-xs">Add Files</span>
+      </button>
+      <button
+        onClick={actions.openGenerate}
+        disabled={!actions.canGenerate}
+        title={!actions.canGenerate ? 'Generate becomes available once merged review data is ready.' : 'Generate forms'}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors disabled:cursor-not-allowed bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400"
+      >
+        <FileText className="w-4 h-4 flex-shrink-0" />
+        <span className="text-xs font-semibold">Generate</span>
+        {actions.selectedTemplateCount > 0 && (
+          <span className="rounded-full bg-white/25 px-1.5 py-0.5 text-xs font-bold leading-none">
+            {actions.selectedTemplateCount}
+          </span>
+        )}
+      </button>
     </div>
   )
 }

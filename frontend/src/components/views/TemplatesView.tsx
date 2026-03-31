@@ -245,36 +245,6 @@ export function TemplatesView({ onTemplateClick, onDownloadTemplate }: Templates
                           <div className="w-12 h-12 bg-green-50 rounded-lg flex items-center justify-center group-hover:bg-green-100 transition-colors">
                             <FileCheck className="w-6 h-6 text-green-600" />
                           </div>
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                if (onDownloadTemplate) {
-                                  onDownloadTemplate(form.id)
-                                } else {
-                                  openTemplate(form.url)
-                                }
-                              }}
-                              className="p-1.5 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded"
-                              title="Download blank"
-                            >
-                              <Download className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                if (onTemplateClick) {
-                                  onTemplateClick(form.id)
-                                } else {
-                                  openTemplate(form.url)
-                                }
-                              }}
-                              className="p-1.5 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded"
-                              title="Preview"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </button>
-                          </div>
                         </div>
 
                         <div className="mb-2 flex items-center gap-2 text-xs">
@@ -288,6 +258,37 @@ export function TemplatesView({ onTemplateClick, onDownloadTemplate }: Templates
 
                         <h5 className="font-semibold text-gray-900 mb-1">{form.name}</h5>
                         <p className="text-xs text-gray-600">{form.description}</p>
+
+                        <div className="mt-4 flex items-center gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (onTemplateClick) {
+                                onTemplateClick(form.id)
+                              } else {
+                                openTemplate(form.url)
+                              }
+                            }}
+                            className="inline-flex items-center gap-1 rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700 hover:bg-green-100"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            Preview
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (onDownloadTemplate) {
+                                onDownloadTemplate(form.id)
+                              } else {
+                                openTemplate(form.url)
+                              }
+                            }}
+                            className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            Download blank
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>

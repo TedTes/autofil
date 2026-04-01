@@ -1,0 +1,37 @@
+template_id: acord_101_2016
+form_type: ACORD_101
+version: "2016_03"
+name: ACORD 101 Additional Remarks Schedule
+description: ACORD 101 Additional Remarks Schedule (2016/03) — supporting remarks attachment for overflow or supplemental narrative data.
+pdf_url: template.pdf
+required_data_sections:
+  - insured
+optional_data_sections:
+  - policy
+  - coverage
+  - supplemental
+  - losses
+expected_documents:
+  - acord_125
+  - acord_126
+  - acord_130
+  - acord_140
+  - supplemental
+estimated_fields: 4
+icon: file-text
+is_popular: false
+signature_fields:
+  - ApplicantName
+  - AdditionalRemarks
+
+field_map:
+  ApplicantName: ApplicantName
+  PolicyNumber: PolicyNumber
+  EffectiveDate: EffectiveDate
+  AdditionalRemarks: AdditionalRemarks
+
+repeaters: {}
+
+metadata:
+  min_fillable_confidence: 0.8
+  supports_alias_fallback: true

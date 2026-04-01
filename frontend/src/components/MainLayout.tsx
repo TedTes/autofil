@@ -201,7 +201,6 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(false)
   const [fileDetailActions, setFileDetailActions] = useState<FileDetailActions | null>(null)
   const [clientDetailActions, setClientDetailActions] = useState<ClientDetailActions | null>(null)
-  const [sidebarTransitionsEnabled, setSidebarTransitionsEnabled] = useState(false)
 
   //state to track closing animation
   const [isMobileClosing, setIsMobileClosing] = useState(false)
@@ -260,14 +259,12 @@ export default function MainLayout({ children }: MainLayoutProps) {
   useEffect(() => {
     if (shouldForceWorkspaceCollapse) {
       if (!desktopSidebarCollapsed) {
-        setSidebarTransitionsEnabled(false)
         setDesktopSidebarCollapsed(true)
         autoCollapsedRef.current = true
       }
     } else if (autoCollapsedRef.current) {
       // Only expand back if we're not in a width-forced collapsed state
       if (!widthCollapsedRef.current) {
-        setSidebarTransitionsEnabled(false)
         setDesktopSidebarCollapsed(false)
       }
       autoCollapsedRef.current = false
@@ -279,11 +276,9 @@ export default function MainLayout({ children }: MainLayoutProps) {
       if (typeof window === 'undefined') return
       const shouldCollapse = window.innerWidth <= 1300
       if (shouldCollapse && !desktopSidebarCollapsed) {
-        setSidebarTransitionsEnabled(false)
         setDesktopSidebarCollapsed(true)
         widthCollapsedRef.current = true
       } else if (!shouldCollapse && widthCollapsedRef.current && !autoCollapsedRef.current) {
-        setSidebarTransitionsEnabled(false)
         setDesktopSidebarCollapsed(false)
         widthCollapsedRef.current = false
       }
@@ -297,8 +292,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
   // Enhanced navigation with unsaved changes guard
   const navigateTo = useCallback((
     type: ViewType,
-    data?: unknown,
-    _breadcrumbs?: string[]
+    data?: unknown
   ) => {
     const target = buildPathFromView(type, data as ViewStateData)
     router.push(target)
@@ -313,25 +307,6 @@ const handleMobileSidebarClose = () => {
   }, 300) // Match animation duration
 }
 
-  const handleBreadcrumbClick = useCallback((index: number, crumb: string) => {
-    const breadcrumbMap: Record<string, ViewType> = {
-      'Dashboard': 'dashboard',
-      'Accounts': 'clients',
-      'Submissions': 'submissions',
-      'Templates': 'templates',
-      'Documents': 'documents',
-      'Reports': 'reports',
-      'Settings': 'settings',
-      'Help': 'help',
-    }
-  
-    const viewType = breadcrumbMap[crumb]
-    
-    if (viewType) {
-      const newBreadcrumbs = currentView.breadcrumbs.slice(0, index + 1)
-      navigateTo(viewType, undefined, newBreadcrumbs)
-    }
-  }, [currentView.breadcrumbs, navigateTo])
 
   // Navigate back to previous view
   const navigateBack = useCallback(() => {
@@ -357,66 +332,22 @@ const handleMobileSidebarClose = () => {
   )
   return (
     <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar */}
-<aside className={`hidden lg:flex lg:flex-col bg-white border-r border-gray-200 ${
-  sidebarTransitionsEnabled ? 'transition-all duration-300 ease-in-out' : ''
-} ${
-  desktopSidebarCollapsed ? 'lg:w-16' : 'lg:w-64'
-} fixed left-0 top-0 bottom-0 z-40`}>
+      {/* Desktop Sidebar — fixed compact icon+label */}
+      <aside className="hidden lg:flex lg:flex-col bg-white border-r border-gray-200 w-24 fixed left-0 top-0 bottom-0 z-40">
 
-  {/* Sidebar Header - Fixed */}
-  <div className="h-16 border-b border-gray-200 flex items-center justify-between px-4 flex-shrink-0">
-    <div className={`flex items-center gap-2.5 ${desktopSidebarCollapsed ? 'justify-center' : ''}`}>
-      <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-        <TrendingUp className="w-5 h-5 text-white" />
-      </div>
-      {!desktopSidebarCollapsed && (
-        <div className="transition-opacity duration-200">
-          <h1 className="text-sm font-bold text-gray-900 leading-tight">AutoFil</h1>
-          <p className="text-[10px] text-gray-500 leading-tight">Smart Form Automation</p>
+        {/* Logo */}
+        <div className="flex flex-col items-center justify-center gap-1 py-4 flex-shrink-0">
+          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-sm">
+            <TrendingUp className="w-4 h-4 text-white" />
+          </div>
+          <span className="text-[10px] font-bold text-gray-500 tracking-widest uppercase leading-none">AutoFil</span>
         </div>
-      )}
-    </div>
-    
-    {/* Collapse Button */}
-    <button
-      onClick={() => {
-        setSidebarTransitionsEnabled(true)
-        setDesktopSidebarCollapsed(prev => !prev)
-      }}
-      className="hidden lg:block p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
-      title={desktopSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-      type="button"
-    >
-      <svg
-        className={`w-4 h-4 transition-transform ${
-          desktopSidebarCollapsed ? 'rotate-180' : ''
-        }`}
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-      </svg>
-    </button>
-  </div>
 
-  {/* Sidebar Content - Scrollable */}
-  <div className="flex-1 overflow-y-auto flex flex-col">
-    <div className={`${desktopSidebarCollapsed ? 'p-2' : 'p-4'}`}>
-      {/* Breathing room at top */}
-      <div className="h-2"></div>
-      
-      {/* Navigation Section */}
-      <nav>
-        {!desktopSidebarCollapsed && (
-          <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3 px-3 flex items-center gap-2">
-            <span className="w-4 h-px bg-gray-300"></span>
-            MAIN
-          </h3>
-        )}
+        {/* Divider */}
+        <div className="mx-4 border-t border-gray-100 mb-3" />
 
-        <div className="space-y-0.5">
+        {/* Nav items */}
+        <div className="flex-1 overflow-y-auto py-1 px-2 space-y-0.5">
           {navigationItems.map((item) => {
             const Icon = item.icon
             const isActive = currentView.type === item.id
@@ -424,50 +355,27 @@ const handleMobileSidebarClose = () => {
               <button
                 key={item.id}
                 onClick={item.onClick}
-                className={`
-                  w-full flex items-center gap-3 py-2.5 rounded-lg 
-                  transition-all duration-200 group
-                  ${desktopSidebarCollapsed ? 'justify-center px-0' : 'px-3'}
-                  ${isActive
-                    ? 'bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-100'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                  }
-                `}
-                title={desktopSidebarCollapsed ? item.label : undefined}
+                title={item.label}
+                className={`w-full flex flex-col items-center justify-center gap-1.5 py-3 px-1 rounded-xl transition-all duration-150 group ${
+                  isActive
+                    ? 'bg-blue-50 ring-1 ring-blue-100'
+                    : 'hover:bg-gray-50'
+                }`}
               >
-                <Icon className={`flex-shrink-0 ${
-                  desktopSidebarCollapsed && shouldForceWorkspaceCollapse ? 'w-5 h-5' : 'w-[18px] h-[18px]'
-                } ${
-                  isActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
+                <Icon className={`w-5 h-5 flex-shrink-0 transition-colors ${
+                  isActive ? 'text-blue-600' : 'text-gray-500 group-hover:text-gray-800'
                 }`} />
-                <span className={`
-                  text-[13px] font-medium transition-opacity duration-150
-                  ${desktopSidebarCollapsed ? 'sr-only' : 'inline'}
-                `}>
+                <span className={`text-[11px] font-medium leading-tight text-center w-full transition-colors ${
+                  isActive ? 'text-blue-600 font-semibold' : 'text-gray-500 group-hover:text-gray-800'
+                }`}>
                   {item.label}
                 </span>
-
-                {!desktopSidebarCollapsed && item.badge && (
-                  <span className="ml-auto text-xs font-bold px-2 py-0.5 bg-blue-600 text-white rounded-full shadow-sm">
-                    {item.badge}
-                  </span>
-                )}
-                
-                {!desktopSidebarCollapsed && isActive && !item.badge && (
-                  <div className="ml-auto w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
-                )}
               </button>
             )
           })}
         </div>
-      </nav>
-    </div>
-    
-    {/* Spacer to push footer down */}
-    <div className="flex-1"></div>
-  </div>
 
-</aside>
+      </aside>
 
   {/* Mobile Sidebar Overlay */}
 {mobileSidebarOpen && (
@@ -568,11 +476,7 @@ const handleMobileSidebarClose = () => {
 )}
 
       {/* Main Content */}
-      <div className={`flex-1 flex flex-col min-h-screen ${
-  sidebarTransitionsEnabled ? 'transition-all duration-300' : ''
-} ${
-  desktopSidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'
-}`}>
+      <div className="flex-1 flex flex-col min-h-screen lg:ml-24">
         {/* Header */}
         <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-30">
           <div className="px-4 sm:px-6 lg:px-8">
@@ -623,7 +527,12 @@ const handleMobileSidebarClose = () => {
                 {/* Divider */}
                 <div className="h-5 w-px bg-gray-200 flex-shrink-0 mx-2" />
 
-                {/* Right: avatar menu */}
+                {/* User label + avatar */}
+                {userLabel && (
+                  <span className="hidden sm:block text-sm text-gray-500 font-medium truncate max-w-[180px]">
+                    {userLabel}
+                  </span>
+                )}
                 <AvatarMenu
                   accountLabel={currentAccountLabel}
                   userLabel={userLabel}
@@ -675,12 +584,17 @@ const handleMobileSidebarClose = () => {
 )}
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 {currentView.type === 'file-detail' && fileDetailActions && (
                   <>
                     <FileDetailActions actions={fileDetailActions} />
                     <div className="h-6 w-px bg-gray-200 flex-shrink-0" />
                   </>
+                )}
+                {userLabel && (
+                  <span className="hidden sm:block text-sm text-gray-500 font-medium truncate max-w-[180px]">
+                    {userLabel}
+                  </span>
                 )}
                 <AvatarMenu
                   userLabel={userLabel}
@@ -913,22 +827,22 @@ function AvatarMenu({
 function ClientDetailHeaderActions({ actions }: { actions: ClientDetailActions }) {
   return (
     <div className="flex items-center gap-1.5">
-      {/* Secondary: ghost buttons — icon primary, label secondary */}
+      {/* Secondary: outlined buttons — icon primary, label secondary */}
       <button
         onClick={actions.openNewSubmission}
         title="New Submission"
-        className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 rounded-lg hover:bg-gray-100 active:scale-95 active:bg-gray-200 transition-all duration-100"
+        className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-gray-700 rounded-lg border border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 active:scale-95 active:bg-gray-100 transition-all duration-100 shadow-sm"
       >
-        <FileStack className="w-4 h-4 flex-shrink-0" />
+        <FileStack className="w-4 h-4 flex-shrink-0 text-gray-500" />
         <span className="hidden sm:inline text-xs font-medium">New Submission</span>
       </button>
       <button
         onClick={actions.openAddFiles}
         disabled={actions.isUploading}
         title="Add Files"
-        className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 rounded-lg hover:bg-gray-100 active:scale-95 active:bg-gray-200 transition-all duration-100 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
+        className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-gray-700 rounded-lg border border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 active:scale-95 active:bg-gray-100 transition-all duration-100 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
       >
-        <FolderOpen className="w-4 h-4 flex-shrink-0" />
+        <FolderOpen className="w-4 h-4 flex-shrink-0 text-gray-500" />
         <span className="hidden sm:inline text-xs font-medium">Add Files</span>
       </button>
 
@@ -958,7 +872,7 @@ function FileDetailActions({
 }) {
   if (!actions) return null
   
-  const { hasChanges, isSaving, isExporting, isFilling, handleSave, handleExport, handleFill } = actions
+  const { hasChanges, isSaving, handleSave } = actions
   
   return (
     <>

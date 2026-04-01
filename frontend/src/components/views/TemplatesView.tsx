@@ -227,9 +227,9 @@ export function TemplatesView({ onTemplateClick, onDownloadTemplate }: Templates
                         : 'space-y-3'
                     }
                   >
-                    {section.items.map((form) => (
+                    {section.items.map((form, i) => (
                       <div
-                        key={form.id}
+                        key={`${section.key}-${form.id ?? i}`}
                         className="border border-gray-200 rounded-lg p-4 hover:border-green-500 hover:shadow-md transition-all cursor-pointer group"
                         onClick={() => openTemplate(form.url)}
                         role="button"

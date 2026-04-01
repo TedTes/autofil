@@ -135,20 +135,8 @@ export function SubmissionsView({ initialStatusFilter, onSubmissionClick }: Subm
     <div className="h-full flex flex-col bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-4 py-4 sm:px-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-              <FileStack className="w-6 h-6 text-blue-600" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Submission Queue</h1>
-              <p className="text-sm text-gray-600">Review, extract, and generate forms for all submissions</p>
-            </div>
-          </div>
-        </div>
-
         {/* Workflow Stats Row */}
-        <div className="grid grid-cols-2 gap-3 mt-4 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {statusSummary.map((stat) => {
             const Icon = stat.icon
             const styles = STATUS_SUMMARY_STYLES[stat.color] || STATUS_SUMMARY_STYLES.blue

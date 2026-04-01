@@ -60,8 +60,22 @@ class ExtractionService:
         self.jobs: Dict[str, Dict[str, Any]] = {}
 
         self._load_state()
+
+    def _require_owned_file(self, file_id: str, current_user_id: Optional[str] = None) -> Dict[str, Any]:
+        file_meta = self.files.get(file_id)
+        if not file_meta:
+            raise ValueError(f'File not found: {file_id}')
+        owner_user_id = file_meta.get('owner_user_id')
+        if current_user_id and owner_user_id and owner_user_id != current_user_id:
+            raise ValueError(f'File not found: {file_id}')
+        return file_meta
     
-    def upload_file(self, file, folder_id: Optional[str] = None) -> Dict[str, Any]:
+    def upload_file(
+        self,
+        file,
+        folder_id: Optional[str] = None,
+        current_user_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Upload a file for extraction.
         
@@ -106,6 +120,7 @@ class ExtractionService:
             'file_size': file_size,
             'mime_type': file.content_type or 'application/octet-stream',
             'folder_id': folder_id,
+            'owner_user_id': current_user_id,
             'uploaded_at': datetime.utcnow().isoformat(),
             'status': 'uploaded'
         }
@@ -120,7 +135,7 @@ class ExtractionService:
             'mime_type': file_metadata['mime_type']
         }
     
-    def classify_document(self, file_id: str) -> Dict[str, Any]:
+    def classify_document(self, file_id: str, current_user_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Classify a document using real classifiers.
         
@@ -136,10 +151,7 @@ class ExtractionService:
             }
         """
         # Get file metadata
-        if file_id not in self.files:
-            raise ValueError(f'File not found: {file_id}')
-        
-        file_meta = self.files[file_id]
+        file_meta = self._require_owned_file(file_id, current_user_id)
         file_path = file_meta['file_path']
         
         try:
@@ -190,7 +202,8 @@ class ExtractionService:
         self,
         file_id: str,
         document_type: Optional[str] = None,
-        options: Optional[Dict[str, Any]] = None
+        options: Optional[Dict[str, Any]] = None,
+        current_user_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Extract data from a document using real extractors.
@@ -211,10 +224,7 @@ class ExtractionService:
             }
         """
         # Get file metadata
-        if file_id not in self.files:
-            raise ValueError(f'File not found: {file_id}')
-        
-        file_meta = self.files[file_id]
+        file_meta = self._require_owned_file(file_id, current_user_id)
         file_path = file_meta['file_path']
         
         try:
@@ -281,7 +291,8 @@ class ExtractionService:
         self,
         file_ids: List[str],
         group_id: Optional[str] = None,
-        options: Optional[Dict[str, Any]] = None
+        options: Optional[Dict[str, Any]] = None,
+        current_user_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Fuse data from multiple documents using fusion strategy.
@@ -302,16 +313,19 @@ class ExtractionService:
         
         for file_id in file_ids:
             if file_id not in self.extractions:
-                self.extract_document(file_id)
+                self.extract_document(file_id, current_user_id=current_user_id)
             
-            if file_id in self.files:
-                file_path = self.files[file_id]['file_path']
-                try:
-                    doc = self.file_loader.load(file_path)
-                    documents.append(doc)
-                    extractions.append(self.extractions.get(file_id))
-                except:
-                    pass
+            try:
+                file_meta = self._require_owned_file(file_id, current_user_id)
+            except ValueError:
+                continue
+            file_path = file_meta['file_path']
+            try:
+                doc = self.file_loader.load(file_path)
+                documents.append(doc)
+                extractions.append(self.extractions.get(file_id))
+            except:
+                pass
         
         # Use fusion strategy
         try:
@@ -352,9 +366,15 @@ class ExtractionService:
                 'errors': []
             }
     
-    def get_job_status(self, job_id: str) -> Optional[Dict[str, Any]]:
+    def get_job_status(self, job_id: str, current_user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Get async job status."""
-        return self.jobs.get(job_id)
+        job = self.jobs.get(job_id)
+        if not job:
+            return None
+        owner_user_id = job.get("owner_user_id")
+        if current_user_id and owner_user_id and owner_user_id != current_user_id:
+            return None
+        return job
 
     # ------------------------------------------------------------------
     # Persistence helpers
@@ -365,15 +385,23 @@ class ExtractionService:
     def _save_state(self) -> None:
         return
     
-    def get_extraction_result(self, extraction_id: str) -> Optional[Dict[str, Any]]:
+    def get_extraction_result(self, extraction_id: str, current_user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Get extraction result."""
+        try:
+            self._require_owned_file(extraction_id, current_user_id)
+        except ValueError:
+            return None
         return self.extractions.get(extraction_id)
     
-    def delete_file(self, file_id: str) -> None:
+    def delete_file(self, file_id: str, current_user_id: Optional[str] = None) -> None:
         """Delete a file and its associated data."""
+        try:
+            file_meta = self._require_owned_file(file_id, current_user_id)
+        except ValueError:
+            return
         if file_id in self.files:
             # Delete physical file
-            file_path = self.files[file_id]['file_path']
+            file_path = file_meta['file_path']
             if os.path.exists(file_path):
                 os.remove(file_path)
             

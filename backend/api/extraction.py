@@ -3,19 +3,16 @@ Extraction routes - handles file upload, classification, and data extraction.
 """
 
 from flask import Blueprint, request, jsonify, send_file
-from werkzeug.utils import secure_filename
-import os
-import uuid
-from datetime import datetime
 
+from api.auth import require_auth, get_current_user_id
 from services.extraction_service import ExtractionService
-from utils.file_utils import allowed_file, get_file_extension
 
 extraction_bp = Blueprint('extraction', __name__)
 extraction_service = ExtractionService()
 
 
 @extraction_bp.route('/upload', methods=['POST'])
+@require_auth
 def upload_file():
     """
     Upload a file for extraction.
@@ -66,21 +63,26 @@ def upload_file():
         # Upload file
         result = extraction_service.upload_file(
             file=file,
-            folder_id=folder_id
+            folder_id=folder_id,
+            current_user_id=get_current_user_id(),
         )
         
         file_id = result['file_id']
         
         # Auto-classify if requested
         if auto_classify:
-            classification = extraction_service.classify_document(file_id)
+            classification = extraction_service.classify_document(
+                file_id,
+                current_user_id=get_current_user_id(),
+            )
             result['classification'] = classification
             
             # Auto-extract if requested and classified
             if auto_extract and classification:
                 extraction = extraction_service.extract_document(
                     file_id=file_id,
-                    document_type=classification.get('document_type')
+                    document_type=classification.get('document_type'),
+                    current_user_id=get_current_user_id(),
                 )
                 result['extraction'] = extraction
         
@@ -97,6 +99,7 @@ def upload_file():
 
 
 @extraction_bp.route('/upload-batch', methods=['POST'])
+@require_auth
 def upload_batch():
     """
     Upload multiple files for extraction.
@@ -143,13 +146,15 @@ def upload_batch():
                 # Upload
                 upload_result = extraction_service.upload_file(
                     file=file,
-                    folder_id=group_id
+                    folder_id=group_id,
+                    current_user_id=get_current_user_id(),
                 )
                 
                 # Auto-classify if requested
                 if auto_classify:
                     classification = extraction_service.classify_document(
-                        upload_result['file_id']
+                        upload_result['file_id'],
+                        current_user_id=get_current_user_id(),
                     )
                     upload_result['classification'] = classification
                 
@@ -181,6 +186,7 @@ def upload_batch():
 
 
 @extraction_bp.route('/classify', methods=['POST'])
+@require_auth
 def classify_document():
     """
     Classify a document to detect its type.
@@ -219,7 +225,10 @@ def classify_document():
         file_id = data['file_id']
         
         # Classify
-        classification = extraction_service.classify_document(file_id)
+        classification = extraction_service.classify_document(
+            file_id,
+            current_user_id=get_current_user_id(),
+        )
         
         return jsonify({
             'success': True,
@@ -234,6 +243,7 @@ def classify_document():
 
 
 @extraction_bp.route('/extract', methods=['POST'])
+@require_auth
 def extract_document():
     """
     Extract data from a document.
@@ -283,7 +293,8 @@ def extract_document():
         result = extraction_service.extract_document(
             file_id=file_id,
             document_type=document_type,
-            options=extraction_options
+            options=extraction_options,
+            current_user_id=get_current_user_id(),
         )
         
         return jsonify({
@@ -299,6 +310,7 @@ def extract_document():
 
 
 @extraction_bp.route('/batch-extract', methods=['POST'])
+@require_auth
 def batch_extract():
     """
     Extract data from multiple documents.
@@ -356,7 +368,8 @@ def batch_extract():
                 result = extraction_service.extract_document(
                     file_id=file_id,
                     document_type=document_type,
-                    options=extraction_options
+                    options=extraction_options,
+                    current_user_id=get_current_user_id(),
                 )
                 
                 results.append({
@@ -389,6 +402,7 @@ def batch_extract():
 
 
 @extraction_bp.route('/fuse', methods=['POST'])
+@require_auth
 def fuse_documents():
     """
     Fuse data from multiple documents into a unified submission.
@@ -437,7 +451,8 @@ def fuse_documents():
         result = extraction_service.fuse_documents(
             file_ids=file_ids,
             group_id=group_id,
-            options=options
+            options=options,
+            current_user_id=get_current_user_id(),
         )
         
         return jsonify({
@@ -453,6 +468,7 @@ def fuse_documents():
 
 
 @extraction_bp.route('/jobs/<job_id>', methods=['GET'])
+@require_auth
 def get_job_status(job_id):
     """
     Get status of an async extraction job.
@@ -472,7 +488,10 @@ def get_job_status(job_id):
         }
     """
     try:
-        job_status = extraction_service.get_job_status(job_id)
+        job_status = extraction_service.get_job_status(
+            job_id,
+            current_user_id=get_current_user_id(),
+        )
         
         if not job_status:
             return jsonify({
@@ -493,6 +512,7 @@ def get_job_status(job_id):
 
 
 @extraction_bp.route('/<extraction_id>/download', methods=['GET'])
+@require_auth
 def download_extraction(extraction_id):
     """
     Download extraction result as JSON file.
@@ -501,7 +521,10 @@ def download_extraction(extraction_id):
         JSON file download
     """
     try:
-        result = extraction_service.get_extraction_result(extraction_id)
+        result = extraction_service.get_extraction_result(
+            extraction_id,
+            current_user_id=get_current_user_id(),
+        )
         
         if not result:
             return jsonify({
@@ -532,6 +555,7 @@ def download_extraction(extraction_id):
 
 
 @extraction_bp.route('/files/<file_id>', methods=['DELETE'])
+@require_auth
 def delete_file(file_id):
     """
     Delete uploaded file.
@@ -543,7 +567,10 @@ def delete_file(file_id):
         }
     """
     try:
-        extraction_service.delete_file(file_id)
+        extraction_service.delete_file(
+            file_id,
+            current_user_id=get_current_user_id(),
+        )
         
         return jsonify({
             'success': True,

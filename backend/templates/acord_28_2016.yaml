@@ -1,0 +1,40 @@
+template_id: acord_28_2016
+form_type: ACORD_28
+version: "2016_03"
+name: ACORD 28 Evidence of Commercial Property Insurance
+description: ACORD 28 Evidence of Commercial Property Insurance (2016/03) — commercial property evidence output generated from merged submission data.
+pdf_url: template.pdf
+required_data_sections:
+  - insured
+  - coverage
+optional_data_sections:
+  - policy
+  - locations
+expected_documents:
+  - acord_140
+  - sov
+  - supplemental
+estimated_fields: 9
+icon: building
+is_popular: true
+signature_fields:
+  - InsuredName
+  - PolicyNumber
+  - PropertyAddress
+
+field_map:
+  InsuredName: InsuredName
+  Carrier: Carrier
+  PolicyNumber: PolicyNumber
+  EffectiveDate: EffectiveDate
+  ExpirationDate: ExpirationDate
+  LocationNumber: LocationNumber
+  PropertyAddress: PropertyAddress
+  BuildingValue: BuildingValue
+  ContentsLimit: ContentsLimit
+
+repeaters: {}
+
+metadata:
+  min_fillable_confidence: 0.85
+  supports_alias_fallback: true

@@ -12,6 +12,7 @@ import logging
 from datetime import datetime
 from flask import Blueprint, request, jsonify, send_file, Response
 from api.auth import require_auth, get_current_user_id
+from api.error_handlers import internal_server_error
 from services.submission_service import SubmissionService
 from services.merged_data_service import MergedDataService
 # Blueprint for submission-specific routes
@@ -813,8 +814,7 @@ def list_all_submissions():
             "message": "Submissions retrieved successfully",
         }), 200
     except Exception as e:
-        print("error in list_all_submissions method", str(e))
-        return jsonify({"error": str(e)}), 500
+        return internal_server_error(logger, "Failed to list submissions", e)
 
 
 @submission_bp.route("/stats", methods=["GET"])

@@ -4,13 +4,17 @@ Client API routes.
 Endpoints for client management.
 """
 
+import logging
+
 from flask import Blueprint, request, jsonify
 from api.auth import require_auth, get_current_user_id
+from api.error_handlers import internal_server_error
 from services.client_service import ClientService
 from services.submission_service import SubmissionService
 from services.template_library_service import TemplateLibraryService
 
 client_bp = Blueprint('clients', __name__)
+logger = logging.getLogger(__name__)
 
 
 def _client_service() -> ClientService:
@@ -44,7 +48,7 @@ def list_clients():
         }), 200
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return internal_server_error(logger, "Failed to list clients", e)
 
 
 @client_bp.route('/', methods=['POST'])
@@ -81,7 +85,7 @@ def create_client():
         }), 201
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return internal_server_error(logger, "Failed to create client", e)
 
 
 @client_bp.route('/<client_id>', methods=['GET'])
@@ -109,7 +113,7 @@ def get_client(client_id):
         }), 200
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return internal_server_error(logger, "Failed to retrieve client", e)
 
 @client_bp.route('/<client_id>/submissions', methods=['GET'])
 @require_auth
@@ -127,7 +131,7 @@ def list_client_submissions(client_id):
             'data': packages,
         }), 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return internal_server_error(logger, "Failed to list client submissions", e)
 
 
 @client_bp.route('/<client_id>', methods=['PUT'])
@@ -170,7 +174,7 @@ def update_client(client_id):
         }), 200
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return internal_server_error(logger, "Failed to update client", e)
 
 
 @client_bp.route('/<client_id>', methods=['DELETE'])
@@ -197,7 +201,7 @@ def delete_client(client_id):
         }), 200
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return internal_server_error(logger, "Failed to delete client", e)
 
 
 @client_bp.route('/<client_id>/submissions', methods=['POST'])
@@ -249,7 +253,7 @@ def create_submission(client_id):
         }), 201
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return internal_server_error(logger, "Failed to create submission", e)
 
 
 
@@ -271,4 +275,4 @@ def list_templates():
         }), 200
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return internal_server_error(logger, "Failed to list templates", e)

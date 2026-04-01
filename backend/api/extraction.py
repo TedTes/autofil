@@ -2,12 +2,16 @@
 Extraction routes - handles file upload, classification, and data extraction.
 """
 
+import logging
+
 from flask import Blueprint, request, jsonify, send_file
 
 from api.auth import require_auth, get_current_user_id
+from api.error_handlers import internal_server_error
 from services.extraction_service import ExtractionService
 
 extraction_bp = Blueprint('extraction', __name__)
+logger = logging.getLogger(__name__)
 extraction_service = ExtractionService()
 
 
@@ -92,10 +96,7 @@ def upload_file():
         }), 200
         
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return internal_server_error(logger, "File upload failed", e, success=False)
 
 
 @extraction_bp.route('/upload-batch', methods=['POST'])
@@ -162,9 +163,10 @@ def upload_batch():
                 successful += 1
                 
             except Exception as e:
+                logger.warning("batch upload failed for file=%s: %s", file.filename, e)
                 results.append({
                     'file_name': file.filename,
-                    'error': str(e)
+                    'error': 'Upload failed'
                 })
                 failed += 1
         
@@ -179,10 +181,7 @@ def upload_batch():
         }), 200
         
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return internal_server_error(logger, "Batch upload failed", e, success=False)
 
 
 @extraction_bp.route('/classify', methods=['POST'])
@@ -236,10 +235,7 @@ def classify_document():
         }), 200
         
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return internal_server_error(logger, "Document classification failed", e, success=False)
 
 
 @extraction_bp.route('/extract', methods=['POST'])
@@ -303,10 +299,7 @@ def extract_document():
         }), 200
         
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return internal_server_error(logger, "Document extraction failed", e, success=False)
 
 
 @extraction_bp.route('/batch-extract', methods=['POST'])
@@ -383,10 +376,11 @@ def batch_extract():
                 })
                 
             except Exception as e:
+                logger.warning("batch extract failed for file_id=%s: %s", file_id, e)
                 results.append({
                     'file_id': file_id,
                     'success': False,
-                    'error': str(e)
+                    'error': 'Extraction failed'
                 })
         
         return jsonify({
@@ -395,10 +389,7 @@ def batch_extract():
         }), 200
         
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return internal_server_error(logger, "Batch extraction failed", e, success=False)
 
 
 @extraction_bp.route('/fuse', methods=['POST'])
@@ -461,10 +452,7 @@ def fuse_documents():
         }), 200
         
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return internal_server_error(logger, "Document fusion failed", e, success=False)
 
 
 @extraction_bp.route('/jobs/<job_id>', methods=['GET'])
@@ -505,10 +493,7 @@ def get_job_status(job_id):
         }), 200
         
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return internal_server_error(logger, "Failed to retrieve job status", e, success=False)
 
 
 @extraction_bp.route('/<extraction_id>/download', methods=['GET'])
@@ -548,10 +533,7 @@ def download_extraction(extraction_id):
         )
         
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return internal_server_error(logger, "Failed to download extraction", e, success=False)
 
 
 @extraction_bp.route('/files/<file_id>', methods=['DELETE'])
@@ -578,10 +560,7 @@ def delete_file(file_id):
         }), 200
         
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return internal_server_error(logger, "Failed to delete file", e, success=False)
 
 
 @extraction_bp.route('/formats', methods=['GET'])
@@ -612,7 +591,4 @@ def get_supported_formats():
         }), 200
         
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return internal_server_error(logger, "Failed to retrieve supported formats", e, success=False)

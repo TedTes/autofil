@@ -4,12 +4,16 @@ Folder API routes.
 Endpoints for folder management.
 """
 
+import logging
+
 from flask import Blueprint, request, jsonify
 from api.auth import require_auth, get_current_user_id
+from api.error_handlers import internal_server_error
 from services.folder_service import FolderService
 from services.submission_service import SubmissionService
 
 folder_bp = Blueprint('folders', __name__)
+logger = logging.getLogger(__name__)
 
 
 def _folder_service() -> FolderService:
@@ -39,7 +43,7 @@ def list_folders():
         }), 200
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return internal_server_error(logger, "Failed to list folders", e)
 
 
 @folder_bp.route('/', methods=['POST'])
@@ -75,7 +79,7 @@ def create_folder():
         }), 201
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return internal_server_error(logger, "Failed to create folder", e)
 
 
 @folder_bp.route('/<folder_id>', methods=['GET'])
@@ -113,7 +117,7 @@ def get_folder(folder_id):
         }), 200
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return internal_server_error(logger, "Failed to retrieve folder", e)
 
 
 @folder_bp.route('/<folder_id>', methods=['PUT'])
@@ -156,7 +160,7 @@ def update_folder(folder_id):
         }), 200
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return internal_server_error(logger, "Failed to update folder", e)
 
 
 @folder_bp.route('/<folder_id>', methods=['DELETE'])
@@ -183,4 +187,4 @@ def delete_folder(folder_id):
         }), 200
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return internal_server_error(logger, "Failed to delete folder", e)

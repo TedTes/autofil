@@ -5,14 +5,17 @@ Endpoints for multi-submission fill, export, download, webhook send, and delete.
 """
 
 import os
+import logging
 from datetime import datetime
 from flask import Blueprint, request, jsonify, send_file, after_this_request
 
 from api.auth import require_auth, get_current_user_id
+from api.error_handlers import internal_server_error
 from services.submission_service import SubmissionService
 from services.bulk_export_service import BulkExportService
 
 bulk_bp = Blueprint("bulk", __name__)
+logger = logging.getLogger(__name__)
 
 
 def _submission_service() -> SubmissionService:
@@ -65,7 +68,8 @@ def bulk_fill():
                     "output": output_meta,
                 })
             except Exception as e:
-                errors.append({"submission_id": sid, "error": str(e)})
+                logger.warning("bulk fill failed for submission_id=%s: %s", sid, e)
+                errors.append({"submission_id": sid, "error": "Fill failed"})
 
         return jsonify({
             "success": len(results) > 0,
@@ -79,7 +83,7 @@ def bulk_fill():
             "message": f"Bulk fill: {len(results)} succeeded, {len(errors)} failed",
         }), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_server_error(logger, "Bulk fill failed", e)
 
 
 @bulk_bp.route("/download", methods=["POST"])
@@ -131,7 +135,7 @@ def bulk_download_zip():
         return send_file(buf, mimetype="application/zip", as_attachment=True, download_name=f"filled_pdfs_{ts}.zip"), status
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_server_error(logger, "Bulk download failed", e)
 
 
 @bulk_bp.route("/export-zip", methods=["POST"])
@@ -190,7 +194,7 @@ def bulk_export_zip():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_server_error(logger, "Bulk export failed", e)
 
 
 @bulk_bp.route("/export/csv", methods=["POST"])
@@ -223,7 +227,7 @@ def bulk_export_csv():
         ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
         return send_file(csv_path, mimetype="text/csv", as_attachment=True, download_name=f"submissions_{ts}.csv")
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_server_error(logger, "CSV export failed", e)
 
 
 @bulk_bp.route("/export/json", methods=["POST"])
@@ -256,7 +260,7 @@ def bulk_export_json():
         ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
         return send_file(json_path, mimetype="application/json", as_attachment=True, download_name=f"submissions_{ts}.json")
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_server_error(logger, "JSON export failed", e)
 
 
 @bulk_bp.route("/export/package", methods=["POST"])
@@ -295,7 +299,7 @@ def bulk_export_package():
         ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
         return send_file(zip_path, mimetype="application/zip", as_attachment=True, download_name=f"submissions_package_{ts}.zip")
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_server_error(logger, "Package export failed", e)
 
 
 @bulk_bp.route("/export/webhook", methods=["POST"])
@@ -340,7 +344,7 @@ def bulk_send_webhook():
         )
         return jsonify({"success": resp["success"], "data": resp}), (200 if resp["success"] else 500)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_server_error(logger, "Webhook export failed", e)
 
 
 @bulk_bp.route("/delete", methods=["DELETE"])
@@ -371,8 +375,9 @@ def bulk_delete():
                 else:
                     results.append({"id": sid, "success": True})
             except Exception as e:
-                results.append({"id": sid, "success": False, "error": str(e)})
+                logger.warning("bulk delete failed for submission_id=%s: %s", sid, e)
+                results.append({"id": sid, "success": False, "error": "Delete failed"})
 
         return jsonify({"success": True, "results": results}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_server_error(logger, "Bulk delete failed", e)

@@ -12,7 +12,10 @@ from services.extraction_service import ExtractionService
 
 extraction_bp = Blueprint('extraction', __name__)
 logger = logging.getLogger(__name__)
-extraction_service = ExtractionService()
+
+
+def _extraction_service() -> ExtractionService:
+    return ExtractionService()
 
 
 @extraction_bp.route('/upload', methods=['POST'])
@@ -65,7 +68,7 @@ def upload_file():
         folder_id = request.form.get('folder_id')
         
         # Upload file
-        result = extraction_service.upload_file(
+        result = _extraction_service().upload_file(
             file=file,
             folder_id=folder_id,
             current_user_id=get_current_user_id(),
@@ -75,7 +78,7 @@ def upload_file():
         
         # Auto-classify if requested
         if auto_classify:
-            classification = extraction_service.classify_document(
+            classification = _extraction_service().classify_document(
                 file_id,
                 current_user_id=get_current_user_id(),
             )
@@ -83,7 +86,7 @@ def upload_file():
             
             # Auto-extract if requested and classified
             if auto_extract and classification:
-                extraction = extraction_service.extract_document(
+                extraction = _extraction_service().extract_document(
                     file_id=file_id,
                     document_type=classification.get('document_type'),
                     current_user_id=get_current_user_id(),
@@ -145,7 +148,7 @@ def upload_batch():
         for file in files:
             try:
                 # Upload
-                upload_result = extraction_service.upload_file(
+                upload_result = _extraction_service().upload_file(
                     file=file,
                     folder_id=group_id,
                     current_user_id=get_current_user_id(),
@@ -153,7 +156,7 @@ def upload_batch():
                 
                 # Auto-classify if requested
                 if auto_classify:
-                    classification = extraction_service.classify_document(
+                    classification = _extraction_service().classify_document(
                         upload_result['file_id'],
                         current_user_id=get_current_user_id(),
                     )
@@ -224,7 +227,7 @@ def classify_document():
         file_id = data['file_id']
         
         # Classify
-        classification = extraction_service.classify_document(
+        classification = _extraction_service().classify_document(
             file_id,
             current_user_id=get_current_user_id(),
         )
@@ -286,7 +289,7 @@ def extract_document():
         extraction_options = data.get('extraction_options', {})
         
         # Extract
-        result = extraction_service.extract_document(
+        result = _extraction_service().extract_document(
             file_id=file_id,
             document_type=document_type,
             options=extraction_options,
@@ -358,7 +361,7 @@ def batch_extract():
             extraction_options = req.get('extraction_options', {})
             
             try:
-                result = extraction_service.extract_document(
+                result = _extraction_service().extract_document(
                     file_id=file_id,
                     document_type=document_type,
                     options=extraction_options,
@@ -439,7 +442,7 @@ def fuse_documents():
         options = data.get('options', {})
         
         # Fuse documents
-        result = extraction_service.fuse_documents(
+        result = _extraction_service().fuse_documents(
             file_ids=file_ids,
             group_id=group_id,
             options=options,
@@ -476,7 +479,7 @@ def get_job_status(job_id):
         }
     """
     try:
-        job_status = extraction_service.get_job_status(
+        job_status = _extraction_service().get_job_status(
             job_id,
             current_user_id=get_current_user_id(),
         )
@@ -506,7 +509,7 @@ def download_extraction(extraction_id):
         JSON file download
     """
     try:
-        result = extraction_service.get_extraction_result(
+        result = _extraction_service().get_extraction_result(
             extraction_id,
             current_user_id=get_current_user_id(),
         )
@@ -549,7 +552,7 @@ def delete_file(file_id):
         }
     """
     try:
-        extraction_service.delete_file(
+        _extraction_service().delete_file(
             file_id,
             current_user_id=get_current_user_id(),
         )
@@ -583,7 +586,7 @@ def get_supported_formats():
         }
     """
     try:
-        formats = extraction_service.get_supported_formats()
+        formats = _extraction_service().get_supported_formats()
         
         return jsonify({
             'success': True,

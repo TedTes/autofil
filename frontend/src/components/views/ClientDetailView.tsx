@@ -438,80 +438,64 @@ function CompactFolderList({
         }`}
       >
 {/* Package Header */}
-<div className="flex items-center gap-1">
-  {/* 1. EXPAND/COLLAPSE BUTTON */}
+<div className="flex items-center group/card">
+  {/* 1. EXPAND/COLLAPSE BUTTON — takes remaining space */}
   <button
     onClick={() => {
-      if (isSmallScreen) {
-        const wasOpen = expandedId === pkg.submission_id
-        const next = wasOpen ? null : pkg.submission_id
-        setExpandedId(next)
-        if (!wasOpen) {
-          onToggle?.(pkg)
-        }
-      } else {
-        const wasOpen = expandedId === pkg.submission_id
-        const next = wasOpen ? null : pkg.submission_id
-        setExpandedId(next)
-        if (!wasOpen) {
-          onToggle?.(pkg)
-        }
-      }
+      const wasOpen = expandedId === pkg.submission_id
+      const next = wasOpen ? null : pkg.submission_id
+      setExpandedId(next)
+      if (!wasOpen) onToggle?.(pkg)
     }}
-    className="flex items-center gap-2 px-3 py-2.5 text-left hover:bg-gray-50 transition-colors rounded-l-lg"
+    className="flex flex-1 items-center gap-2.5 px-3 py-3 text-left min-w-0 hover:bg-gray-50 transition-colors rounded-l-lg"
   >
-    <div className="flex-shrink-0">
-      {isExpanded ? (
-        <ChevronDown className="w-4 h-4 text-gray-600" />
-      ) : (
-        <ChevronRight className="w-4 h-4 text-gray-600" />
-      )}
-    </div>
-    <Folder className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-blue-600' : 'text-gray-500'}`} />
-    <div className="flex-1 min-w-0">
-      <p className={`text-sm font-medium truncate ${isActive ? 'text-blue-900' : 'text-gray-900'}`}>
-        {pkg.name}
-      </p>
-    </div>
+    {isExpanded ? (
+      <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 text-gray-400" />
+    ) : (
+      <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 text-gray-400" />
+    )}
+    <Folder className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-blue-500' : 'text-gray-400'}`} />
+    <p className={`text-sm font-medium truncate flex-1 ${isActive ? 'text-blue-900' : 'text-gray-800'}`}>
+      {pkg.name}
+    </p>
+    {totalInputs > 0 && (
+      <span className="text-xs text-gray-400 font-normal flex-shrink-0 pr-1">
+        {totalInputs} {totalInputs === 1 ? 'file' : 'files'}
+      </span>
+    )}
   </button>
-  
-  {/* File count badge - OUTSIDE expand button, between buttons */}
-  <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs font-medium rounded whitespace-nowrap">
-    {totalInputs}
-  </span>
-  
-  {/* 2. ADD FILES BUTTON */}
-  <button
-    type="button"
-    onClick={(e) => {
-      e.preventDefault()
-      e.stopPropagation()
-      onAddFiles?.(pkg)
-    }}
-    onMouseDown={(e) => {
-      e.stopPropagation()
-    }}
-    className="px-2.5 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded transition-colors border border-blue-200 hover:border-blue-300 flex-shrink-0"
-    title="Add files to this submission"
-  >
-    <Plus className="w-4 h-4" />
-  </button>
-  
-  {/* 3. DELETE SUBMISSION BUTTON */}
-  <button
-    onClick={(e) => {
-      e.preventDefault()
-      e.stopPropagation()
-      onDeleteSubmission?.(pkg.submission_id, e)
-    }}
-    onMouseDown={(e) => {
-      e.stopPropagation()
-    }}
-    className="px-2 py-2.5 hover:bg-red-50 text-gray-400 hover:text-red-600 rounded-r-lg transition-colors flex-shrink-0"
-    title="Delete submission"
-  >
-    <Trash2 className="w-4 h-4" />
-  </button>
+
+  {/* Actions — visible on hover */}
+  <div className="flex items-center pr-1 opacity-0 group-hover/card:opacity-100 transition-opacity duration-150">
+    {/* 2. ADD FILES BUTTON */}
+    <button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        onAddFiles?.(pkg)
+      }}
+      onMouseDown={(e) => e.stopPropagation()}
+      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors flex-shrink-0"
+      title="Add files to this submission"
+    >
+      <Plus className="w-4 h-4" />
+    </button>
+
+    {/* 3. DELETE SUBMISSION BUTTON */}
+    <button
+      onClick={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        onDeleteSubmission?.(pkg.submission_id, e)
+      }}
+      onMouseDown={(e) => e.stopPropagation()}
+      className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors flex-shrink-0"
+      title="Delete submission"
+    >
+      <Trash2 className="w-3.5 h-3.5" />
+    </button>
+  </div>
 </div>
 <div
    className={`
@@ -532,12 +516,13 @@ function CompactFolderList({
             {/* Inputs Section */}
             {pkg.inputs && pkg.inputs.length > 0 && (
   <div className="px-3 py-3 border-t border-gray-100">
-    {/* Header with title and select all button */}
+    {/* Header with title and select-all checkbox */}
     <div className="flex items-center justify-between mb-2">
       <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
         Input Files ({pkg.inputs.length})
       </h4>
-      <button
+      <label
+        className="flex items-center gap-1.5 cursor-pointer group"
         onClick={(e) => {
           e.stopPropagation()
           const inputIds =
@@ -546,10 +531,18 @@ function CompactFolderList({
               .filter((val): val is string => Boolean(val)) || []
           onSelectAllInputs?.(pkg.submission_id, inputIds)
         }}
-        className="text-xs text-blue-600 hover:text-blue-700 font-medium hover:underline"
       >
-        {selectedInputFilenames.length === totalInputs ? 'Exclude All' : 'Include All'}
-      </button>
+        <input
+          type="checkbox"
+          readOnly
+          checked={selectedInputFilenames.length === totalInputs && totalInputs > 0}
+          ref={(el) => {
+            if (el) el.indeterminate = selectedInputFilenames.length > 0 && selectedInputFilenames.length < totalInputs
+          }}
+          className="w-3.5 h-3.5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+        />
+        <span className="text-xs text-gray-500 group-hover:text-gray-700 font-medium">All</span>
+      </label>
     </div>
 
     {/* Vertical list of input files */}

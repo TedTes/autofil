@@ -11,6 +11,7 @@ import {
   Plus,
   Upload,
   Building2,
+  FileText,
 } from 'lucide-react'
 
 import { getRecentSubmissions } from '@/lib/api-client'
@@ -118,65 +119,110 @@ export function HomeView({
   const goToNeedsReview = onNavigateToNeedsReview ?? onNavigateToSubmissions
   const goToReadyToGenerate = onNavigateToReadyToGenerate ?? onNavigateToSubmissions
 
+  const continueWorkItems = [
+    {
+      label: 'Needs Review',
+      sublabel: 'Flagged submissions',
+      count: needsReview,
+      icon: AlertTriangle,
+      onClick: goToNeedsReview,
+      accent: {
+        activeBg: 'bg-red-50 border-red-100',
+        iconBg: 'bg-red-100',
+        iconColor: 'text-red-500',
+        countColor: 'text-red-600',
+        arrowColor: 'group-hover:text-red-400',
+      },
+    },
+    {
+      label: 'Ready to Generate',
+      sublabel: 'Output-ready submissions',
+      count: readyToGenerate,
+      icon: TrendingUp,
+      onClick: goToReadyToGenerate,
+      accent: {
+        activeBg: 'bg-violet-50 border-violet-100',
+        iconBg: 'bg-violet-100',
+        iconColor: 'text-violet-500',
+        countColor: 'text-violet-600',
+        arrowColor: 'group-hover:text-violet-400',
+      },
+    },
+    {
+      label: 'In Progress',
+      sublabel: 'Submission queue',
+      count: activeSubmissions,
+      icon: Clock3,
+      onClick: onNavigateToSubmissions,
+      accent: {
+        activeBg: 'bg-blue-50 border-blue-100',
+        iconBg: 'bg-blue-100',
+        iconColor: 'text-blue-500',
+        countColor: 'text-blue-600',
+        arrowColor: 'group-hover:text-blue-400',
+      },
+    },
+  ]
+
   return (
-    <div className="space-y-8 py-6">
+    <div className="space-y-7 py-6">
 
       {/* ── Section 1: Start New ──────────────────────────────────────── */}
       <section>
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-gray-400">
+        <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400">
           Start New
-        </h2>
+        </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
 
-          {/* New Submission — primary action */}
+          {/* New Submission — primary */}
           <button
             onClick={onNavigateToClients}
-            className="group flex items-start gap-4 rounded-xl bg-blue-600 p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-md"
+            className="group flex items-center gap-4 rounded-xl bg-blue-600 p-5 text-left shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-md active:scale-[0.98] active:shadow-sm"
           >
-            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-white/20">
-              <Plus className="h-5 w-5 text-white" />
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-white/20">
+              <Plus className="h-4 w-4 text-white" />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-white">New Submission</p>
-              <p className="mt-1 text-xs text-blue-100 leading-relaxed">
-                Create a submission and upload insurance documents
+              <p className="mt-0.5 text-xs text-blue-200 leading-relaxed">
+                Create and upload insurance documents
               </p>
             </div>
-            <ArrowUpRight className="ml-auto h-4 w-4 flex-shrink-0 text-blue-200 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-white" />
+            <ArrowUpRight className="h-3.5 w-3.5 flex-shrink-0 text-blue-300 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-white" />
           </button>
 
-          {/* Upload Documents */}
+          {/* Upload Files */}
           <button
             onClick={onNavigateToUpload}
-            className="group flex items-start gap-4 rounded-xl border border-gray-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md"
+            className="group flex items-center gap-4 rounded-xl border border-gray-200 bg-white p-5 text-left shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md active:scale-[0.98] active:shadow-sm"
           >
-            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100 group-hover:bg-blue-50">
-              <Upload className="h-5 w-5 text-gray-500 group-hover:text-blue-600" />
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100 transition-colors group-hover:bg-blue-50">
+              <Upload className="h-4 w-4 text-gray-500 transition-colors group-hover:text-blue-600" />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-gray-900">Upload Files</p>
-              <p className="mt-1 text-xs text-gray-500 leading-relaxed">
-                Upload documents without selecting an account first
+              <p className="mt-0.5 text-xs text-gray-500 leading-relaxed">
+                Upload documents without selecting an account
               </p>
             </div>
-            <ArrowUpRight className="ml-auto h-4 w-4 flex-shrink-0 text-gray-300 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-gray-500" />
+            <ArrowUpRight className="h-3.5 w-3.5 flex-shrink-0 text-gray-300 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-gray-500" />
           </button>
 
           {/* New Account */}
           <button
             onClick={onNavigateToClients}
-            className="group flex items-start gap-4 rounded-xl border border-gray-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md"
+            className="group flex items-center gap-4 rounded-xl border border-gray-200 bg-white p-5 text-left shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md active:scale-[0.98] active:shadow-sm"
           >
-            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100 group-hover:bg-blue-50">
-              <Building2 className="h-5 w-5 text-gray-500 group-hover:text-blue-600" />
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100 transition-colors group-hover:bg-blue-50">
+              <Building2 className="h-4 w-4 text-gray-500 transition-colors group-hover:text-blue-600" />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-gray-900">New Account</p>
-              <p className="mt-1 text-xs text-gray-500 leading-relaxed">
+              <p className="mt-0.5 text-xs text-gray-500 leading-relaxed">
                 Add a new insured or client account
               </p>
             </div>
-            <ArrowUpRight className="ml-auto h-4 w-4 flex-shrink-0 text-gray-300 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-gray-500" />
+            <ArrowUpRight className="h-3.5 w-3.5 flex-shrink-0 text-gray-300 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-gray-500" />
           </button>
 
         </div>
@@ -184,89 +230,44 @@ export function HomeView({
 
       {/* ── Section 2: Continue Work ──────────────────────────────────── */}
       <section>
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-gray-400">
+        <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400">
           Continue Work
-        </h2>
+        </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-
-          {/* Needs Review */}
-          <button
-            onClick={goToNeedsReview}
-            className={`group flex items-center gap-4 rounded-xl border p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-md ${
-              needsReview > 0
-                ? 'border-red-200 bg-red-50 shadow-sm hover:border-red-300'
-                : 'border-gray-100 bg-gray-50 hover:border-gray-200'
-            }`}
-          >
-            <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg ${
-              needsReview > 0 ? 'bg-red-100' : 'bg-gray-200/60'
-            }`}>
-              <AlertTriangle className={`h-4 w-4 ${needsReview > 0 ? 'text-red-600' : 'text-gray-400'}`} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className={`text-xl font-semibold leading-none tabular-nums ${needsReview > 0 ? 'text-red-700' : 'text-gray-300'}`}>
-                {needsReview}
-              </p>
-              <p className={`mt-1 text-sm font-medium ${needsReview > 0 ? 'text-gray-800' : 'text-gray-400'}`}>Needs Review</p>
-              <p className={`text-xs ${needsReview > 0 ? 'text-gray-500' : 'text-gray-300'}`}>Open flagged submissions</p>
-            </div>
-            <ArrowUpRight className={`h-4 w-4 flex-shrink-0 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 ${
-              needsReview > 0 ? 'text-red-300 group-hover:text-red-500' : 'text-gray-200'
-            }`} />
-          </button>
-
-          {/* Ready to Generate */}
-          <button
-            onClick={goToReadyToGenerate}
-            className={`group flex items-center gap-4 rounded-xl border p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-md ${
-              readyToGenerate > 0
-                ? 'border-purple-200 bg-purple-50 shadow-sm hover:border-purple-300'
-                : 'border-gray-100 bg-gray-50 hover:border-gray-200'
-            }`}
-          >
-            <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg ${
-              readyToGenerate > 0 ? 'bg-purple-100' : 'bg-gray-200/60'
-            }`}>
-              <TrendingUp className={`h-4 w-4 ${readyToGenerate > 0 ? 'text-purple-600' : 'text-gray-400'}`} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className={`text-xl font-semibold leading-none tabular-nums ${readyToGenerate > 0 ? 'text-purple-700' : 'text-gray-300'}`}>
-                {readyToGenerate}
-              </p>
-              <p className={`mt-1 text-sm font-medium ${readyToGenerate > 0 ? 'text-gray-800' : 'text-gray-400'}`}>Ready to Generate</p>
-              <p className={`text-xs ${readyToGenerate > 0 ? 'text-gray-500' : 'text-gray-300'}`}>Open output-ready submissions</p>
-            </div>
-            <ArrowUpRight className={`h-4 w-4 flex-shrink-0 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 ${
-              readyToGenerate > 0 ? 'text-purple-300 group-hover:text-purple-500' : 'text-gray-200'
-            }`} />
-          </button>
-
-          {/* In Progress */}
-          <button
-            onClick={onNavigateToSubmissions}
-            className={`group flex items-center gap-4 rounded-xl border p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-md ${
-              activeSubmissions > 0
-                ? 'border-blue-200 bg-blue-50 shadow-sm hover:border-blue-300'
-                : 'border-gray-100 bg-gray-50 hover:border-gray-200'
-            }`}
-          >
-            <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg ${
-              activeSubmissions > 0 ? 'bg-blue-100' : 'bg-gray-200/60'
-            }`}>
-              <Clock3 className={`h-4 w-4 ${activeSubmissions > 0 ? 'text-blue-600' : 'text-gray-400'}`} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className={`text-xl font-semibold leading-none tabular-nums ${activeSubmissions > 0 ? 'text-blue-700' : 'text-gray-300'}`}>
-                {activeSubmissions}
-              </p>
-              <p className={`mt-1 text-sm font-medium ${activeSubmissions > 0 ? 'text-gray-800' : 'text-gray-400'}`}>In Progress</p>
-              <p className={`text-xs ${activeSubmissions > 0 ? 'text-gray-500' : 'text-gray-300'}`}>Open the submission queue</p>
-            </div>
-            <ArrowUpRight className={`h-4 w-4 flex-shrink-0 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 ${
-              activeSubmissions > 0 ? 'text-blue-300 group-hover:text-blue-500' : 'text-gray-200'
-            }`} />
-          </button>
-
+          {continueWorkItems.map(({ label, sublabel, count, icon: Icon, onClick, accent }) => {
+            const isActive = count > 0
+            return (
+              <button
+                key={label}
+                onClick={onClick}
+                className={`group flex items-center gap-4 rounded-xl border p-4 text-left shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98] ${
+                  isActive ? accent.activeBg : 'border-gray-200 bg-white'
+                }`}
+              >
+                <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg ${
+                  isActive ? accent.iconBg : 'bg-gray-100'
+                }`}>
+                  <Icon className={`h-4 w-4 ${isActive ? accent.iconColor : 'text-gray-400'}`} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className={`text-2xl font-bold leading-none tabular-nums ${
+                    isActive ? accent.countColor : 'text-gray-300'
+                  }`}>
+                    {count}
+                  </p>
+                  <p className={`mt-1 text-sm font-medium ${isActive ? 'text-gray-800' : 'text-gray-400'}`}>
+                    {label}
+                  </p>
+                  <p className={`text-xs ${isActive ? 'text-gray-500' : 'text-gray-300'}`}>
+                    {sublabel}
+                  </p>
+                </div>
+                <ArrowUpRight className={`h-3.5 w-3.5 flex-shrink-0 text-gray-300 transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 ${
+                  isActive ? accent.arrowColor : ''
+                }`} />
+              </button>
+            )
+          })}
         </div>
       </section>
 
@@ -274,7 +275,6 @@ export function HomeView({
       <section>
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_300px] xl:items-start">
 
-          {/* Recent Submissions — main list */}
           <div className="min-w-0">
             <RecentSubmissionsCard
               limit={5}
@@ -283,18 +283,17 @@ export function HomeView({
             />
           </div>
 
-          {/* Needs Attention + Generated summary */}
           <div className="flex flex-col gap-4 min-w-0">
 
             {/* Needs Attention */}
-            <div className="flex-1 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden flex flex-col">
+            <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden flex flex-col">
               <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
                 <div className="flex items-center gap-2.5">
                   <div className={`flex h-6 w-6 items-center justify-center rounded-md ${
                     pendingIssues.length > 0 ? 'bg-orange-100' : 'bg-green-50'
                   }`}>
                     {pendingIssues.length > 0
-                      ? <AlertTriangle className="h-3.5 w-3.5 text-orange-600" />
+                      ? <AlertTriangle className="h-3.5 w-3.5 text-orange-500" />
                       : <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
                     }
                   </div>
@@ -317,7 +316,7 @@ export function HomeView({
               </div>
 
               {pendingIssues.length > 0 ? (
-                <div className="divide-y divide-gray-100 max-h-[260px] overflow-y-auto custom-scrollbar flex-1">
+                <div className="divide-y divide-gray-100 max-h-[260px] overflow-y-auto custom-scrollbar">
                   {pendingIssues.map((issue) => (
                     <button
                       key={issue.key}
@@ -348,7 +347,7 @@ export function HomeView({
                   ))}
                 </div>
               ) : (
-                <div className="flex flex-1 flex-col items-center justify-center px-5 py-8 text-center">
+                <div className="flex flex-col items-center justify-center px-5 py-8 text-center">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-50 mb-3">
                     <CheckCircle2 className="h-5 w-5 text-green-500" />
                   </div>
@@ -358,12 +357,12 @@ export function HomeView({
               )}
             </div>
 
-            {/* Generated forms summary */}
+            {/* Generated Forms */}
             <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-5">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2.5">
                   <div className="flex h-6 w-6 items-center justify-center rounded-md bg-green-100">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                    <FileText className="h-3.5 w-3.5 text-green-600" />
                   </div>
                   <span className="text-sm font-semibold text-gray-900">Generated Forms</span>
                 </div>
@@ -387,7 +386,7 @@ export function HomeView({
                 <div className="mt-3 border-t border-gray-100 pt-3">
                   <button
                     onClick={goToReadyToGenerate}
-                    className="inline-flex items-center gap-1.5 text-xs font-medium text-purple-600 hover:text-purple-700"
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-violet-600 hover:text-violet-700"
                   >
                     <TrendingUp className="h-3.5 w-3.5" />
                     {readyToGenerate} submission{readyToGenerate === 1 ? '' : 's'} ready to generate
@@ -396,7 +395,7 @@ export function HomeView({
                 </div>
               ) : generated === 0 ? (
                 <p className="mt-2 text-xs text-gray-400">
-                  Forms will appear here once a submission is generated.
+                  Forms appear here once a submission is generated.
                 </p>
               ) : null}
             </div>

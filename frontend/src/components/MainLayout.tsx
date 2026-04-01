@@ -651,26 +651,28 @@ const handleMobileSidebarClose = () => {
              {/* Breadcrumbs */}
             
 
-<nav className="flex items-center gap-2 text-xs text-gray-500 py-2 px-4 bg-white border-b border-gray-100">
-  {currentView.breadcrumbs.map((crumb, i) => (
-    <React.Fragment key={i}>
-      {i > 0 && <ChevronRight className="w-3 h-3" />}
-      <button
-        onClick={() => {
-          const targetView = breadcrumbViewMap[crumb]
-          if (targetView) navigateTo(targetView)
-        }}
-        className={`hover:text-gray-900 transition-colors ${
-          i === currentView.breadcrumbs.length - 1
-            ? 'text-gray-900 font-medium'
-            : 'text-gray-500'
-        }`}
-      >
-        {crumb}
-      </button>
-    </React.Fragment>
-  ))}
-</nav>
+{currentView.type !== 'dashboard' && (
+  <nav className="flex items-center gap-2 text-sm text-gray-500">
+    {currentView.breadcrumbs.map((crumb, i) => (
+      <React.Fragment key={i}>
+        {i > 0 && <ChevronRight className="w-3.5 h-3.5 text-gray-300" />}
+        <button
+          onClick={() => {
+            const targetView = breadcrumbViewMap[crumb]
+            if (targetView) navigateTo(targetView)
+          }}
+          className={`transition-colors ${
+            i === currentView.breadcrumbs.length - 1
+              ? 'text-gray-900 font-semibold'
+              : 'text-gray-400 hover:text-gray-700'
+          }`}
+        >
+          {crumb}
+        </button>
+      </React.Fragment>
+    ))}
+  </nav>
+)}
               </div>
 
               <div className="flex items-center gap-2">

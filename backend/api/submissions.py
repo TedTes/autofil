@@ -79,10 +79,11 @@ def upload_pdf():
                     success_count += 1
                     successful_results.append(result)
             except Exception as e:
+                logger.warning("submission upload failed for filename=%s: %s", file.filename, e)
                 errors.append({
                     "index": idx,
                     "filename": file.filename,
-                    "error": str(e),
+                    "error": "Upload failed",
                 })
 
         if success_count > 0:
@@ -126,7 +127,7 @@ def upload_pdf():
 
     except Exception as e:
         logger.exception("submission upload failed")
-        return jsonify({"error": f"Upload failed: {str(e)}"}), 500
+        return jsonify({"error": "Upload failed"}), 500
 
 
 @submission_bp.route("/<submission_id>", methods=["GET"])
@@ -158,7 +159,7 @@ def get_submission(submission_id):
             "message": "Submission retrieved successfully",
         }), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_server_error(logger, "Failed to retrieve submission", e)
 
 
 @submission_bp.route("/<submission_id>/merged-data", methods=["GET"])
@@ -176,7 +177,7 @@ def get_submission_merged_data(submission_id: str):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 404
     except Exception as exc:
-        return jsonify({"error": f"Failed to build merged data: {exc}"}), 500
+        return internal_server_error(logger, "Failed to build merged data", exc)
 
 
 @submission_bp.route("/<submission_id>/package", methods=["GET"])
@@ -194,7 +195,7 @@ def get_submission_package(submission_id: str):
             "message": "Submission package retrieved successfully",
         }), 200
     except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
+        return internal_server_error(logger, "Failed to retrieve submission package", exc)
 
 
 @submission_bp.route("/<submission_id>", methods=["PUT"])
@@ -217,7 +218,7 @@ def update_submission(submission_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_server_error(logger, "Failed to update submission", e)
 
 
 @submission_bp.route("/<submission_id>/inputs/<input_id>", methods=["DELETE"])
@@ -231,7 +232,7 @@ def delete_submission_input(submission_id, input_id):
             return jsonify({"error": "Input file not found"}), 404
         return jsonify({"success": True, "message": "Input file deleted"}), 200
     except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
+        return internal_server_error(logger, "Failed to delete submission input", exc)
 
 
 @submission_bp.route("/<submission_id>/inputs/<input_id>/include", methods=["PATCH"])
@@ -257,7 +258,7 @@ def update_submission_input_inclusion(submission_id, input_id):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 404
     except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
+        return internal_server_error(logger, "Failed to update input inclusion", exc)
 
 
 @submission_bp.route("/<submission_id>/outputs/<output_id>", methods=["DELETE"])
@@ -271,7 +272,7 @@ def delete_submission_output(submission_id, output_id):
             return jsonify({"error": "Output file not found"}), 404
         return jsonify({"success": True, "message": "Output file deleted"}), 200
     except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
+        return internal_server_error(logger, "Failed to delete submission output", exc)
 
 
 @submission_bp.route("/<submission_id>", methods=["DELETE"])
@@ -289,7 +290,7 @@ def delete_submission(submission_id):
             "message": "Submission deleted successfully",
         }), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_server_error(logger, "Failed to delete submission", e)
 
 
 @submission_bp.route("/<submission_id>/fill", methods=["POST"])
@@ -348,7 +349,7 @@ def fill_pdf(submission_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify({"error": f"Fill failed: {str(e)}"}), 500
+        return internal_server_error(logger, "Fill failed", e)
 
 
 @submission_bp.route("/<submission_id>/download", methods=["GET"])
@@ -380,7 +381,7 @@ def download_pdf(submission_id):
         )
     except Exception as e:
         logger.exception("download output failed for submission_id=%s", submission_id)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Failed to download output"}), 500
 
 
 
@@ -409,7 +410,7 @@ def preview_input_pdf(submission_id):
         return jsonify({"error": "File not found"}), 404
     except Exception as e:
         logger.exception("preview input failed for submission_id=%s", submission_id)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Failed to preview input"}), 500
 
 
 @submission_bp.route("/<submission_id>/preview-output", methods=["GET"])
@@ -435,7 +436,7 @@ def preview_output_pdf(submission_id):
         return jsonify({"error": "File not found"}), 404
     except Exception as e:
         logger.exception("preview output failed for submission_id=%s", submission_id)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Failed to preview output"}), 500
 
 
 @submission_bp.route("/<submission_id>/versions", methods=["GET"])
@@ -455,7 +456,7 @@ def get_version_history(submission_id):
             "message": "Version history retrieved successfully",
         }), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_server_error(logger, "Failed to retrieve version history", e)
 
 
 @submission_bp.route("/<submission_id>/versions/<version_id>", methods=["GET"])
@@ -475,7 +476,7 @@ def get_specific_version(submission_id, version_id):
             "version": version,
         }), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_server_error(logger, "Failed to retrieve version", e)
 
 
 @submission_bp.route("/<submission_id>/versions/<version_id>/rollback",
@@ -520,7 +521,7 @@ def rollback_to_version(submission_id, version_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_server_error(logger, "Failed to roll back submission version", e)
 
 
 @submission_bp.route("/<submission_id>/versions/compare", methods=["POST"])
@@ -548,7 +549,7 @@ def compare_versions(submission_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_server_error(logger, "Failed to compare submission versions", e)
 
 
 @submission_bp.route("/<submission_id>/compare", methods=["POST"])
@@ -579,7 +580,7 @@ def compare_data(submission_id):
         }), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_server_error(logger, "Failed to compare submission data", e)
 
 
 @submission_bp.route("/<submission_id>/compare-with-original", methods=["GET"])
@@ -597,7 +598,7 @@ def compare_with_original(submission_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_server_error(logger, "Failed to compare submission with original", e)
 
 
 @submission_bp.route("/<submission_id>/conflicts/<field>/suggest",
@@ -623,7 +624,7 @@ def suggest_resolution(submission_id, field):
         }), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_server_error(logger, "Failed to suggest conflict resolution", e)
 
 
 @submission_bp.route("/<submission_id>/conflicts/resolve", methods=["POST"])
@@ -674,7 +675,7 @@ def resolve_conflicts(submission_id):
         }), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_server_error(logger, "Failed to resolve conflicts", e)
 
 
 @submission_bp.route("/<submission_id>/form", methods=["GET"])
@@ -696,7 +697,7 @@ def get_submission_form(submission_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_server_error(logger, "Failed to generate submission form", e)
 
 
 @submission_bp.route("/<submission_id>/data", methods=["PATCH"])
@@ -730,7 +731,7 @@ def patch_submission_data(submission_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_server_error(logger, "Failed to patch submission data", e)
 
 
 @submission_bp.route("/<submission_id>/status", methods=["PATCH"])
@@ -764,7 +765,7 @@ def update_submission_status(submission_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_server_error(logger, "Failed to update submission status", e)
 
 
 @submission_bp.route("/list", methods=["GET"])
@@ -849,7 +850,7 @@ def get_submissions_stats():
             },
         }), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_server_error(logger, "Failed to retrieve submission stats", e)
 
 
 @submission_bp.route("/reports/summary", methods=["GET"])
@@ -866,7 +867,7 @@ def get_reports_summary():
             "message": "Report summary generated successfully",
         }), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_server_error(logger, "Failed to build reports summary", e)
 
 
 @submission_bp.route('/recent', methods=['GET'])
@@ -912,4 +913,4 @@ def list_recent_submissions():
         }), 200
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return internal_server_error(logger, "Failed to list recent submissions", e)

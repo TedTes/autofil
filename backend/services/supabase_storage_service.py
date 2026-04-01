@@ -65,9 +65,27 @@ class SupabaseStorageService:
         content_type: Optional[str] = None,
     ) -> Optional[Dict[str, str]]:
         """Upload a local file into the configured bucket."""
-        if not self.enabled or not self._client:
+        if not self.enabled:
             return None
+        if self._client:
+            return self._upload_file_sdk(
+                local_path=local_path,
+                storage_path=storage_path,
+                content_type=content_type,
+            )
+        return self._upload_file_http(
+            local_path=local_path,
+            storage_path=storage_path,
+            content_type=content_type,
+        )
 
+    def _upload_file_sdk(
+        self,
+        *,
+        local_path: str,
+        storage_path: str,
+        content_type: Optional[str] = None,
+    ) -> Optional[Dict[str, str]]:
         bucket = self._client.storage.from_(self.bucket)
         content_type = content_type or mimetypes.guess_type(local_path)[0] or "application/octet-stream"
         try:
@@ -94,6 +112,40 @@ class SupabaseStorageService:
             }
         except Exception as exc:
             logger.warning("supabase upload failed for %s: %s", storage_path, exc)
+            return None
+
+    def _upload_file_http(
+        self,
+        *,
+        local_path: str,
+        storage_path: str,
+        content_type: Optional[str] = None,
+    ) -> Optional[Dict[str, str]]:
+        content_type = content_type or mimetypes.guess_type(local_path)[0] or "application/octet-stream"
+        try:
+            with open(local_path, "rb") as handle:
+                response = requests.post(
+                    f"{self.url}/storage/v1/object/{self.bucket}/{quote(storage_path.lstrip('/'), safe='/')}",
+                    headers={
+                        "apikey": self.key,
+                        "Authorization": f"Bearer {self.key}",
+                        "x-upsert": "true",
+                        "Content-Type": content_type,
+                    },
+                    data=handle.read(),
+                    timeout=30,
+                )
+            if response.status_code not in {200, 201}:
+                raise RuntimeError(f"HTTP {response.status_code}: {response.text[:300]}")
+            return {
+                "provider": "supabase",
+                "bucket": self.bucket,
+                "path": storage_path,
+                "public_url": self.get_public_url(storage_path),
+                "content_type": content_type,
+            }
+        except Exception as exc:
+            logger.warning("supabase http upload failed for %s: %s", storage_path, exc)
             return None
 
     # ------------------------------------------------------------- downloads
@@ -155,13 +207,34 @@ class SupabaseStorageService:
     # --------------------------------------------------------------- deletion
     def delete_file(self, storage_path: str) -> None:
         """Remove a file from storage (best-effort)."""
-        if not self.enabled or not self._client:
+        if not self.enabled:
             return
+        if self._client:
+            self._delete_file_sdk(storage_path)
+            return
+        self._delete_file_http(storage_path)
+
+    def _delete_file_sdk(self, storage_path: str) -> None:
         try:
             bucket = self._client.storage.from_(self.bucket)
             bucket.remove([storage_path])
         except Exception as exc:
             logger.warning("supabase delete failed for %s: %s", storage_path, exc)
+
+    def _delete_file_http(self, storage_path: str) -> None:
+        try:
+            response = requests.delete(
+                f"{self.url}/storage/v1/object/{self.bucket}/{quote(storage_path.lstrip('/'), safe='/')}",
+                headers={
+                    "apikey": self.key,
+                    "Authorization": f"Bearer {self.key}",
+                },
+                timeout=20,
+            )
+            if response.status_code not in {200, 204}:
+                raise RuntimeError(f"HTTP {response.status_code}: {response.text[:300]}")
+        except Exception as exc:
+            logger.warning("supabase http delete failed for %s: %s", storage_path, exc)
 
     # ------------------------------------------------------------- signed URLs
     def create_signed_url(self, storage_path: str, expires_in: int = 3600) -> Optional[str]:

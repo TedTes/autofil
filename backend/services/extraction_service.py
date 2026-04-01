@@ -6,13 +6,13 @@ Uses real extraction pipeline with classifiers and extractors.
 import os
 import uuid
 import logging
+import tempfile
 from datetime import datetime
 from threading import Lock
 from typing import Dict, List, Optional, Any
 from werkzeug.utils import secure_filename
 
 from utils.file_utils import allowed_file, get_file_extension
-from storage import LocalStorageProvider, StorageProvider
 
 # Import extraction components
 from extraction.core import UniversalFileLoader, Document
@@ -28,12 +28,13 @@ logger = logging.getLogger(__name__)
 class ExtractionService:
     """Service for managing extraction workflow with real extractors."""
     
-    def __init__(self, storage_provider: Optional[StorageProvider] = None):
+    def __init__(self):
         """Initialize extraction service."""
-        self.storage: StorageProvider = storage_provider or LocalStorageProvider('storage')
-        self.uploads_dir = self.storage.ensure_dir('extraction_uploads')
-        self.results_dir = self.storage.ensure_dir('extraction_results')
-        self.state_key = 'extraction_state.json'
+        self.workspace_dir = tempfile.mkdtemp(prefix="fillform_extraction_")
+        self.uploads_dir = os.path.join(self.workspace_dir, 'uploads')
+        self.results_dir = os.path.join(self.workspace_dir, 'results')
+        os.makedirs(self.uploads_dir, exist_ok=True)
+        os.makedirs(self.results_dir, exist_ok=True)
         self._state_lock = Lock()
         
         # Initialize extraction components
@@ -91,7 +92,8 @@ class ExtractionService:
         extension = get_file_extension(filename)
         
         # Save file
-        file_path = self.storage.save_upload(file, 'extraction_uploads', f'{file_id}{extension}')
+        file_path = os.path.join(self.uploads_dir, f'{file_id}{extension}')
+        file.save(file_path)
         
         # Get file size
         file_size = os.path.getsize(file_path)
@@ -358,26 +360,10 @@ class ExtractionService:
     # Persistence helpers
     # ------------------------------------------------------------------
     def _load_state(self) -> None:
-        state = self.storage.read_json(self.state_key)
-        if not state:
-            return
-        self.files = state.get('files', {})
-        self.classifications = state.get('classifications', {})
-        self.extractions = state.get('extractions', {})
-        self.jobs = state.get('jobs', {})
+        return
 
     def _save_state(self) -> None:
-        state = {
-            'files': self.files,
-            'classifications': self.classifications,
-            'extractions': self.extractions,
-            'jobs': self.jobs,
-        }
-        with self._state_lock:
-            try:
-                self.storage.write_json(self.state_key, state)
-            except Exception as exc:
-                logger.warning("failed to persist extraction state: %s", exc)
+        return
     
     def get_extraction_result(self, extraction_id: str) -> Optional[Dict[str, Any]]:
         """Get extraction result."""

@@ -7,10 +7,12 @@ when local storage is not available (e.g., ephemeral deploys).
 from __future__ import annotations
 
 import logging
-import os
 import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote
+
+import requests
 
 try:
     from supabase import Client, create_client
@@ -25,34 +27,28 @@ class SupabaseDatabaseService:
     def __init__(self) -> None:
         self.url = os.getenv("SUPABASE_URL")
         self.key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
-        self.local_root = os.getenv(
-            "LOCAL_METADATA_ROOT",
-            os.path.join(
-                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                "storage",
-                "metadata",
-            ),
-        )
 
         self._client: Optional[Client] = None
-        self.remote_enabled = bool(self.url and self.key and Client and create_client)
+        self.remote_enabled = bool(self.url and self.key)
         self.enabled = True
 
-        if self.remote_enabled:
+        if self.remote_enabled and Client and create_client:
             try:
                 self._client = create_client(self.url, self.key)
             except Exception as exc:  # pragma: no cover - initialization failure logging
                 logger.warning("supabase-db failed to initialize client: %s", exc)
-                self.remote_enabled = False
                 self._client = None
 
         if not self.remote_enabled:
-            os.makedirs(self.local_root, exist_ok=True)
-            logger.info("supabase-db unavailable; using local metadata store at %s", self.local_root)
+            logger.warning("supabase-db unavailable; metadata operations will fail without Supabase config")
 
     def _reset_client(self) -> bool:
-        if not (self.url and self.key and Client and create_client):
+        if not (self.url and self.key):
             return False
+        if not (Client and create_client):
+            self.remote_enabled = True
+            self._client = None
+            return True
         try:
             self._client = create_client(self.url, self.key)
             self.remote_enabled = True
@@ -74,81 +70,98 @@ class SupabaseDatabaseService:
             return response.data
         return response.get("data")  # type: ignore[return-value]
 
-    def _local_dir(self, collection: str) -> str:
-        path = os.path.join(self.local_root, collection)
-        os.makedirs(path, exist_ok=True)
-        return path
+    def _rest_headers(self, *, prefer: Optional[str] = None) -> Dict[str, str]:
+        headers = {
+            "apikey": self.key or "",
+            "Authorization": f"Bearer {self.key or ''}",
+            "Content-Type": "application/json",
+        }
+        if prefer:
+            headers["Prefer"] = prefer
+        return headers
 
-    def _local_path(self, collection: str, item_id: str) -> str:
-        return os.path.join(self._local_dir(collection), f"{item_id}.json")
+    def _rest_url(self, table: str) -> str:
+        return f"{self.url}/rest/v1/{quote(table, safe='')}"
 
-    def _local_save(self, collection: str, item_id: str, metadata: Dict[str, Any]) -> None:
-        path = self._local_path(collection, item_id)
-        tmp_path = f"{path}.tmp"
-        with open(tmp_path, "w", encoding="utf-8") as handle:
-            json.dump(metadata, handle, indent=2)
-        os.replace(tmp_path, path)
-
-    def _local_get(self, collection: str, item_id: str) -> Optional[Dict[str, Any]]:
-        path = self._local_path(collection, item_id)
-        if not os.path.exists(path):
-            return None
+    def _http_upsert(
+        self,
+        table: str,
+        payload: Dict[str, Any],
+        *,
+        on_conflict: str,
+    ) -> bool:
         try:
-            with open(path, "r", encoding="utf-8") as handle:
-                return json.load(handle)
-        except json.JSONDecodeError as exc:
-            repaired = self._repair_local_json(path, exc)
-            if repaired is not None:
-                return repaired
-            logger.warning("local metadata read failed for %s: %s", path, exc)
-            return None
+            response = requests.post(
+                self._rest_url(table),
+                headers=self._rest_headers(prefer="resolution=merge-duplicates,return=minimal"),
+                params={"on_conflict": on_conflict},
+                json=payload,
+                timeout=20,
+            )
+            if response.status_code not in {200, 201}:
+                raise RuntimeError(f"HTTP {response.status_code}: {response.text[:300]}")
+            return True
+        except Exception as exc:
+            logger.warning("supabase-db http upsert failed for %s: %s", table, exc)
+            return False
 
-    def _local_list(self, collection: str) -> List[Dict[str, Any]]:
-        collection_dir = self._local_dir(collection)
-        items: List[Dict[str, Any]] = []
-        for filename in os.listdir(collection_dir):
-            if not filename.endswith(".json"):
-                continue
-            path = os.path.join(collection_dir, filename)
-            try:
-                with open(path, "r", encoding="utf-8") as handle:
-                    items.append(json.load(handle))
-            except json.JSONDecodeError as exc:
-                repaired = self._repair_local_json(path, exc)
-                if repaired is not None:
-                    items.append(repaired)
-                else:
-                    logger.warning("local metadata read failed for %s: %s", path, exc)
-            except Exception as exc:
-                logger.warning("local metadata read failed for %s: %s", path, exc)
-        return items
-
-    def _local_delete(self, collection: str, item_id: str) -> None:
-        path = self._local_path(collection, item_id)
-        if os.path.exists(path):
-            os.remove(path)
-
-    def _repair_local_json(self, path: str, exc: json.JSONDecodeError) -> Optional[Dict[str, Any]]:
-        """Repair metadata files with trailing junk by keeping the first valid JSON object."""
-        if "Extra data" not in str(exc):
-            return None
+    def _http_select(
+        self,
+        table: str,
+        *,
+        filters: Optional[Dict[str, str]] = None,
+        order: Optional[str] = None,
+        maybe_single: bool = False,
+    ) -> Optional[List[Dict[str, Any]]]:
         try:
-            with open(path, "r", encoding="utf-8") as handle:
-                raw_text = handle.read()
-            decoder = json.JSONDecoder()
-            payload, end = decoder.raw_decode(raw_text)
-            trailing = raw_text[end:].strip()
-            if not isinstance(payload, dict) or not trailing:
+            params: Dict[str, str] = {"select": "metadata"}
+            if filters:
+                for key, value in filters.items():
+                    params[key] = f"eq.{value}"
+            if order:
+                params["order"] = order
+            headers = self._rest_headers(
+                prefer="return=representation" + (",plurality=singular" if maybe_single else "")
+            )
+            response = requests.get(
+                self._rest_url(table),
+                headers=headers,
+                params=params,
+                timeout=20,
+            )
+            if response.status_code == 406 and maybe_single:
                 return None
-            tmp_path = f"{path}.tmp"
-            with open(tmp_path, "w", encoding="utf-8") as handle:
-                json.dump(payload, handle, indent=2)
-            os.replace(tmp_path, path)
-            logger.warning("repaired malformed local metadata file %s by trimming trailing data", path)
-            return payload
-        except Exception as repair_exc:
-            logger.warning("failed to repair malformed local metadata file %s: %s", path, repair_exc)
+            if response.status_code != 200:
+                raise RuntimeError(f"HTTP {response.status_code}: {response.text[:300]}")
+            payload = response.json()
+            if maybe_single:
+                return [payload] if isinstance(payload, dict) else (payload or None)
+            return payload or []
+        except Exception as exc:
+            logger.warning("supabase-db http select failed for %s: %s", table, exc)
             return None
+
+    def _http_delete(self, table: str, *, filters: Dict[str, str]) -> bool:
+        try:
+            params: Dict[str, str] = {}
+            for key, value in filters.items():
+                params[key] = f"eq.{value}"
+            response = requests.delete(
+                self._rest_url(table),
+                headers=self._rest_headers(prefer="return=minimal"),
+                params=params,
+                timeout=20,
+            )
+            if response.status_code not in {200, 204}:
+                raise RuntimeError(f"HTTP {response.status_code}: {response.text[:300]}")
+            return True
+        except Exception as exc:
+            logger.warning("supabase-db http delete failed for %s: %s", table, exc)
+            return False
+
+    def _require_remote(self) -> None:
+        if not self.remote_enabled:
+            raise RuntimeError("Supabase metadata storage must be configured.")
 
     def _stamp_owner(self, metadata: Dict[str, Any], user_id: Optional[str]) -> Dict[str, Any]:
         if user_id and not metadata.get("owner_user_id"):
@@ -199,15 +212,16 @@ class SupabaseDatabaseService:
         if not submission_id:
             return
         metadata = self._stamp_owner(metadata, user_id)
-        if not self.remote_enabled or not self._client:
-            self._local_save("submissions", submission_id, metadata)
-            return
+        self._require_remote()
         payload = {
             "submission_id": submission_id,
             "client_id": metadata.get("client_id"),
             "metadata": metadata,
             "updated_at": metadata.get("updated_at") or datetime.utcnow().isoformat(),
         }
+        if not self._client:
+            self._http_upsert("submissions_metadata", payload, on_conflict="submission_id")
+            return
         for attempt in range(2):
             try:
                 self._client.table("submissions_metadata").upsert(
@@ -222,10 +236,18 @@ class SupabaseDatabaseService:
                 break
 
     def get_submission_metadata(self, submission_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        if not self.remote_enabled or not self._client:
-            metadata = self._local_get("submissions", submission_id)
-            metadata = self._claim_submission_if_unowned(metadata, user_id)
-            return metadata if self._is_visible_to_user(metadata, user_id) else None
+        self._require_remote()
+        if not self._client:
+            rows = self._http_select(
+                "submissions_metadata",
+                filters={"submission_id": submission_id},
+                maybe_single=True,
+            )
+            if rows:
+                metadata = rows[0].get("metadata")
+                metadata = self._claim_submission_if_unowned(metadata, user_id)
+                return metadata if self._is_visible_to_user(metadata, user_id) else None
+            return None
         for attempt in range(2):
             try:
                 data = self._execute(
@@ -249,8 +271,9 @@ class SupabaseDatabaseService:
     def delete_submission_metadata(self, submission_id: str, user_id: Optional[str] = None) -> None:
         if user_id and not self.get_submission_metadata(submission_id, user_id=user_id):
             return
-        if not self.remote_enabled or not self._client:
-            self._local_delete("submissions", submission_id)
+        self._require_remote()
+        if not self._client:
+            self._http_delete("submissions_metadata", filters={"submission_id": submission_id})
             return
         try:
             self._client.table("submissions_metadata").delete().eq("submission_id", submission_id).execute()
@@ -258,10 +281,13 @@ class SupabaseDatabaseService:
             logger.warning("supabase-db failed to delete submission %s: %s", submission_id, exc)
 
     def list_submissions_metadata(self, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
-        if not self.remote_enabled or not self._client:
+        self._require_remote()
+        if not self._client:
+            rows = self._http_select("submissions_metadata") or []
             return [
                 self._claim_submission_if_unowned(meta, user_id)
-                for meta in self._local_list("submissions")
+                for meta in
+                (row.get("metadata") for row in rows)
                 if meta and self._is_visible_to_user(meta, user_id) and (meta.get("file_count") or 0) > 0
             ]
         for attempt in range(2):
@@ -291,15 +317,16 @@ class SupabaseDatabaseService:
         if not client_id:
             return
         metadata = self._stamp_owner(metadata, user_id)
-        if not self.remote_enabled or not self._client:
-            self._local_save("clients", client_id, metadata)
-            return
+        self._require_remote()
         payload = {
             "client_id": client_id,
             "name": metadata.get("name"),
             "metadata": metadata,
             "updated_at": metadata.get("updated_at") or datetime.utcnow().isoformat(),
         }
+        if not self._client:
+            self._http_upsert("clients_metadata", payload, on_conflict="client_id")
+            return
         for attempt in range(2):
             try:
                 self._client.table("clients_metadata").upsert(
@@ -314,10 +341,18 @@ class SupabaseDatabaseService:
                 break
 
     def get_client_metadata(self, client_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        if not self.remote_enabled or not self._client:
-            metadata = self._local_get("clients", client_id)
-            metadata = self._claim_client_if_unowned(metadata, user_id)
-            return metadata if self._is_visible_to_user(metadata, user_id) else None
+        self._require_remote()
+        if not self._client:
+            rows = self._http_select(
+                "clients_metadata",
+                filters={"client_id": client_id},
+                maybe_single=True,
+            )
+            if rows:
+                metadata = rows[0].get("metadata")
+                metadata = self._claim_client_if_unowned(metadata, user_id)
+                return metadata if self._is_visible_to_user(metadata, user_id) else None
+            return None
         for attempt in range(2):
             try:
                 data = self._execute(
@@ -339,11 +374,15 @@ class SupabaseDatabaseService:
         return None
 
     def list_clients_metadata(self, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
-        if not self.remote_enabled or not self._client:
-            rows = self._local_list("clients")
-            rows = [self._claim_client_if_unowned(row, user_id) for row in rows]
-            visible = [row for row in rows if self._is_visible_to_user(row, user_id)]
-            return sorted(visible, key=lambda row: (row or {}).get("name", "").lower())
+        self._require_remote()
+        if not self._client:
+            rows = self._http_select("clients_metadata", order="name.asc") or []
+            return [
+                self._claim_client_if_unowned(metadata, user_id)
+                for metadata in
+                (row.get("metadata") for row in rows)
+                if self._is_visible_to_user(metadata, user_id)
+            ]
         for attempt in range(2):
             try:
                 rows = self._execute(
@@ -369,8 +408,9 @@ class SupabaseDatabaseService:
     def delete_client_metadata(self, client_id: str, user_id: Optional[str] = None) -> None:
         if user_id and not self.get_client_metadata(client_id, user_id=user_id):
             return
-        if not self.remote_enabled or not self._client:
-            self._local_delete("clients", client_id)
+        self._require_remote()
+        if not self._client:
+            self._http_delete("clients_metadata", filters={"client_id": client_id})
             return
         try:
             self._client.table("clients_metadata").delete().eq("client_id", client_id).execute()
@@ -383,15 +423,16 @@ class SupabaseDatabaseService:
         if not folder_id:
             return
         metadata = self._stamp_owner(metadata, user_id)
-        if not self.remote_enabled or not self._client:
-            self._local_save("folders", folder_id, metadata)
-            return
+        self._require_remote()
         payload = {
             "folder_id": folder_id,
             "name": metadata.get("name"),
             "metadata": metadata,
             "updated_at": metadata.get("updated_at") or datetime.utcnow().isoformat(),
         }
+        if not self._client:
+            self._http_upsert("folders_metadata", payload, on_conflict="folder_id")
+            return
         try:
             self._client.table("folders_metadata").upsert(
                 payload,
@@ -401,10 +442,18 @@ class SupabaseDatabaseService:
             logger.warning("supabase-db failed to save folder %s: %s", folder_id, exc)
 
     def get_folder_metadata(self, folder_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        if not self.remote_enabled or not self._client:
-            metadata = self._local_get("folders", folder_id)
-            metadata = self._claim_folder_if_unowned(metadata, user_id)
-            return metadata if self._is_visible_to_user(metadata, user_id) else None
+        self._require_remote()
+        if not self._client:
+            rows = self._http_select(
+                "folders_metadata",
+                filters={"folder_id": folder_id},
+                maybe_single=True,
+            )
+            if rows:
+                metadata = rows[0].get("metadata")
+                metadata = self._claim_folder_if_unowned(metadata, user_id)
+                return metadata if self._is_visible_to_user(metadata, user_id) else None
+            return None
         try:
             data = self._execute(
                 self._client.table("folders_metadata")
@@ -421,9 +470,15 @@ class SupabaseDatabaseService:
         return None
 
     def list_folders_metadata(self, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
-        if not self.remote_enabled or not self._client:
-            rows = [self._claim_folder_if_unowned(row, user_id) for row in self._local_list("folders")]
-            return [row for row in rows if self._is_visible_to_user(row, user_id)]
+        self._require_remote()
+        if not self._client:
+            rows = self._http_select("folders_metadata", order="updated_at.desc") or []
+            return [
+                self._claim_folder_if_unowned(metadata, user_id)
+                for metadata in
+                (row.get("metadata") for row in rows)
+                if self._is_visible_to_user(metadata, user_id)
+            ]
         try:
             rows = self._execute(
                 self._client.table("folders_metadata")
@@ -445,8 +500,9 @@ class SupabaseDatabaseService:
     def delete_folder_metadata(self, folder_id: str, user_id: Optional[str] = None) -> None:
         if user_id and not self.get_folder_metadata(folder_id, user_id=user_id):
             return
-        if not self.remote_enabled or not self._client:
-            self._local_delete("folders", folder_id)
+        self._require_remote()
+        if not self._client:
+            self._http_delete("folders_metadata", filters={"folder_id": folder_id})
             return
         try:
             self._client.table("folders_metadata").delete().eq("folder_id", folder_id).execute()

@@ -1,0 +1,38 @@
+template_id: acord_27_2016
+form_type: ACORD_27
+version: "2016_03"
+name: ACORD 27 Evidence of Property Insurance
+description: ACORD 27 Evidence of Property Insurance (2016/03) — evidence output for property-focused submissions.
+pdf_url: template.pdf
+required_data_sections:
+  - insured
+  - coverage
+optional_data_sections:
+  - policy
+  - locations
+expected_documents:
+  - acord_140
+  - sov
+  - supplemental
+estimated_fields: 8
+icon: home
+is_popular: true
+signature_fields:
+  - InsuredName
+  - PolicyNumber
+
+field_map:
+  InsuredName: InsuredName
+  Carrier: Carrier
+  PolicyNumber: PolicyNumber
+  EffectiveDate: EffectiveDate
+  ExpirationDate: ExpirationDate
+  PropertyAddress: PropertyAddress
+  BuildingValue: BuildingValue
+  ContentsLimit: ContentsLimit
+
+repeaters: {}
+
+metadata:
+  min_fillable_confidence: 0.85
+  supports_alias_fallback: true

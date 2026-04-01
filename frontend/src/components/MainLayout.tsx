@@ -292,8 +292,10 @@ export default function MainLayout({ children }: MainLayoutProps) {
   // Enhanced navigation with unsaved changes guard
   const navigateTo = useCallback((
     type: ViewType,
-    data?: unknown
+    data?: unknown,
+    breadcrumbs?: string[]
   ) => {
+    void breadcrumbs
     const target = buildPathFromView(type, data as ViewStateData)
     router.push(target)
   }, [router])

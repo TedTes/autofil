@@ -77,6 +77,8 @@ const NAV_ITEMS: Array<{
   { id: 'reports', label: 'Reports', icon: BarChart3, route: 'reports' },
 ]
 
+const PUBLIC_VIEWS = new Set<ViewType>(['dashboard'])
+
 function buildPathFromView(type: ViewType, data?: ViewStateData): string {
   switch (type) {
     case 'dashboard':
@@ -362,9 +364,16 @@ const handleMobileSidebarClose = () => {
     () =>
       NAV_ITEMS.map(item => ({
         ...item,
-        onClick: () => navigateTo(item.route),
+        onClick: () => {
+          if (PUBLIC_VIEWS.has(item.route)) {
+            navigateTo(item.route)
+            return
+          }
+
+          requireAuth(`open ${item.label}`, () => navigateTo(item.route))
+        },
       })),
-    [navigateTo]
+    [navigateTo, requireAuth]
   )
   return (
     <>
@@ -663,17 +672,35 @@ const handleMobileSidebarClose = () => {
           <div className={currentView.type === 'file-detail' ? 'h-full' : 'px-4 sm:px-6 lg:px-8'}>
             
             {/* Home View */}
-            {currentView.type === 'dashboard' && (
+{currentView.type === 'dashboard' && (
   <HomeView
     submissionStats={submissionStats}
     isAuthenticated={Boolean(user)}
-    onGoToFile={handleFileClick}
-    onNavigateToClients={() => navigateTo('clients', undefined, ['Dashboard', 'Accounts'])}
-    onNavigateToUpload={() => navigateTo('upload', undefined, ['Dashboard', 'Upload'])}
-    onNavigateToSubmissions={() => navigateTo('submissions', undefined, ['Dashboard', 'Submissions'])}
-    onNavigateToNeedsReview={() => navigateTo('submissions', { status: 'error' }, ['Dashboard', 'Submissions'])}
-    onNavigateToReadyToGenerate={() => navigateTo('submissions', { status: 'ready' }, ['Dashboard', 'Submissions'])}
-    onNavigateToTemplates={() => navigateTo('templates', undefined, ['Dashboard', 'Templates'])}
+    onGoToFile={(submissionId, filename, inputId) =>
+      requireAuth('open recent submissions', () => handleFileClick(submissionId, filename, inputId))
+    }
+    onNavigateToClients={() =>
+      requireAuth('start a new submission', () => navigateTo('clients', undefined, ['Dashboard', 'Accounts']))
+    }
+    onNavigateToUpload={() =>
+      requireAuth('upload files', () => navigateTo('upload', undefined, ['Dashboard', 'Upload']))
+    }
+    onNavigateToSubmissions={() =>
+      requireAuth('view submissions', () => navigateTo('submissions', undefined, ['Dashboard', 'Submissions']))
+    }
+    onNavigateToNeedsReview={() =>
+      requireAuth('review flagged submissions', () =>
+        navigateTo('submissions', { status: 'error' }, ['Dashboard', 'Submissions'])
+      )
+    }
+    onNavigateToReadyToGenerate={() =>
+      requireAuth('generate outputs', () =>
+        navigateTo('submissions', { status: 'ready' }, ['Dashboard', 'Submissions'])
+      )
+    }
+    onNavigateToTemplates={() =>
+      requireAuth('browse available forms', () => navigateTo('templates', undefined, ['Dashboard', 'Templates']))
+    }
   />
 )}
 

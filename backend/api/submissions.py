@@ -241,6 +241,7 @@ def update_submission_input_inclusion(submission_id, input_id):
     """Include or exclude a submission input from merged review data."""
     try:
         submission_service = _submission_service()
+        merged_data_service = _merged_data_service(submission_service)
         payload = request.get_json(silent=True) or {}
         if "included" not in payload:
             return jsonify({"error": "included is required"}), 400
@@ -250,9 +251,13 @@ def update_submission_input_inclusion(submission_id, input_id):
             input_id,
             bool(payload.get("included")),
         )
+        merged_data = merged_data_service.get_merged_data(submission_id)
         return jsonify({
             "success": True,
-            "data": updated,
+            "data": {
+                "package": updated,
+                "mergedData": merged_data,
+            },
             "message": "Input inclusion updated",
         }), 200
     except ValueError as exc:

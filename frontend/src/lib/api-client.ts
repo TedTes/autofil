@@ -469,7 +469,7 @@ export async function updateSubmissionInputInclusion(
   submissionId: string,
   inputId: string,
   included: boolean
-): Promise<ClientSubmissionPackage> {
+): Promise<{ package: ClientSubmissionPackage; mergedData: MergedData | null }> {
   try {
     const response = await api.patch(`/submissions/${submissionId}/inputs/${inputId}/include`, {
       included,
@@ -477,7 +477,7 @@ export async function updateSubmissionInputInclusion(
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to update input inclusion')
     }
-    return response.data.data as ClientSubmissionPackage
+    return response.data.data as { package: ClientSubmissionPackage; mergedData: MergedData | null }
   } catch (error) {
     handleApiError(error)
   }

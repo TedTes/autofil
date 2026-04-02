@@ -342,7 +342,6 @@ function FileUploadDropZone({
 function CompactFolderList({
   submissions,
   activeId,
-  selectedInputsByPackage,
   selectedOutputsByPackage,
   onToggle,
   onAddFiles,
@@ -360,7 +359,6 @@ function CompactFolderList({
 }: {
   submissions: ClientSubmissionPackage[]
   activeId?: string | null
-  selectedInputsByPackage: Record<string, string[]>
   selectedOutputsByPackage: Record<string, string[]>
   onToggle?: (pkg: ClientSubmissionPackage) => void
   onViewFile?: (submissionId: string, filename?: string, inputId?: string) => void
@@ -421,7 +419,10 @@ function CompactFolderList({
     const isExpanded = expandedId === pkg.submission_id
 
     const totalInputs = pkg.inputs?.length || 0
-    const selectedInputFilenames = selectedInputsByPackage[pkg.submission_id] || []
+    const selectedInputFilenames = (pkg.inputs || [])
+      .filter((input) => input.included_in_merge !== false)
+      .map((input) => input.input_id || input.filename)
+      .filter((id): id is string => Boolean(id))
     const selectedOutputFilenames = selectedOutputsByPackage[pkg.submission_id] || []
 
     const isFilling = fillingPackageId === pkg.submission_id
@@ -525,17 +526,18 @@ function CompactFolderList({
         className="flex items-center gap-1.5 cursor-pointer group"
         onClick={(e) => {
           e.stopPropagation()
-          const inputIds =
-            pkg.inputs
-              ?.map(input => input.input_id || input.filename)
-              .filter((val): val is string => Boolean(val)) || []
-          onSelectAllInputs?.(pkg.submission_id, inputIds)
         }}
       >
         <input
           type="checkbox"
-          readOnly
           checked={selectedInputFilenames.length === totalInputs && totalInputs > 0}
+          onChange={() => {
+            const inputIds =
+              pkg.inputs
+                ?.map(input => input.input_id || input.filename)
+                .filter((val): val is string => Boolean(val)) || []
+            onSelectAllInputs?.(pkg.submission_id, inputIds)
+          }}
           ref={(el) => {
             if (el) el.indeterminate = selectedInputFilenames.length > 0 && selectedInputFilenames.length < totalInputs
           }}
@@ -1058,7 +1060,6 @@ const [isCreating, setIsCreating] = useState(false)
         <CompactFolderList
           submissions={packagesToRender}
           activeId={activePackageId}
-          selectedInputsByPackage={selectedInputsByPackage}
           selectedOutputsByPackage={selectedOutputsByPackage}
           onToggle={(pkg) => {
             setActivePackageId(pkg.submission_id)

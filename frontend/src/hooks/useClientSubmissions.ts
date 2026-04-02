@@ -25,6 +25,7 @@ export function useClientSubmissions(
   const initialSubmissionId = options?.initialSubmissionId ?? null
   const [activePackageId, setActivePackageId] = useState<string | null>(initialSubmissionId)
   const initialAppliedRef = useRef(false)
+  const suspendedMergedReloadForRef = useRef<Set<string>>(new Set())
   const [standalonePackage, setStandalonePackage] = useState<ClientSubmissionPackage | null>(null)
   const [standaloneLoading, setStandaloneLoading] = useState(false)
   const [standaloneError, setStandaloneError] = useState<string | null>(null)
@@ -253,6 +254,9 @@ const activePackage = activePackageId
   }, [])
 useEffect(() => {
     if (activePackageId && activePackage) {
+      if (suspendedMergedReloadForRef.current.has(activePackageId)) {
+        return
+      }
       // Check if package has extracted files
       const hasExtractedFiles = activePackage.inputs?.some(
         input => input.extraction_status === 'extracted' || input.extraction_status === 'ready'
@@ -289,29 +293,77 @@ useEffect(() => {
     setUploadedRows(prev => prev.filter(row => row.submissionId !== submissionId))
   }
 
+  const getIncludedInputIds = useCallback((submissionId: string) => {
+    const pkg = resolvedPackages.find((entry) => entry.submission_id === submissionId)
+    if (!pkg?.inputs?.length) return []
+    return pkg.inputs
+      .filter((input) => input.included_in_merge !== false)
+      .map((input) => input.input_id || input.filename)
+      .filter((id): id is string => Boolean(id))
+  }, [resolvedPackages])
+
+  const applyOptimisticInputInclusion = useCallback((
+    submissionId: string,
+    updater: (inputId: string) => boolean
+  ) => {
+    const updatePackageInputs = (pkg: ClientSubmissionPackage) =>
+      pkg.submission_id === submissionId
+        ? {
+            ...pkg,
+            inputs: (pkg.inputs || []).map((input) => {
+              const inputKey = input.input_id || input.filename
+              if (!inputKey) return input
+              return {
+                ...input,
+                included_in_merge: updater(inputKey),
+              }
+            }),
+          }
+        : pkg
+
+    setPackages((prev) => prev.map(updatePackageInputs))
+    setStandalonePackage((prev) => (prev && prev.submission_id === submissionId ? updatePackageInputs(prev) : prev))
+  }, [])
+
+  const replacePackageSnapshot = useCallback((updatedPackage: ClientSubmissionPackage) => {
+    setPackages((prev) =>
+      prev.map((pkg) => (pkg.submission_id === updatedPackage.submission_id ? updatedPackage : pkg))
+    )
+    setStandalonePackage((prev) =>
+      prev && prev.submission_id === updatedPackage.submission_id ? updatedPackage : prev
+    )
+  }, [])
+
   // ---- INPUT inclusion management ----
   const toggleInputSelection = async (submissionId: string, inputId?: string) => {
     if (!submissionId || !inputId) return
-    const current = selectedInputsByPackage[submissionId] || []
+    const current = getIncludedInputIds(submissionId)
     const nextIncluded = !current.includes(inputId)
     const nextSelections = nextIncluded
       ? [...current, inputId]
       : current.filter(id => id !== inputId)
 
+    suspendedMergedReloadForRef.current.add(submissionId)
     setSelectedInputsByPackage(prev => ({ ...prev, [submissionId]: nextSelections }))
+    applyOptimisticInputInclusion(submissionId, (currentInputId) =>
+      currentInputId === inputId ? nextIncluded : current.includes(currentInputId)
+    )
     setMergedDataError(null)
 
     try {
-      await updateSubmissionInputInclusion(submissionId, inputId, nextIncluded)
-      await loadClientData({ silent: true })
+      const { package: updatedPackage, mergedData: updatedMergedData } = await updateSubmissionInputInclusion(submissionId, inputId, nextIncluded)
+      replacePackageSnapshot(updatedPackage)
       if (activePackageId === submissionId) {
-        await loadMergedData(submissionId)
+        setMergedData(updatedMergedData)
       }
     } catch (err) {
       setSelectedInputsByPackage(prev => ({ ...prev, [submissionId]: current }))
+      applyOptimisticInputInclusion(submissionId, (currentInputId) => current.includes(currentInputId))
       const errorMsg = err instanceof Error ? err.message : 'Failed to update file inclusion'
       setWorkflowError(errorMsg)
       toast.error(errorMsg)
+    } finally {
+      suspendedMergedReloadForRef.current.delete(submissionId)
     }
   }
 
@@ -319,28 +371,39 @@ useEffect(() => {
     if (!submissionId) return
     const available = inputIds.filter((id): id is string => Boolean(id))
     if (!available.length) return
-    const current = selectedInputsByPackage[submissionId] || []
+    const current = getIncludedInputIds(submissionId)
     const targetIncluded = !available.every(id => current.includes(id))
     const nextSelections = targetIncluded ? available : []
 
+    suspendedMergedReloadForRef.current.add(submissionId)
     setSelectedInputsByPackage(prev => ({ ...prev, [submissionId]: nextSelections }))
+    applyOptimisticInputInclusion(submissionId, (currentInputId) =>
+      available.includes(currentInputId) ? targetIncluded : current.includes(currentInputId)
+    )
     setMergedDataError(null)
 
     try {
-      await Promise.all(
-        available.map((inputId) =>
-          updateSubmissionInputInclusion(submissionId, inputId, targetIncluded)
-        )
-      )
-      await loadClientData({ silent: true })
+      let latestPackage: ClientSubmissionPackage | null = null
+      let latestMergedData: MergedData | null = null
+      for (const inputId of available) {
+        const result = await updateSubmissionInputInclusion(submissionId, inputId, targetIncluded)
+        latestPackage = result.package
+        latestMergedData = result.mergedData
+      }
+      if (latestPackage) {
+        replacePackageSnapshot(latestPackage)
+      }
       if (activePackageId === submissionId) {
-        await loadMergedData(submissionId)
+        setMergedData(latestMergedData)
       }
     } catch (err) {
       setSelectedInputsByPackage(prev => ({ ...prev, [submissionId]: current }))
+      applyOptimisticInputInclusion(submissionId, (currentInputId) => current.includes(currentInputId))
       const errorMsg = err instanceof Error ? err.message : 'Failed to update file inclusion'
       setWorkflowError(errorMsg)
       toast.error(errorMsg)
+    } finally {
+      suspendedMergedReloadForRef.current.delete(submissionId)
     }
   }
 

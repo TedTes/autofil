@@ -222,11 +222,23 @@ class TemplateLoader:
         version: str,
         pdf_url: Optional[str],
     ) -> TemplateConfig:
+        field_map = raw_data.get("field_map", {}) or {}
+        repeaters = raw_data.get("repeaters", {}) or {}
+        estimated_fields = int(raw_data.get("estimated_fields") or raw_data.get("estimatedFields") or 0)
+        if estimated_fields <= 0 and isinstance(field_map, dict):
+            estimated_fields = len(field_map)
+        if estimated_fields <= 0 and isinstance(repeaters, dict):
+            estimated_fields = sum(
+                len((repeater or {}).get("columns", {}) or {}) * max(len((repeater or {}).get("row_ids", []) or []), 1)
+                for repeater in repeaters.values()
+                if isinstance(repeater, dict)
+            )
+
         config = TemplateConfig(
             template_id=raw_data.get("template_id", template_id),
             form_type=raw_data.get("form_type") or raw_data.get("formType") or "CUSTOM",
-            field_map=raw_data.get("field_map", {}),
-            repeaters=raw_data.get("repeaters", {}),
+            field_map=field_map,
+            repeaters=repeaters,
             raw=raw_data,
             name=raw_data.get("name"),
             description=raw_data.get("description", ""),
@@ -235,7 +247,7 @@ class TemplateLoader:
             required_data_sections=raw_data.get("required_data_sections") or raw_data.get("requiredDataSections"),
             optional_data_sections=raw_data.get("optional_data_sections") or raw_data.get("optionalDataSections"),
             expected_documents=raw_data.get("expected_documents") or raw_data.get("expectedDocuments"),
-            estimated_fields=int(raw_data.get("estimated_fields") or raw_data.get("estimatedFields") or 0),
+            estimated_fields=estimated_fields,
             icon=raw_data.get("icon"),
             is_popular=bool(raw_data.get("is_popular") or raw_data.get("isPopular", False)),
         )

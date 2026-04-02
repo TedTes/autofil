@@ -58,20 +58,24 @@ class SubmissionFillCoordinator:
             )
 
         template_choice = Path(str(template_choice)).stem
+        filler = self.select_filler(template_choice)
         template_config = TemplateLoader.load(template_choice)
-        if not template_config:
+        resolved_template_id = template_config.template_id if template_config else template_choice
+
+        default_ext = getattr(filler, "default_extension", ".pdf")
+        normalized_ext = default_ext if str(default_ext).startswith(".") else f".{default_ext}"
+        is_export_filler = normalized_ext.lower() != ".pdf"
+
+        if not template_config and not is_export_filler:
             raise ValueError(
                 f"Unknown output template '{template_choice}'. Select a supported YAML-backed template id."
             )
-        resolved_template_id = template_config.template_id
 
         metadata["template_type"] = resolved_template_id
-        filler = self.select_filler(resolved_template_id)
 
         temp_output_dir = tempfile.mkdtemp(prefix=f"filled_{submission_id}_")
         try:
-            default_ext = getattr(filler, "default_extension", ".pdf")
-            ext = default_ext if default_ext.startswith(".") else f".{default_ext}"
+            ext = normalized_ext
             filename = f"{submission_id}_filled{ext}"
             output_path = os.path.join(temp_output_dir, filename)
 
@@ -100,7 +104,12 @@ class SubmissionFillCoordinator:
                 metadata["filled_at"] = output_entry["generated_at"]
                 output_entry.update({
                     "filename": os.path.basename(output_path),
-                    "url": remote_output.get("public_url") if remote_output else None,
+                    "url": (
+                        remote_output.get("signed_url")
+                        or remote_output.get("public_url")
+                        if remote_output
+                        else None
+                    ),
                     "storage": remote_output,
                 })
                 outputs_meta = metadata.setdefault("outputs", [])

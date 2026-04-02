@@ -58,11 +58,7 @@ class TemplateLibraryService:
 
     def _to_library_dict(self, config: TemplateConfig) -> Dict[str, Any]:
         remote_path = self.storage.build_path(self.templates_root, config.template_id, "template.pdf")
-        template_url = (
-            self.storage.create_signed_url(remote_path, expires_in=3600)
-            or self.storage.get_public_url(remote_path)
-            or config.pdf_url
-        )
+        template_url = self.storage.resolve_download_url(remote_path, expires_in=3600) or config.pdf_url
 
         payload = config.to_library_dict(template_url=template_url)
         payload["estimatedSize"] = config.raw.get("estimated_size")

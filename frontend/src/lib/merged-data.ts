@@ -26,6 +26,12 @@ function sectionHasValues(section?: SemanticSection): boolean {
   )
 }
 
+function hasAnyMergedData(mergedData: MergedData | null): boolean {
+  return Boolean(
+    mergedData?.semantic_sections?.some((section) => sectionHasValues(section))
+  )
+}
+
 export function calculateSectionCompleteness(
   section: DataSection,
   mergedData: MergedData | null
@@ -68,7 +74,11 @@ export function calculateTemplateReadiness(
   const availableSections =
     (requiredSections.length - missingRequired.length) + availableOptional.length
   const completeness =
-    totalSections > 0 ? Math.round((availableSections / totalSections) * 100) : 0
+    totalSections > 0
+      ? Math.round((availableSections / totalSections) * 100)
+      : hasAnyMergedData(mergedData)
+        ? 100
+        : 0
 
   return {
     canGenerate: missingRequired.length === 0,

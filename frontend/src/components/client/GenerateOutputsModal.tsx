@@ -55,6 +55,18 @@ export default function GenerateOutputsModal({
   const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null)
   const [batchResults, setBatchResults] = useState<MultipleFillResults | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  const estimateMergedFieldCount = useMemo(() => {
+    if (!mergedData?.semantic_sections?.length) return 0
+    return mergedData.semantic_sections.reduce((count, section) => {
+      const sectionFields = Array.isArray(section.fields) ? section.fields : []
+      return count + sectionFields.filter((field) =>
+        Array.isArray(field.values) && field.values.some((value) =>
+          value.value !== null && value.value !== undefined && value.value !== ''
+        )
+      ).length
+    }, 0)
+  }, [mergedData])
   
   // Calculate availability for each template
   const templateAvailabilities = useMemo(() => {
@@ -65,13 +77,17 @@ export default function GenerateOutputsModal({
         mergedData
       )
       
+      const baseEstimatedFields =
+        template.estimatedFields > 0 ? template.estimatedFields : estimateMergedFieldCount
+
       return {
         template,
         ...readiness,
-        estimatedFields: Math.round((template.estimatedFields * readiness.completeness) / 100),
+        estimatedFields: Math.round((baseEstimatedFields * readiness.completeness) / 100),
+        totalTemplateFields: baseEstimatedFields,
       }
     })
-  }, [availableTemplates, mergedData])
+  }, [availableTemplates, estimateMergedFieldCount, mergedData])
   
   const availableOnly = templateAvailabilities.filter(t => t.canGenerate)
   const unavailableOnly = templateAvailabilities.filter(t => !t.canGenerate)
@@ -262,12 +278,13 @@ export default function GenerateOutputsModal({
                 </div>
               </div>
               
-              {availableOnly.map(({ template, completeness, estimatedFields }) => (
+              {availableOnly.map(({ template, completeness, estimatedFields, totalTemplateFields }) => (
                 <TemplateSelectionCard
                   key={template.id}
                   template={template}
                   completeness={completeness}
                   estimatedFields={estimatedFields}
+                  totalTemplateFields={totalTemplateFields}
                   isSelected={selectedTemplateIds.includes(template.id)}
                   onToggle={() => onToggleTemplate(template.id)}
                 />
@@ -281,12 +298,13 @@ export default function GenerateOutputsModal({
               <h3 className="text-sm font-semibold text-gray-500">
                 Unavailable Templates
               </h3>
-              {unavailableOnly.map(({ template, completeness, missingRequired }) => (
+              {unavailableOnly.map(({ template, completeness, missingRequired, totalTemplateFields }) => (
                 <TemplateSelectionCard
                   key={template.id}
                   template={template}
                   completeness={completeness}
                   estimatedFields={0}
+                  totalTemplateFields={totalTemplateFields}
                   isSelected={false}
                   onToggle={() => {}}
                   disabled
@@ -508,6 +526,7 @@ function TemplateSelectionCard({
   template,
   completeness,
   estimatedFields,
+  totalTemplateFields,
   isSelected,
   onToggle,
   disabled = false,
@@ -516,6 +535,7 @@ function TemplateSelectionCard({
   template: OutputTemplate
   completeness: number
   estimatedFields: number
+  totalTemplateFields: number
   isSelected: boolean
   onToggle: () => void
   disabled?: boolean
@@ -561,7 +581,7 @@ function TemplateSelectionCard({
             <div className="text-right flex-shrink-0">
               <p className="text-xs text-gray-500">Fields</p>
               <p className="text-sm font-semibold text-gray-900">
-                {estimatedFields}/{template.estimatedFields}
+                {estimatedFields}/{totalTemplateFields}
               </p>
             </div>
           </div>

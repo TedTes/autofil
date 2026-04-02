@@ -108,6 +108,7 @@ class SupabaseStorageService:
                 "bucket": self.bucket,
                 "path": storage_path,
                 "public_url": public_url,
+                "signed_url": self.resolve_download_url(storage_path),
                 "content_type": content_type,
             }
         except Exception as exc:
@@ -142,6 +143,7 @@ class SupabaseStorageService:
                 "bucket": self.bucket,
                 "path": storage_path,
                 "public_url": self.get_public_url(storage_path),
+                "signed_url": self.resolve_download_url(storage_path),
                 "content_type": content_type,
             }
         except Exception as exc:
@@ -254,8 +256,18 @@ class SupabaseStorageService:
                 if error:
                     raise RuntimeError(error)
                 data = response.get("data") or {}
-                return data.get("signedUrl")
-            return response
+                signed = data.get("signedUrl")
+            else:
+                signed = response
+
+            if not signed:
+                return None
+            if isinstance(signed, str) and signed.startswith("http"):
+                return signed
+            if isinstance(signed, str):
+                prefix = "/storage/v1"
+                return f"{self.url}{signed if signed.startswith(prefix) else f'{prefix}{signed}'}"
+            return None
         except Exception as exc:
             logger.warning("supabase signed URL failed for %s: %s", storage_path, exc)
             return None
@@ -291,6 +303,10 @@ class SupabaseStorageService:
         if self._client:
             return self._get_public_url_sdk(storage_path)
         return f"{self.url}/storage/v1/object/public/{self.bucket}/{quote(storage_path.lstrip('/'), safe='/')}"
+
+    def resolve_download_url(self, storage_path: str, expires_in: int = 3600) -> Optional[str]:
+        """Return the best available download URL for a storage object."""
+        return self.create_signed_url(storage_path, expires_in=expires_in) or self.get_public_url(storage_path)
 
     def _get_public_url_sdk(self, storage_path: str) -> Optional[str]:
         try:

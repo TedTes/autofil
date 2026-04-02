@@ -32,6 +32,7 @@ import {
   getSubmissionStats,
 } from '@/lib/api-client'
 import { useAuth } from '@/contexts/AuthContext'
+import AuthPromptModal from './auth/AuthPromptModal'
 
 import type { ViewType,  FileDetailActions,ViewDataMap, SubmissionStats } from '@/types'
 import type { ClientDetailActions } from '@/types'
@@ -206,6 +207,8 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const [isMobileClosing, setIsMobileClosing] = useState(false)
   const [isMobileOpening, setIsMobileOpening] = useState(false)
   const [submissionStats, setSubmissionStats] = useState<SubmissionStats | null>(null)
+  const [isAuthPromptOpen, setIsAuthPromptOpen] = useState(false)
+  const [pendingActionLabel, setPendingActionLabel] = useState<string | null>(null)
 
   const router = useRouter()
   const { user, signOut, isConfigured } = useAuth()
@@ -217,6 +220,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
   )
   const autoCollapsedRef = useRef(false)
   const widthCollapsedRef = useRef(false)
+  const pendingActionRef = useRef<(() => void) | null>(null)
   const shouldForceWorkspaceCollapse =
     currentView.type === 'file-detail' || currentView.type === 'client-detail'
   const currentAccountLabel =
@@ -224,6 +228,31 @@ export default function MainLayout({ children }: MainLayoutProps) {
       ? currentView.data.clientName || 'Account'
       : null
   const userLabel = user?.email || user?.user_metadata?.full_name || null
+
+  const requireAuth = useCallback((actionLabel: string, action?: () => void) => {
+    if (user) {
+      action?.()
+      return
+    }
+
+    pendingActionRef.current = action ?? null
+    setPendingActionLabel(actionLabel)
+    setIsAuthPromptOpen(true)
+  }, [user])
+
+  const handleCloseAuthPrompt = useCallback(() => {
+    pendingActionRef.current = null
+    setPendingActionLabel(null)
+    setIsAuthPromptOpen(false)
+  }, [])
+
+  const handleAuthenticatedAction = useCallback(() => {
+    const pendingAction = pendingActionRef.current
+    pendingActionRef.current = null
+    setPendingActionLabel(null)
+    setIsAuthPromptOpen(false)
+    pendingAction?.()
+  }, [])
 
   // Measure sidebar state on mount to avoid flicker on laptop-sized screens
   useLayoutEffect(() => {
@@ -338,7 +367,14 @@ const handleMobileSidebarClose = () => {
     [navigateTo]
   )
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <>
+      <AuthPromptModal
+        isOpen={isAuthPromptOpen}
+        actionLabel={pendingActionLabel}
+        onClose={handleCloseAuthPrompt}
+        onAuthenticated={handleAuthenticatedAction}
+      />
+      <div className="min-h-screen bg-gray-50 flex">
       {/* Desktop Sidebar — fixed compact icon+label */}
       <aside className="hidden lg:flex lg:flex-col bg-white border-r border-gray-200 w-24 fixed left-0 top-0 bottom-0 z-40">
 
@@ -544,7 +580,7 @@ const handleMobileSidebarClose = () => {
                   accountLabel={currentAccountLabel}
                   userLabel={userLabel}
                   isConfigured={isConfigured}
-                  onLogin={() => router.push('/login')}
+                  onLogin={() => requireAuth('continue')}
                   onLogout={async () => {
                     await signOut()
                     router.push('/login')
@@ -608,7 +644,7 @@ const handleMobileSidebarClose = () => {
                 <AvatarMenu
                   userLabel={userLabel}
                   isConfigured={isConfigured}
-                  onLogin={() => router.push('/login')}
+                  onLogin={() => requireAuth('continue')}
                   onLogout={async () => {
                     await signOut()
                     router.push('/login')
@@ -745,7 +781,8 @@ const handleMobileSidebarClose = () => {
         </main>
       </div>
 
-    </div>
+      </div>
+    </>
   )
 }
 

@@ -17,6 +17,7 @@ import {
   FolderOpen,
   BarChart3,
   ChevronRight,
+  LockKeyhole,
 } from 'lucide-react'
 import {
   UploadView,
@@ -78,6 +79,59 @@ const NAV_ITEMS: Array<{
 ]
 
 const PUBLIC_VIEWS = new Set<ViewType>(['dashboard'])
+
+const PROTECTED_VIEW_COPY: Partial<Record<ViewType, { title: string; description: string; actionLabel: string }>> = {
+  clients: {
+    title: 'Accounts require sign in',
+    description: 'Sign in to create insured accounts, organize submissions, and save client workspaces.',
+    actionLabel: 'open accounts',
+  },
+  'client-detail': {
+    title: 'Submission workspaces require sign in',
+    description: 'Sign in to review merged data, manage included files, and generate output forms.',
+    actionLabel: 'open this account workspace',
+  },
+  submissions: {
+    title: 'Submissions require sign in',
+    description: 'Sign in to view extraction progress, review flagged items, and continue working on submissions.',
+    actionLabel: 'open submissions',
+  },
+  documents: {
+    title: 'Documents require sign in',
+    description: 'Sign in to browse uploaded files and inspect extracted source documents.',
+    actionLabel: 'open documents',
+  },
+  upload: {
+    title: 'Uploads require sign in',
+    description: 'Sign in to upload source documents and save them into your workspace.',
+    actionLabel: 'upload files',
+  },
+  'file-detail': {
+    title: 'File review requires sign in',
+    description: 'Sign in to inspect uploaded files, compare source data, and continue your review workflow.',
+    actionLabel: 'open this document',
+  },
+  templates: {
+    title: 'Form library requires sign in',
+    description: 'Sign in to preview available output forms and use them in your generation workflow.',
+    actionLabel: 'browse the form library',
+  },
+  reports: {
+    title: 'Reports require sign in',
+    description: 'Sign in to access workspace reporting and export insights from your submissions.',
+    actionLabel: 'open reports',
+  },
+  settings: {
+    title: 'Settings require sign in',
+    description: 'Sign in to manage your workspace settings and account preferences.',
+    actionLabel: 'open settings',
+  },
+  help: {
+    title: 'Support tools require sign in',
+    description: 'Sign in to access in-product support and account-specific help resources.',
+    actionLabel: 'open help',
+  },
+}
 
 function buildPathFromView(type: ViewType, data?: ViewStateData): string {
   switch (type) {
@@ -375,6 +429,7 @@ const handleMobileSidebarClose = () => {
       })),
     [navigateTo, requireAuth]
   )
+  const protectedViewCopy = !user ? PROTECTED_VIEW_COPY[currentView.type] : undefined
   return (
     <>
       <AuthPromptModal
@@ -670,9 +725,17 @@ const handleMobileSidebarClose = () => {
         {/* Views */}
         <main className={`flex-1 bg-gray-50 ${currentView.type === 'file-detail' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
           <div className={currentView.type === 'file-detail' ? 'h-full' : 'px-4 sm:px-6 lg:px-8'}>
+            {protectedViewCopy ? (
+              <ProtectedWorkspaceState
+                title={protectedViewCopy.title}
+                description={protectedViewCopy.description}
+                onContinue={() => requireAuth(protectedViewCopy.actionLabel)}
+              />
+            ) : (
+              <>
             
             {/* Home View */}
-{currentView.type === 'dashboard' && (
+            {currentView.type === 'dashboard' && (
   <HomeView
     submissionStats={submissionStats}
     isAuthenticated={Boolean(user)}
@@ -804,12 +867,43 @@ const handleMobileSidebarClose = () => {
   />
 )}
             {children}
+              </>
+            )}
           </div>
         </main>
       </div>
 
       </div>
     </>
+  )
+}
+
+function ProtectedWorkspaceState({
+  title,
+  description,
+  onContinue,
+}: {
+  title: string
+  description: string
+  onContinue: () => void
+}) {
+  return (
+    <div className="flex min-h-[calc(100vh-10rem)] items-center justify-center py-10">
+      <div className="w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+          <LockKeyhole className="h-6 w-6" />
+        </div>
+        <h2 className="text-2xl font-bold text-gray-900">{title}</h2>
+        <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-gray-600">{description}</p>
+        <button
+          onClick={onContinue}
+          className="mt-6 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+        >
+          Sign in to continue
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
   )
 }
 

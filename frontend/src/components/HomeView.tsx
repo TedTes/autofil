@@ -20,6 +20,7 @@ import RecentSubmissionsCard from './dashboard/RecentSubmissionsCard'
 
 type HomeViewProps = {
   submissionStats?: SubmissionStats | null
+  isAuthenticated?: boolean
   onGoToFile?: (submissionId: string, filename?: string, inputId?: string) => void
   onNavigateToClients?: () => void
   onNavigateToUpload?: () => void
@@ -31,6 +32,7 @@ type HomeViewProps = {
 
 export function HomeView({
   submissionStats,
+  isAuthenticated = true,
   onGoToFile,
   onNavigateToClients,
   onNavigateToUpload,
@@ -44,8 +46,12 @@ export function HomeView({
   const ISSUE_CONFIDENCE_THRESHOLD = 0.7
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      setRecentSubmissions([])
+      return
+    }
     loadRecentSubmissions()
-  }, [])
+  }, [isAuthenticated])
 
   const loadRecentSubmissions = async () => {
     try {

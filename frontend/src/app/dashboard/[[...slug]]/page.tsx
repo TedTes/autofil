@@ -1,20 +1,10 @@
 'use client'
 
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import MainLayout from '@/components/MainLayout'
 import { useAuth } from '@/contexts/AuthContext'
 
 export default function DashboardRoutePage() {
-  const router = useRouter()
-  const { user, isLoading, isConfigured } = useAuth()
-
-  useEffect(() => {
-    if (isLoading) return
-    if (!isConfigured || !user) {
-      router.replace('/login')
-    }
-  }, [isLoading, isConfigured, user, router])
+  const { isLoading } = useAuth()
 
   if (isLoading) {
     return (
@@ -22,10 +12,6 @@ export default function DashboardRoutePage() {
         Loading workspace...
       </div>
     )
-  }
-
-  if (!isConfigured || !user) {
-    return null
   }
 
   return <MainLayout />

@@ -208,7 +208,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const [submissionStats, setSubmissionStats] = useState<SubmissionStats | null>(null)
 
   const router = useRouter()
-  const { user, signOut } = useAuth()
+  const { user, signOut, isConfigured } = useAuth()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const currentView = useMemo(
@@ -234,6 +234,11 @@ export default function MainLayout({ children }: MainLayoutProps) {
   }, [])
 
   useEffect(() => {
+    if (!user) {
+      setSubmissionStats(null)
+      return
+    }
+
     void (async () => {
       try {
         const stats = await getSubmissionStats()
@@ -242,7 +247,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
         console.warn('Failed to load submission stats', err)
       }
     })()
-  }, [])
+  }, [user])
 
   useEffect(() => {
     if (mobileSidebarOpen) {
@@ -538,6 +543,8 @@ const handleMobileSidebarClose = () => {
                 <AvatarMenu
                   accountLabel={currentAccountLabel}
                   userLabel={userLabel}
+                  isConfigured={isConfigured}
+                  onLogin={() => router.push('/login')}
                   onLogout={async () => {
                     await signOut()
                     router.push('/login')
@@ -600,6 +607,8 @@ const handleMobileSidebarClose = () => {
                 )}
                 <AvatarMenu
                   userLabel={userLabel}
+                  isConfigured={isConfigured}
+                  onLogin={() => router.push('/login')}
                   onLogout={async () => {
                     await signOut()
                     router.push('/login')
@@ -621,6 +630,7 @@ const handleMobileSidebarClose = () => {
             {currentView.type === 'dashboard' && (
   <HomeView
     submissionStats={submissionStats}
+    isAuthenticated={Boolean(user)}
     onGoToFile={handleFileClick}
     onNavigateToClients={() => navigateTo('clients', undefined, ['Dashboard', 'Accounts'])}
     onNavigateToUpload={() => navigateTo('upload', undefined, ['Dashboard', 'Upload'])}
@@ -742,12 +752,16 @@ const handleMobileSidebarClose = () => {
 function AvatarMenu({
   accountLabel,
   userLabel,
+  isConfigured,
+  onLogin,
   onLogout,
   onSettings,
   onHelp,
 }: {
   accountLabel?: string | null
   userLabel?: string | null
+  isConfigured: boolean
+  onLogin: () => void
   onLogout: () => Promise<void> | void
   onSettings: () => void
   onHelp: () => void
@@ -810,16 +824,30 @@ function AvatarMenu({
             Help & Support
           </button>
           <div className="my-1 border-t border-gray-100" />
-          <button
-            onClick={() => {
-              void onLogout()
-              setOpen(false)
-            }}
-            className="flex w-full items-center gap-2.5 px-3 py-2 text-red-600 hover:bg-red-50 transition-colors"
-          >
-            <X className="h-4 w-4" />
-            Logout
-          </button>
+          {userLabel ? (
+            <button
+              onClick={() => {
+                void onLogout()
+                setOpen(false)
+              }}
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-red-600 hover:bg-red-50 transition-colors"
+            >
+              <X className="h-4 w-4" />
+              Logout
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                onLogin()
+                setOpen(false)
+              }}
+              disabled={!isConfigured}
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-blue-600 hover:bg-blue-50 transition-colors disabled:text-gray-400 disabled:hover:bg-transparent"
+            >
+              <ChevronRight className="h-4 w-4" />
+              Sign in
+            </button>
+          )}
         </div>
       )}
     </div>

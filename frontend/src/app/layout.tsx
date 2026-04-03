@@ -4,6 +4,7 @@ import './globals.css'
 import { ToastProvider } from '@/contexts/ToastContext'
 import { FieldCatalogProvider } from '@/contexts/FieldCatalogContext'
 import { AuthProvider } from '@/contexts/AuthContext'
+import { LandingUploadProvider } from '@/contexts/LandingUploadContext'
 import ToastContainer from '@/components/ToastContainer'
 import BackendStatusBanner from '@/components/BackendStatusBanner'
 
@@ -23,14 +24,16 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <AuthProvider>
-          <FieldCatalogProvider>
-            <ToastProvider>
-              <div className="min-h-screen">
-                {children}
-              </div>
-              <ToastContainer />
-            </ToastProvider>
-          </FieldCatalogProvider>
+          <LandingUploadProvider>
+            <FieldCatalogProvider>
+              <ToastProvider>
+                <div className="min-h-screen">
+                  {children}
+                </div>
+                <ToastContainer />
+              </ToastProvider>
+            </FieldCatalogProvider>
+          </LandingUploadProvider>
         </AuthProvider>
       </body>
     </html>

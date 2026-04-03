@@ -7,13 +7,14 @@ import AnimatedDemo from '@/components/landing/AnimatedDemo'
 import LandingUploadPanel from '@/components/landing/LandingUploadPanel'
 import AuthPromptModal from '@/components/auth/AuthPromptModal'
 import { useAuth } from '@/contexts/AuthContext'
+import { useLandingUpload } from '@/contexts/LandingUploadContext'
 
 export default function LandingPage() {
   const router = useRouter()
   const { user } = useAuth()
+  const { files, addFiles, removeFile, clearFiles } = useLandingUpload()
   const [isAuthPromptOpen, setIsAuthPromptOpen] = useState(false)
   const [pendingActionLabel, setPendingActionLabel] = useState<string | null>(null)
-  const [stagedFiles, setStagedFiles] = useState<File[]>([])
 
   const handleGetStarted = useCallback((actionLabel = 'start your workspace') => {
     if (user) {
@@ -138,12 +139,10 @@ export default function LandingPage() {
         </section>
 
         <LandingUploadPanel
-          files={stagedFiles}
-          onAddFiles={(files) => setStagedFiles((prev) => [...prev, ...files])}
-          onRemoveFile={(index) =>
-            setStagedFiles((prev) => prev.filter((_, fileIndex) => fileIndex !== index))
-          }
-          onClearFiles={() => setStagedFiles([])}
+          files={files}
+          onAddFiles={addFiles}
+          onRemoveFile={removeFile}
+          onClearFiles={clearFiles}
           onContinue={() => handleGetStarted('process these staged files')}
         />
 

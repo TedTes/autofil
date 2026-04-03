@@ -52,6 +52,12 @@ class ExtractionService:
             classification_strategy='highest_confidence',
             min_classification_confidence=0.6
         )
+        self.preview_pipeline = ExtractionPipeline(
+            use_classification=True,
+            classification_strategy='highest_confidence',
+            min_classification_confidence=0.6,
+            enable_ocr_enrichment=False,
+        )
         
         # Storage (persisted to disk)
         self.files: Dict[str, Dict[str, Any]] = {}
@@ -134,6 +140,67 @@ class ExtractionService:
             'file_size': file_size,
             'mime_type': file_metadata['mime_type']
         }
+
+    def preview_extract_file(
+        self,
+        file,
+        document_type: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Extract a preview from a single uploaded file without persisting it to
+        the authenticated workspace state.
+        """
+        if not file or file.filename == '':
+            raise ValueError('No file provided')
+
+        if not allowed_file(file.filename):
+            raise ValueError(f'File type not allowed: {file.filename}')
+
+        filename = secure_filename(file.filename)
+        extension = get_file_extension(filename)
+
+        with tempfile.NamedTemporaryFile(
+            prefix='fillform_preview_',
+            suffix=extension or '',
+            delete=False,
+        ) as temp_file:
+            temp_path = temp_file.name
+
+        try:
+            file.save(temp_path)
+
+            result = self.preview_pipeline.process(
+                temp_path,
+                override_document_type=document_type,
+            )
+
+            metadata = {
+                'extractor_used': result.metadata.get('extractor_used', 'Unknown') if result.metadata else 'Unknown',
+                'document_type': result.metadata.get('document_type', document_type or 'unknown') if result.metadata else (document_type or 'unknown'),
+                'preview_generated_at': datetime.utcnow().isoformat(),
+                'file_name': filename,
+                'is_preview': True,
+            }
+
+            if result.metadata:
+                metadata.update(result.metadata)
+
+            return {
+                'success': result.success,
+                'file_name': filename,
+                'file_size': os.path.getsize(temp_path),
+                'data': result.data or {},
+                'confidence': result.confidence,
+                'warnings': result.warnings or [],
+                'errors': result.errors or [],
+                'metadata': metadata,
+            }
+        finally:
+            try:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+            except OSError:
+                logger.warning("failed to clean preview extraction temp file %s", temp_path)
     
     def classify_document(self, file_id: str, current_user_id: Optional[str] = None) -> Dict[str, Any]:
         """

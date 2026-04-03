@@ -800,6 +800,52 @@ export async function uploadFileForExtraction(
   return response.data.data
 }
 
+export async function previewExtractLandingFile(
+  file: File,
+  options?: {
+    documentType?: string
+  },
+  onProgress?: (progress: number) => void
+): Promise<{
+  success: boolean
+  file_name: string
+  file_size: number
+  data: Record<string, unknown>
+  confidence: number
+  warnings?: string[]
+  errors?: string[]
+  metadata?: {
+    extractor_used?: string
+    document_type?: string
+    is_preview?: boolean
+    [key: string]: unknown
+  }
+}> {
+  const formData = new FormData()
+  formData.append('file', file)
+  if (options?.documentType) {
+    formData.append('document_type', options.documentType)
+  }
+
+  const response = await api.post('/extraction/preview', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    onUploadProgress: (progressEvent) => {
+      if (onProgress && progressEvent.total) {
+        const progress = Math.round(
+          (progressEvent.loaded * 100) / progressEvent.total
+        )
+        onProgress(progress)
+      }
+    },
+  })
+
+  if (!response.data.success) {
+    throw new Error(response.data.error || 'Preview extraction failed')
+  }
+
+  return response.data.data
+}
+
 export async function uploadBatchForExtraction(
   files: File[],
   options?: { autoClassify?: boolean; groupId?: string },

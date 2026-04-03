@@ -102,6 +102,47 @@ def upload_file():
         return internal_server_error(logger, "File upload failed", e, success=False)
 
 
+@extraction_bp.route('/preview', methods=['POST'])
+def preview_extract_file():
+    """
+    Extract preview data from a single file without creating persisted
+    workspace state. Intended for the public landing-page preview flow.
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({
+                'success': False,
+                'error': 'No file provided'
+            }), 400
+
+        file = request.files['file']
+
+        if file.filename == '':
+            return jsonify({
+                'success': False,
+                'error': 'No file selected'
+            }), 400
+
+        document_type = request.form.get('document_type')
+        result = _extraction_service().preview_extract_file(
+            file=file,
+            document_type=document_type,
+        )
+
+        return jsonify({
+            'success': True,
+            'data': result
+        }), 200
+
+    except ValueError as exc:
+        return jsonify({
+            'success': False,
+            'error': str(exc)
+        }), 400
+    except Exception as e:
+        return internal_server_error(logger, "Preview extraction failed", e, success=False)
+
+
 @extraction_bp.route('/upload-batch', methods=['POST'])
 @require_auth
 def upload_batch():

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Upload, Zap, Download, CheckCircle, ArrowRight } from 'lucide-react'
 import AnimatedDemo from '@/components/landing/AnimatedDemo'
@@ -8,13 +8,41 @@ import LandingUploadPanel from '@/components/landing/LandingUploadPanel'
 import AuthPromptModal from '@/components/auth/AuthPromptModal'
 import { useAuth } from '@/contexts/AuthContext'
 import { useLandingUpload } from '@/contexts/LandingUploadContext'
+import { previewExtractLandingFile } from '@/lib/api-client'
 
 export default function LandingPage() {
   const router = useRouter()
   const { user } = useAuth()
-  const { files, addFiles, removeFile, clearFiles, hasFiles } = useLandingUpload()
+  const {
+    files,
+    addFiles,
+    removeFile,
+    clearFiles,
+    hasFiles,
+    previewFileIndex,
+    previewResult,
+    setPreviewResult,
+    isPreviewLoading,
+    setIsPreviewLoading,
+    previewError,
+    setPreviewError,
+  } = useLandingUpload()
   const [isAuthPromptOpen, setIsAuthPromptOpen] = useState(false)
   const [pendingActionLabel, setPendingActionLabel] = useState<string | null>(null)
+  const [previewProgress, setPreviewProgress] = useState(0)
+  const [previewStageLabel, setPreviewStageLabel] = useState<string>('Preparing preview')
+  const inFlightPreviewKeyRef = useRef<string | null>(null)
+  const settledPreviewKeyRef = useRef<string | null>(null)
+
+  const previewFile = useMemo(() => {
+    if (previewFileIndex === null) return null
+    return files[previewFileIndex] ?? null
+  }, [files, previewFileIndex])
+
+  const previewKey = useMemo(() => {
+    if (!previewFile) return null
+    return `${previewFile.name}:${previewFile.size}:${previewFile.lastModified}`
+  }, [previewFile])
 
   const handleGetStarted = useCallback((actionLabel = 'start your workspace') => {
     if (user) {
@@ -25,6 +53,112 @@ export default function LandingPage() {
     setPendingActionLabel(actionLabel)
     setIsAuthPromptOpen(true)
   }, [hasFiles, router, user])
+
+  useEffect(() => {
+    if (!previewFile || !previewKey || user) {
+      return
+    }
+
+    if (
+      settledPreviewKeyRef.current === previewKey ||
+      inFlightPreviewKeyRef.current === previewKey
+    ) {
+      return
+    }
+
+    let isCancelled = false
+    inFlightPreviewKeyRef.current = previewKey
+    setIsPreviewLoading(true)
+    setPreviewError(null)
+    setPreviewProgress(8)
+    setPreviewStageLabel('Uploading preview file')
+
+    void previewExtractLandingFile(previewFile)
+      .then((result) => {
+        if (isCancelled) return
+        settledPreviewKeyRef.current = previewKey
+        setPreviewProgress(100)
+        setPreviewStageLabel('Preview ready')
+        setPreviewResult(result)
+      })
+      .catch((error) => {
+        if (isCancelled) return
+        settledPreviewKeyRef.current = previewKey
+        setPreviewProgress(100)
+        setPreviewStageLabel('Preview failed')
+        setPreviewResult(null)
+        setPreviewError(
+          error instanceof Error
+            ? error.message
+            : 'Preview extraction failed'
+        )
+      })
+      .finally(() => {
+        if (isCancelled) return
+        inFlightPreviewKeyRef.current = null
+        setIsPreviewLoading(false)
+      })
+
+    return () => {
+      isCancelled = true
+      if (inFlightPreviewKeyRef.current === previewKey) {
+        inFlightPreviewKeyRef.current = null
+      }
+    }
+  }, [
+    previewFile,
+    previewKey,
+    setIsPreviewLoading,
+    setPreviewError,
+    setPreviewResult,
+    user,
+  ])
+
+  useEffect(() => {
+    if (!previewKey) {
+      inFlightPreviewKeyRef.current = null
+      settledPreviewKeyRef.current = null
+      setPreviewProgress(0)
+      setPreviewStageLabel('Preparing preview')
+      return
+    }
+
+    if (settledPreviewKeyRef.current && settledPreviewKeyRef.current !== previewKey) {
+      settledPreviewKeyRef.current = null
+      setPreviewResult(null)
+      setPreviewError(null)
+    }
+  }, [previewKey, setPreviewError, setPreviewResult])
+
+  useEffect(() => {
+    if (!isPreviewLoading) {
+      if (!previewResult && !previewError) {
+        setPreviewProgress(0)
+        setPreviewStageLabel('Preparing preview')
+      }
+      return
+    }
+
+    setPreviewStageLabel((current) =>
+      current === 'Uploading preview file' ? current : 'Extracting sample fields'
+    )
+
+    const timer = window.setInterval(() => {
+      setPreviewProgress((current) => {
+        if (current < 24) {
+          setPreviewStageLabel('Uploading preview file')
+          return Math.min(current + 8, 24)
+        }
+        setPreviewStageLabel('Extracting sample fields')
+        if (current >= 92) {
+          return current
+        }
+        return Math.min(current + Math.max(2, Math.round((92 - current) / 4)), 92)
+      })
+    }, 180)
+
+    return () => window.clearInterval(timer)
+  }, [isPreviewLoading, previewError, previewResult])
 
   return (
     <div className="min-h-screen bg-white">
@@ -143,7 +277,13 @@ export default function LandingPage() {
           onAddFiles={addFiles}
           onRemoveFile={removeFile}
           onClearFiles={clearFiles}
-          onContinue={() => handleGetStarted('process these staged files')}
+          onContinue={() => handleGetStarted('continue with this extraction preview')}
+          previewFile={previewFile}
+          previewResult={previewResult}
+          isPreviewLoading={isPreviewLoading}
+          previewError={previewError}
+          previewProgress={previewProgress}
+          previewStageLabel={previewStageLabel}
         />
 
         {/* ANIMATED DEMO SECTION */}

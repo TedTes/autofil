@@ -3,41 +3,100 @@
 
 import { Upload, FileText, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
 import { uploadPdf } from '@/lib/api-client'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { useLandingUpload } from '@/contexts/LandingUploadContext'
+
+const LANDING_ACCEPT = '.pdf,.xlsx,.xls,.csv'
 
 export function UploadView() {
+  const { files: stagedLandingFiles, setFiles: setStagedLandingFiles, clearFiles: clearLandingFiles } = useLandingUpload()
   const [uploading, setUploading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const autoUploadStartedRef = useRef(false)
 
-  const handleFile = async (file: File) => {
-    if (!file) return
+  const uploadFiles = useCallback(async (files: File[], source: 'manual' | 'landing') => {
+    if (!files.length) return
+
     setUploading(true)
     setError(null)
     setSuccess(false)
+    setStatusMessage(source === 'landing' ? 'Uploading staged landing files...' : 'Uploading files...')
+
+    const failedFiles: File[] = []
+
     try {
-      await uploadPdf(file)
-      setSuccess(true)
+      for (let index = 0; index < files.length; index += 1) {
+        const file = files[index]
+        setStatusMessage(
+          source === 'landing'
+            ? `Uploading ${index + 1} of ${files.length}: ${file.name}`
+            : `Uploading ${file.name}`
+        )
+
+        try {
+          await uploadPdf(file)
+        } catch (err) {
+          failedFiles.push(file)
+          console.error('Upload failed for file', file.name, err)
+        }
+      }
+
+      if (failedFiles.length > 0) {
+        setError(
+          failedFiles.length === files.length
+            ? 'None of the staged files could be uploaded. Please retry.'
+            : `${failedFiles.length} file${failedFiles.length === 1 ? '' : 's'} could not be uploaded.`
+        )
+        if (source === 'landing') {
+          setStagedLandingFiles(failedFiles)
+        }
+      } else {
+        setSuccess(true)
+        if (source === 'landing') {
+          clearLandingFiles()
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed')
     } finally {
       setUploading(false)
+      setStatusMessage(null)
     }
-  }
+  }, [clearLandingFiles, setStagedLandingFiles])
+
+  useEffect(() => {
+    if (!stagedLandingFiles.length) {
+      autoUploadStartedRef.current = false
+      return
+    }
+
+    if (autoUploadStartedRef.current || uploading) {
+      return
+    }
+
+    autoUploadStartedRef.current = true
+    void uploadFiles(stagedLandingFiles, 'landing')
+  }, [stagedLandingFiles, uploadFiles, uploading])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) void handleFile(file)
+    const files = Array.from(e.target.files || [])
+    if (files.length > 0) {
+      void uploadFiles(files, 'manual')
+    }
     e.target.value = ''
   }
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setDragOver(false)
-    const file = e.dataTransfer.files?.[0]
-    if (file) void handleFile(file)
+    const files = Array.from(e.dataTransfer.files || [])
+    if (files.length > 0) {
+      void uploadFiles(files, 'manual')
+    }
   }
 
   return (
@@ -50,6 +109,13 @@ export function UploadView() {
           Upload documents without selecting an account. Files will be processed automatically.
         </p>
       </div>
+
+      {stagedLandingFiles.length > 0 && !uploading && !success && !error && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+          {stagedLandingFiles.length} staged file{stagedLandingFiles.length === 1 ? '' : 's'} from
+          the landing page will upload automatically here.
+        </div>
+      )}
 
       {/* Drop Zone Card */}
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
@@ -81,7 +147,7 @@ export function UploadView() {
           {uploading ? (
             <>
               <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
-              <p className="text-sm font-medium text-gray-700">Uploading...</p>
+              <p className="text-sm font-medium text-gray-700">{statusMessage || 'Uploading...'}</p>
             </>
           ) : success ? (
             <>
@@ -116,7 +182,7 @@ export function UploadView() {
                   Drop your file here, or{' '}
                   <span className="text-blue-600">browse</span>
                 </p>
-                <p className="mt-1 text-xs text-gray-400">PDF files only</p>
+                <p className="mt-1 text-xs text-gray-400">PDF, Excel, and CSV files supported</p>
               </div>
             </>
           )}
@@ -135,7 +201,8 @@ export function UploadView() {
         type="file"
         className="hidden"
         onChange={handleFileChange}
-        accept="application/pdf"
+        accept={LANDING_ACCEPT}
+        multiple
       />
     </div>
   )

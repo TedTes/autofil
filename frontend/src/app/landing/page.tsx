@@ -12,19 +12,19 @@ import { useLandingUpload } from '@/contexts/LandingUploadContext'
 export default function LandingPage() {
   const router = useRouter()
   const { user } = useAuth()
-  const { files, addFiles, removeFile, clearFiles } = useLandingUpload()
+  const { files, addFiles, removeFile, clearFiles, hasFiles } = useLandingUpload()
   const [isAuthPromptOpen, setIsAuthPromptOpen] = useState(false)
   const [pendingActionLabel, setPendingActionLabel] = useState<string | null>(null)
 
   const handleGetStarted = useCallback((actionLabel = 'start your workspace') => {
     if (user) {
-      router.push('/dashboard')
+      router.push(hasFiles ? '/dashboard/upload' : '/dashboard')
       return
     }
 
     setPendingActionLabel(actionLabel)
     setIsAuthPromptOpen(true)
-  }, [router, user])
+  }, [hasFiles, router, user])
 
   return (
     <div className="min-h-screen bg-white">
@@ -38,7 +38,7 @@ export default function LandingPage() {
         onAuthenticated={() => {
           setPendingActionLabel(null)
           setIsAuthPromptOpen(false)
-          router.push('/dashboard')
+          router.push(hasFiles ? '/dashboard/upload' : '/dashboard')
         }}
       />
 

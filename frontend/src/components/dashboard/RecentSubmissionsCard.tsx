@@ -5,14 +5,16 @@
 
 'use client'
 
-import React, { useEffect, useState } from 'react'
-import { Clock, AlertCircle, ChevronRight, Loader2, FileStack } from 'lucide-react'
-import { getRecentSubmissions } from '@/lib/api-client'
+import React from 'react'
+import { Clock, ChevronRight, Loader2, FileStack, LockKeyhole } from 'lucide-react'
 import type { RecentSubmission } from '@/types'
 import RecentSubmissionItem from './RecentSubmissionItem'
 
 interface RecentSubmissionsCardProps {
   limit?: number
+  submissions: RecentSubmission[]
+  isLoading?: boolean
+  isAuthenticated?: boolean
   onSubmissionClick?: (submissionId: string) => void
   onViewAll?: () => void
   className?: string
@@ -20,39 +22,13 @@ interface RecentSubmissionsCardProps {
 
 export default function RecentSubmissionsCard({
   limit = 5,
+  submissions,
+  isLoading = false,
+  isAuthenticated = true,
   onSubmissionClick,
   onViewAll,
   className = '',
 }: RecentSubmissionsCardProps) {
-  const [submissions, setSubmissions] = useState<RecentSubmission[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    loadRecentSubmissions()
-  }, [limit])
-
-  const loadRecentSubmissions = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      
-      const data = await getRecentSubmissions({ 
-        limit,
-        include_files: true,
-        sort_by: 'updated_at',
-        sort_order: 'desc'
-      })
-      
-      setSubmissions(data)
-    } catch (err) {
-      console.error('Failed to load recent submissions:', err)
-      setError('Failed to load recent submissions')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const handleSubmissionClick = (submissionId: string) => {
     if (onSubmissionClick) {
       onSubmissionClick(submissionId)
@@ -76,25 +52,21 @@ export default function RecentSubmissionsCard({
 
       {/* Content */}
       <div className="divide-y divide-gray-100">
-        {loading ? (
+        {!isAuthenticated ? (
+          <div className="px-6 py-10 flex flex-col items-center justify-center text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 mb-3">
+              <LockKeyhole className="w-6 h-6 text-gray-400" />
+            </div>
+            <p className="text-sm font-medium text-gray-700">Sign in to view recent submissions</p>
+            <p className="mt-1 text-xs text-gray-400">
+              Your saved submission history appears here after login
+            </p>
+          </div>
+        ) : isLoading ? (
           // Loading state
           <div className="px-6 py-8 flex items-center justify-center">
             <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
             <span className="ml-2 text-sm text-gray-600">Loading submissions...</span>
-          </div>
-        ) : error ? (
-          // Error state
-          <div className="px-6 py-8">
-            <div className="flex items-center gap-3 text-red-600">
-              <AlertCircle className="w-5 h-5" />
-              <p className="text-sm">{error}</p>
-            </div>
-            <button
-              onClick={loadRecentSubmissions}
-              className="mt-3 text-sm text-blue-600 hover:text-blue-700 font-medium"
-            >
-              Try again
-            </button>
           </div>
         ) : submissions.length === 0 ? (
           // Empty state
@@ -122,7 +94,7 @@ export default function RecentSubmissionsCard({
       </div>
 
       {/* Footer - optional "View All" link */}
-      {!loading && !error && submissions.length > 0 && (
+      {isAuthenticated && !isLoading && submissions.length > 0 && (
         <div className="px-6 py-3 bg-gray-50 border-t border-gray-200 rounded-b-xl">
           <button
             onClick={onViewAll}

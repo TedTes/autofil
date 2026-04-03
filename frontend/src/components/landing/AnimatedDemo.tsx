@@ -151,7 +151,13 @@ function getStageForStatus(
 // MAIN COMPONENT
 // ============================================================================
 
-export default function AnimatedDemo() {
+export default function AnimatedDemo({
+  onPrimaryCta,
+  onSecondaryCta,
+}: {
+  onPrimaryCta?: () => void
+  onSecondaryCta?: () => void
+}) {
   const prefersReducedMotion = useReducedMotion()
 
   const [state, setState] = useState<AnimationState>({
@@ -353,6 +359,8 @@ export default function AnimatedDemo() {
           <ExportScene
             documents={state.documents}
             progress={state.sceneProgress}
+            onPrimaryCta={onPrimaryCta}
+            onSecondaryCta={onSecondaryCta}
           />
         )
       default:
@@ -1068,9 +1076,13 @@ function ProcessScene({
 function ExportScene({
   documents,
   progress,
+  onPrimaryCta,
+  onSecondaryCta,
 }: {
   documents: MockDocument[]
   progress: number
+  onPrimaryCta?: () => void
+  onSecondaryCta?: () => void
 }) {
   return (
     <div className="max-w-4xl mx-auto text-center">
@@ -1118,10 +1130,18 @@ function ExportScene({
           animate={{ opacity: 1, y: 0 }}
           className="flex gap-4 justify-center"
         >
-          <button className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg shadow-sm">
+          <button
+            type="button"
+            onClick={onPrimaryCta}
+            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg shadow-sm"
+          >
             Download carrier package
           </button>
-          <button className="px-6 py-3 bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium rounded-lg">
+          <button
+            type="button"
+            onClick={onSecondaryCta}
+            className="px-6 py-3 bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium rounded-lg"
+          >
             View in submission workspace
           </button>
         </motion.div>

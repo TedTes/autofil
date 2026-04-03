@@ -10,6 +10,7 @@ import React, {
 } from 'react'
 import type { FieldCatalog } from '@/types'
 import { getFieldCatalog } from '@/lib/api-client'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface FieldCatalogContextValue {
   catalog: FieldCatalog | null
@@ -21,6 +22,7 @@ interface FieldCatalogContextValue {
 const FieldCatalogContext = createContext<FieldCatalogContextValue | undefined>(undefined)
 
 export function FieldCatalogProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth()
   const [catalog, setCatalog] = useState<FieldCatalog | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -39,8 +41,15 @@ export function FieldCatalogProvider({ children }: { children: React.ReactNode }
   }, [])
 
   useEffect(() => {
+    if (!user) {
+      setCatalog(null)
+      setError(null)
+      setIsLoading(false)
+      return
+    }
+
     void fetchCatalog()
-  }, [fetchCatalog])
+  }, [fetchCatalog, user])
 
   const refresh = useCallback(async () => {
     await fetchCatalog(true)

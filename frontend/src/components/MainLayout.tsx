@@ -17,7 +17,6 @@ import {
   FolderOpen,
   BarChart3,
   ChevronRight,
-  LockKeyhole,
 } from 'lucide-react'
 import {
   UploadView,
@@ -33,7 +32,6 @@ import {
   getSubmissionStats,
 } from '@/lib/api-client'
 import { useAuth } from '@/contexts/AuthContext'
-import AuthPromptModal from './auth/AuthPromptModal'
 
 import type { ViewType,  FileDetailActions,ViewDataMap, SubmissionStats } from '@/types'
 import type { ClientDetailActions } from '@/types'
@@ -78,60 +76,6 @@ const NAV_ITEMS: Array<{
   { id: 'reports', label: 'Reports', icon: BarChart3, route: 'reports' },
 ]
 
-const PUBLIC_VIEWS = new Set<ViewType>(['dashboard'])
-
-const PROTECTED_VIEW_COPY: Partial<Record<ViewType, { title: string; description: string; actionLabel: string }>> = {
-  clients: {
-    title: 'Accounts require sign in',
-    description: 'Sign in to create insured accounts, organize submissions, and save client workspaces.',
-    actionLabel: 'open accounts',
-  },
-  'client-detail': {
-    title: 'Submission workspaces require sign in',
-    description: 'Sign in to review merged data, manage included files, and generate output forms.',
-    actionLabel: 'open this account workspace',
-  },
-  submissions: {
-    title: 'Submissions require sign in',
-    description: 'Sign in to view extraction progress, review flagged items, and continue working on submissions.',
-    actionLabel: 'open submissions',
-  },
-  documents: {
-    title: 'Documents require sign in',
-    description: 'Sign in to browse uploaded files and inspect extracted source documents.',
-    actionLabel: 'open documents',
-  },
-  upload: {
-    title: 'Uploads require sign in',
-    description: 'Sign in to upload source documents and save them into your workspace.',
-    actionLabel: 'upload files',
-  },
-  'file-detail': {
-    title: 'File review requires sign in',
-    description: 'Sign in to inspect uploaded files, compare source data, and continue your review workflow.',
-    actionLabel: 'open this document',
-  },
-  templates: {
-    title: 'Form library requires sign in',
-    description: 'Sign in to preview available output forms and use them in your generation workflow.',
-    actionLabel: 'browse the form library',
-  },
-  reports: {
-    title: 'Reports require sign in',
-    description: 'Sign in to access workspace reporting and export insights from your submissions.',
-    actionLabel: 'open reports',
-  },
-  settings: {
-    title: 'Settings require sign in',
-    description: 'Sign in to manage your workspace settings and account preferences.',
-    actionLabel: 'open settings',
-  },
-  help: {
-    title: 'Support tools require sign in',
-    description: 'Sign in to access in-product support and account-specific help resources.',
-    actionLabel: 'open help',
-  },
-}
 
 function buildPathFromView(type: ViewType, data?: ViewStateData): string {
   switch (type) {
@@ -263,11 +207,9 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const [isMobileClosing, setIsMobileClosing] = useState(false)
   const [isMobileOpening, setIsMobileOpening] = useState(false)
   const [submissionStats, setSubmissionStats] = useState<SubmissionStats | null>(null)
-  const [isAuthPromptOpen, setIsAuthPromptOpen] = useState(false)
-  const [pendingActionLabel, setPendingActionLabel] = useState<string | null>(null)
 
   const router = useRouter()
-  const { user, signOut, isConfigured } = useAuth()
+  const { user, signOut } = useAuth()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const currentView = useMemo(
@@ -276,7 +218,6 @@ export default function MainLayout({ children }: MainLayoutProps) {
   )
   const autoCollapsedRef = useRef(false)
   const widthCollapsedRef = useRef(false)
-  const pendingActionRef = useRef<(() => void) | null>(null)
   const shouldForceWorkspaceCollapse =
     currentView.type === 'file-detail' || currentView.type === 'client-detail'
   const currentAccountLabel =
@@ -284,31 +225,6 @@ export default function MainLayout({ children }: MainLayoutProps) {
       ? currentView.data.clientName || 'Account'
       : null
   const userLabel = user?.email || user?.user_metadata?.full_name || null
-
-  const requireAuth = useCallback((actionLabel: string, action?: () => void) => {
-    if (user) {
-      action?.()
-      return
-    }
-
-    pendingActionRef.current = action ?? null
-    setPendingActionLabel(actionLabel)
-    setIsAuthPromptOpen(true)
-  }, [user])
-
-  const handleCloseAuthPrompt = useCallback(() => {
-    pendingActionRef.current = null
-    setPendingActionLabel(null)
-    setIsAuthPromptOpen(false)
-  }, [])
-
-  const handleAuthenticatedAction = useCallback(() => {
-    const pendingAction = pendingActionRef.current
-    pendingActionRef.current = null
-    setPendingActionLabel(null)
-    setIsAuthPromptOpen(false)
-    pendingAction?.()
-  }, [])
 
   // Measure sidebar state on mount to avoid flicker on laptop-sized screens
   useLayoutEffect(() => {
@@ -418,27 +334,12 @@ const handleMobileSidebarClose = () => {
     () =>
       NAV_ITEMS.map(item => ({
         ...item,
-        onClick: () => {
-          if (PUBLIC_VIEWS.has(item.route)) {
-            navigateTo(item.route)
-            return
-          }
-
-          requireAuth(`open ${item.label}`, () => navigateTo(item.route))
-        },
+        onClick: () => navigateTo(item.route),
       })),
-    [navigateTo, requireAuth]
+    [navigateTo]
   )
-  const protectedViewCopy = !user ? PROTECTED_VIEW_COPY[currentView.type] : undefined
   return (
-    <>
-      <AuthPromptModal
-        isOpen={isAuthPromptOpen}
-        actionLabel={pendingActionLabel}
-        onClose={handleCloseAuthPrompt}
-        onAuthenticated={handleAuthenticatedAction}
-      />
-      <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-gray-50 flex">
       {/* Desktop Sidebar — fixed compact icon+label */}
       <aside className="hidden lg:flex lg:flex-col bg-white border-r border-gray-200 w-24 fixed left-0 top-0 bottom-0 z-40">
 
@@ -643,8 +544,6 @@ const handleMobileSidebarClose = () => {
                 <AvatarMenu
                   accountLabel={currentAccountLabel}
                   userLabel={userLabel}
-                  isConfigured={isConfigured}
-                  onLogin={() => requireAuth('continue')}
                   onLogout={async () => {
                     await signOut()
                     router.push('/login')
@@ -707,8 +606,6 @@ const handleMobileSidebarClose = () => {
                 )}
                 <AvatarMenu
                   userLabel={userLabel}
-                  isConfigured={isConfigured}
-                  onLogin={() => requireAuth('continue')}
                   onLogout={async () => {
                     await signOut()
                     router.push('/login')
@@ -725,45 +622,19 @@ const handleMobileSidebarClose = () => {
         {/* Views */}
         <main className={`flex-1 bg-gray-50 ${currentView.type === 'file-detail' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
           <div className={currentView.type === 'file-detail' ? 'h-full' : 'px-4 sm:px-6 lg:px-8'}>
-            {protectedViewCopy ? (
-              <ProtectedWorkspaceState
-                title={protectedViewCopy.title}
-                description={protectedViewCopy.description}
-                onContinue={() => requireAuth(protectedViewCopy.actionLabel)}
-              />
-            ) : (
-              <>
             
             {/* Home View */}
             {currentView.type === 'dashboard' && (
   <HomeView
     submissionStats={submissionStats}
     isAuthenticated={Boolean(user)}
-    onGoToFile={(submissionId, filename, inputId) =>
-      requireAuth('open recent submissions', () => handleFileClick(submissionId, filename, inputId))
-    }
-    onNavigateToClients={() =>
-      requireAuth('start a new submission', () => navigateTo('clients', undefined, ['Dashboard', 'Accounts']))
-    }
-    onNavigateToUpload={() =>
-      requireAuth('upload files', () => navigateTo('upload', undefined, ['Dashboard', 'Upload']))
-    }
-    onNavigateToSubmissions={() =>
-      requireAuth('view submissions', () => navigateTo('submissions', undefined, ['Dashboard', 'Submissions']))
-    }
-    onNavigateToNeedsReview={() =>
-      requireAuth('review flagged submissions', () =>
-        navigateTo('submissions', { status: 'error' }, ['Dashboard', 'Submissions'])
-      )
-    }
-    onNavigateToReadyToGenerate={() =>
-      requireAuth('generate outputs', () =>
-        navigateTo('submissions', { status: 'ready' }, ['Dashboard', 'Submissions'])
-      )
-    }
-    onNavigateToTemplates={() =>
-      requireAuth('browse available forms', () => navigateTo('templates', undefined, ['Dashboard', 'Templates']))
-    }
+    onGoToFile={handleFileClick}
+    onNavigateToClients={() => navigateTo('clients', undefined, ['Dashboard', 'Accounts'])}
+    onNavigateToUpload={() => navigateTo('upload', undefined, ['Dashboard', 'Upload'])}
+    onNavigateToSubmissions={() => navigateTo('submissions', undefined, ['Dashboard', 'Submissions'])}
+    onNavigateToNeedsReview={() => navigateTo('submissions', { status: 'error' }, ['Dashboard', 'Submissions'])}
+    onNavigateToReadyToGenerate={() => navigateTo('submissions', { status: 'ready' }, ['Dashboard', 'Submissions'])}
+    onNavigateToTemplates={() => navigateTo('templates', undefined, ['Dashboard', 'Templates'])}
   />
 )}
 
@@ -867,59 +738,23 @@ const handleMobileSidebarClose = () => {
   />
 )}
             {children}
-              </>
-            )}
           </div>
         </main>
       </div>
 
       </div>
-    </>
-  )
-}
-
-function ProtectedWorkspaceState({
-  title,
-  description,
-  onContinue,
-}: {
-  title: string
-  description: string
-  onContinue: () => void
-}) {
-  return (
-    <div className="flex min-h-[calc(100vh-10rem)] items-center justify-center py-10">
-      <div className="w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
-          <LockKeyhole className="h-6 w-6" />
-        </div>
-        <h2 className="text-2xl font-bold text-gray-900">{title}</h2>
-        <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-gray-600">{description}</p>
-        <button
-          onClick={onContinue}
-          className="mt-6 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
-        >
-          Sign in to continue
-          <ChevronRight className="h-4 w-4" />
-        </button>
-      </div>
-    </div>
   )
 }
 
 function AvatarMenu({
   accountLabel,
   userLabel,
-  isConfigured,
-  onLogin,
   onLogout,
   onSettings,
   onHelp,
 }: {
   accountLabel?: string | null
   userLabel?: string | null
-  isConfigured: boolean
-  onLogin: () => void
   onLogout: () => Promise<void> | void
   onSettings: () => void
   onHelp: () => void
@@ -982,30 +817,16 @@ function AvatarMenu({
             Help & Support
           </button>
           <div className="my-1 border-t border-gray-100" />
-          {userLabel ? (
-            <button
-              onClick={() => {
-                void onLogout()
-                setOpen(false)
-              }}
-              className="flex w-full items-center gap-2.5 px-3 py-2 text-red-600 hover:bg-red-50 transition-colors"
-            >
-              <X className="h-4 w-4" />
-              Logout
-            </button>
-          ) : (
-            <button
-              onClick={() => {
-                onLogin()
-                setOpen(false)
-              }}
-              disabled={!isConfigured}
-              className="flex w-full items-center gap-2.5 px-3 py-2 text-blue-600 hover:bg-blue-50 transition-colors disabled:text-gray-400 disabled:hover:bg-transparent"
-            >
-              <ChevronRight className="h-4 w-4" />
-              Sign in
-            </button>
-          )}
+          <button
+            onClick={() => {
+              void onLogout()
+              setOpen(false)
+            }}
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-red-600 hover:bg-red-50 transition-colors"
+          >
+            <X className="h-4 w-4" />
+            Logout
+          </button>
         </div>
       )}
     </div>

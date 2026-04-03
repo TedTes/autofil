@@ -42,12 +42,14 @@ export function HomeView({
   onNavigateToTemplates,
 }: HomeViewProps) {
   const [recentSubmissions, setRecentSubmissions] = useState<RecentSubmission[]>([])
+  const [recentSubmissionsLoading, setRecentSubmissionsLoading] = useState(false)
 
   const ISSUE_CONFIDENCE_THRESHOLD = 0.7
 
   useEffect(() => {
     if (!isAuthenticated) {
       setRecentSubmissions([])
+      setRecentSubmissionsLoading(false)
       return
     }
     loadRecentSubmissions()
@@ -55,10 +57,13 @@ export function HomeView({
 
   const loadRecentSubmissions = async () => {
     try {
+      setRecentSubmissionsLoading(true)
       const data = await getRecentSubmissions({ limit: 5, include_files: true })
       setRecentSubmissions(data)
     } catch (error) {
       console.error('Failed to load recent submissions:', error)
+    } finally {
+      setRecentSubmissionsLoading(false)
     }
   }
 
@@ -284,6 +289,9 @@ export function HomeView({
           <div className="min-w-0">
             <RecentSubmissionsCard
               limit={5}
+              submissions={recentSubmissions}
+              isLoading={recentSubmissionsLoading}
+              isAuthenticated={isAuthenticated}
               onSubmissionClick={(id) => onGoToFile?.(id)}
               onViewAll={onNavigateToSubmissions}
             />

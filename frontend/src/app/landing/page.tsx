@@ -1,15 +1,46 @@
 'use client'
 
+import { useCallback, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Upload, Zap, Download, CheckCircle, ArrowRight } from 'lucide-react'
 import AnimatedDemo from '@/components/landing/AnimatedDemo'
+import LandingUploadPanel from '@/components/landing/LandingUploadPanel'
+import AuthPromptModal from '@/components/auth/AuthPromptModal'
+import { useAuth } from '@/contexts/AuthContext'
 
 export default function LandingPage() {
   const router = useRouter()
-  const handleGetStarted = () => router.push('/login')
+  const { user } = useAuth()
+  const [isAuthPromptOpen, setIsAuthPromptOpen] = useState(false)
+  const [pendingActionLabel, setPendingActionLabel] = useState<string | null>(null)
+  const [stagedFiles, setStagedFiles] = useState<File[]>([])
+
+  const handleGetStarted = useCallback((actionLabel = 'start your workspace') => {
+    if (user) {
+      router.push('/dashboard')
+      return
+    }
+
+    setPendingActionLabel(actionLabel)
+    setIsAuthPromptOpen(true)
+  }, [router, user])
 
   return (
     <div className="min-h-screen bg-white">
+      <AuthPromptModal
+        isOpen={isAuthPromptOpen}
+        actionLabel={pendingActionLabel}
+        onClose={() => {
+          setPendingActionLabel(null)
+          setIsAuthPromptOpen(false)
+        }}
+        onAuthenticated={() => {
+          setPendingActionLabel(null)
+          setIsAuthPromptOpen(false)
+          router.push('/dashboard')
+        }}
+      />
+
       {/* HEADER */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
@@ -36,7 +67,7 @@ export default function LandingPage() {
           </div>
 
           <button
-            onClick={handleGetStarted}
+            onClick={() => handleGetStarted('start your workspace')}
             className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-all shadow-sm hover:shadow-md"
           >
             Get Started
@@ -67,7 +98,7 @@ export default function LandingPage() {
 
               <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
                 <button
-                  onClick={handleGetStarted}
+                  onClick={() => handleGetStarted('start using AutoFil')}
                   className="inline-flex items-center gap-2 px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
                 >
                   Try AutoFil Free
@@ -106,10 +137,23 @@ export default function LandingPage() {
           </div>
         </section>
 
+        <LandingUploadPanel
+          files={stagedFiles}
+          onAddFiles={(files) => setStagedFiles((prev) => [...prev, ...files])}
+          onRemoveFile={(index) =>
+            setStagedFiles((prev) => prev.filter((_, fileIndex) => fileIndex !== index))
+          }
+          onClearFiles={() => setStagedFiles([])}
+          onContinue={() => handleGetStarted('process these staged files')}
+        />
+
         {/* ANIMATED DEMO SECTION */}
         <section id="demo-section" className="py-20 bg-gray-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <AnimatedDemo />
+            <AnimatedDemo
+              onPrimaryCta={() => handleGetStarted('download a carrier package')}
+              onSecondaryCta={() => handleGetStarted('open the submission workspace')}
+            />
           </div>
         </section>
 
@@ -292,7 +336,7 @@ export default function LandingPage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <button
-                onClick={handleGetStarted}
+                onClick={() => handleGetStarted('start your free trial')}
                 className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white text-blue-700 text-lg font-semibold rounded-xl hover:bg-gray-50 shadow-xl transition-all transform hover:scale-105"
               >
                 Start Free Trial

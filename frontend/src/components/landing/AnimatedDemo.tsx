@@ -55,6 +55,11 @@ interface AnimationState {
   extractedData: MockExtractedData | null
 }
 
+interface AnimatedDemoProps {
+  onPrimaryCta?: () => void
+  onSecondaryCta?: () => void
+}
+
 // ============================================================================
 // MOCK DATA
 // ============================================================================
@@ -154,10 +159,7 @@ function getStageForStatus(
 export default function AnimatedDemo({
   onPrimaryCta,
   onSecondaryCta,
-}: {
-  onPrimaryCta?: () => void
-  onSecondaryCta?: () => void
-}) {
+}: AnimatedDemoProps) {
   const prefersReducedMotion = useReducedMotion()
 
   const [state, setState] = useState<AnimationState>({

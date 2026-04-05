@@ -55,6 +55,7 @@ export default function LandingUploadPanel({
   onRemoveFile,
   onClearFiles,
   onContinue,
+  isAuthenticated,
   previewFile,
   previewResult,
   isPreviewLoading,
@@ -67,6 +68,7 @@ export default function LandingUploadPanel({
   onRemoveFile: (index: number) => void
   onClearFiles: () => void
   onContinue: () => void
+  isAuthenticated: boolean
   previewFile: File | null
   previewResult: LandingPreviewResult | null
   isPreviewLoading: boolean
@@ -146,7 +148,13 @@ export default function LandingUploadPanel({
     } else {
       setError(null)
     }
-    if (supported.length > 0) onAddFiles(supported)
+    if (supported.length > 0) {
+      if (!isAuthenticated && files.length > 0) {
+        onContinue()
+        return
+      }
+      onAddFiles(supported)
+    }
   }
 
   return (
@@ -249,51 +257,16 @@ export default function LandingUploadPanel({
                 </p>
               </motion.div>
             ) : (
-              /* ── FILES STAGED: two-panel layout ── */
+              /* ── FILES STAGED: full-width extracted preview ── */
               <motion.div
                 key="staged"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.18 }}
-                className="grid lg:grid-cols-[1fr_1.4fr] divide-y lg:divide-y-0 lg:divide-x divide-gray-100"
+                className="p-6 sm:p-8"
               >
-                {/* LEFT: Drop zone — always a proper target */}
-                <motion.div
-                  animate={{
-                    borderColor: isDragging ? 'rgb(59,130,246)' : 'transparent',
-                    backgroundColor: isDragging ? 'rgb(239,246,255)' : 'rgb(250,251,252)',
-                  }}
-                  transition={{ duration: 0.15 }}
-                  onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
-                  onDragLeave={() => setIsDragging(false)}
-                  onDrop={(e) => { e.preventDefault(); setIsDragging(false); handleFiles(e.dataTransfer.files) }}
-                  onClick={() => addMoreRef.current?.click()}
-                  className="group flex flex-col items-center justify-center gap-4 cursor-pointer p-8 text-center min-h-[220px] border-2 border-dashed border-gray-200 rounded-bl-[24px] lg:rounded-bl-[24px] rounded-br-none lg:rounded-tr-none transition-colors hover:border-blue-300 hover:bg-blue-50/40"
-                >
-                  <motion.div
-                    animate={{ scale: isDragging ? 1.1 : 1, y: isDragging ? -4 : 0 }}
-                    transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                    className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-gray-100 group-hover:ring-blue-200 transition-all"
-                  >
-                    <Upload className="h-6 w-6 text-blue-500" />
-                  </motion.div>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-700 group-hover:text-blue-700 transition-colors">
-                      {isDragging ? 'Release to add' : 'Add more files'}
-                    </p>
-                    <p className="mt-1 text-xs text-gray-400">
-                      PDF, Excel, or CSV
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-500 shadow-sm group-hover:border-blue-200 group-hover:text-blue-600 transition-all">
-                    Browse files
-                  </div>
-                </motion.div>
-
-                {/* RIGHT: Staged queue + sign-in gateway */}
-                <div className="flex flex-col p-6 sm:p-8 gap-5">
-                  {/* Header */}
+                <div className="flex flex-col gap-5">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">
@@ -313,8 +286,7 @@ export default function LandingUploadPanel({
                     </button>
                   </div>
 
-                  {/* File list */}
-                  <div className="space-y-1.5 max-h-52 overflow-y-auto pr-0.5">
+                  <div className="space-y-1.5">
                     <AnimatePresence initial={false}>
                       {files.map((file, index) => (
                         <motion.div
@@ -354,29 +326,129 @@ export default function LandingUploadPanel({
                     </div>
                   )}
 
-                  {/* Sign-in gateway */}
-                  <div className="mt-auto rounded-2xl bg-gradient-to-br from-blue-50 to-sky-50 border border-blue-100 p-5">
-                    <div className="flex items-start gap-3 mb-4">
-                      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-blue-100">
-                        <Lock className="h-4 w-4 text-blue-600" />
-                      </div>
+                  <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-sky-50 p-5">
+                    {isPreviewLoading ? (
                       <div>
-                        <p className="text-sm font-semibold text-gray-900">
-                          Ready to process
-                        </p>
-                        <p className="mt-0.5 text-xs text-gray-500 leading-relaxed">
-                          Your files are staged in your browser. Sign in to upload them to AutoFil and start extracting data — nothing leaves your device until then.
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                            <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                            {previewStageLabel}
+                          </div>
+                          <span className="text-xs font-semibold tabular-nums text-blue-700">
+                            {Math.max(0, Math.min(100, Math.round(previewProgress)))}%
+                          </span>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-blue-100">
+                          <motion.div
+                            className="h-full rounded-full bg-gradient-to-r from-blue-600 to-sky-400"
+                            initial={{ width: '0%' }}
+                            animate={{ width: `${Math.max(6, Math.min(100, previewProgress))}%` }}
+                            transition={{ duration: 0.2, ease: 'easeOut' }}
+                          />
+                        </div>
+                        <p className="mt-3 text-xs leading-relaxed text-gray-500">
+                          Building a one-file extraction preview from {previewFile?.name || 'your file'}...
                         </p>
                       </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={onContinue}
-                      className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 active:scale-[0.98] transition-all"
-                    >
-                      Sign in to process {files.length === 1 ? 'this file' : `these ${files.length} files`}
-                      <ArrowRight className="h-4 w-4" />
-                    </button>
+                    ) : previewError ? (
+                      <div>
+                        <div className="flex items-start gap-2">
+                          <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-700" />
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900">Preview extraction failed</p>
+                            <p className="mt-1 text-xs leading-relaxed text-amber-700">{previewError}</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={onContinue}
+                          className="mt-4 w-full inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 active:scale-[0.98] transition-all"
+                        >
+                          Sign in to continue
+                          <ArrowRight className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : previewResult && previewEntries.length > 0 ? (
+                      <div>
+                        <div className="mb-4 flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">
+                              Extracted Preview
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-gray-900 truncate">
+                              {previewFile?.name || previewResult.file_name}
+                            </p>
+                            {(previewMeta?.formType || previewMeta?.lineOfBusiness) && (
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {previewMeta?.formType && (
+                                  <span className="rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-medium text-gray-700">
+                                    {previewMeta.formType}
+                                  </span>
+                                )}
+                                {previewMeta?.lineOfBusiness && (
+                                  <span className="rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-medium text-blue-700">
+                                    {previewMeta.lineOfBusiness}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          <div className="rounded-full bg-white/80 px-3 py-1 text-[11px] font-semibold text-blue-700">
+                            {Math.round(previewResult.confidence * 100)}%
+                          </div>
+                        </div>
+
+                        <div className="space-y-2 rounded-xl border border-white/70 bg-white/80 p-4">
+                          {previewEntries.slice(0, 4).map((entry) => (
+                            <div key={entry.label} className="grid gap-1 sm:grid-cols-[112px_1fr] sm:items-start">
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                                {entry.label}
+                              </p>
+                              <p className="text-sm text-gray-800 break-words">
+                                {entry.value}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="mt-4 flex items-start gap-2 text-xs leading-relaxed text-gray-500">
+                          <Lock className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-gray-400" />
+                          Sign in to process all staged files, merge data, and continue in the workspace.
+                        </div>
+                        <button
+                          type="button"
+                          onClick={onContinue}
+                          className="mt-4 w-full inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 active:scale-[0.98] transition-all"
+                        >
+                          Sign in to continue
+                          <ArrowRight className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="flex items-start gap-3 mb-4">
+                          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-blue-100">
+                            <Lock className="h-4 w-4 text-blue-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900">
+                              Ready to process
+                            </p>
+                            <p className="mt-0.5 text-xs text-gray-500 leading-relaxed">
+                              Your file is staged in your browser. Sign in to upload it to AutoFil and continue.
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={onContinue}
+                          className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 active:scale-[0.98] transition-all"
+                        >
+                          Sign in to continue
+                          <ArrowRight className="h-4 w-4" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </motion.div>
@@ -521,7 +593,7 @@ export default function LandingUploadPanel({
                         onClick={onContinue}
                         className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 active:scale-[0.98] transition-all"
                       >
-                        Use this preview
+                        Sign in to continue
                         <ArrowRight className="h-4 w-4" />
                       </button>
                     </div>

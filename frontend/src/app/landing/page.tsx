@@ -278,6 +278,7 @@ export default function LandingPage() {
           onRemoveFile={removeFile}
           onClearFiles={clearFiles}
           onContinue={() => handleGetStarted('continue with this extraction preview')}
+          isAuthenticated={Boolean(user)}
           previewFile={previewFile}
           previewResult={previewResult}
           isPreviewLoading={isPreviewLoading}

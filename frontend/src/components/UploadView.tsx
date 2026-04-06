@@ -4,11 +4,13 @@
 import { Upload, FileText, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
 import { uploadPdf } from '@/lib/api-client'
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { useLandingUpload } from '@/contexts/LandingUploadContext'
 
 const LANDING_ACCEPT = '.pdf,.xlsx,.xls,.csv'
 
 export function UploadView() {
+  const router = useRouter()
   const { files: stagedLandingFiles, setFiles: setStagedLandingFiles, clearFiles: clearLandingFiles } = useLandingUpload()
   const [uploading, setUploading] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -27,6 +29,7 @@ export function UploadView() {
     setStatusMessage(source === 'landing' ? 'Uploading staged landing files...' : 'Uploading files...')
 
     const failedFiles: File[] = []
+    const successfulResults: Array<{ submission_id?: string; filename?: string }> = []
 
     try {
       for (let index = 0; index < files.length; index += 1) {
@@ -38,7 +41,8 @@ export function UploadView() {
         )
 
         try {
-          await uploadPdf(file)
+          const result = await uploadPdf(file)
+          successfulResults.push(result)
         } catch (err) {
           failedFiles.push(file)
           console.error('Upload failed for file', file.name, err)
@@ -58,6 +62,19 @@ export function UploadView() {
         setSuccess(true)
         if (source === 'landing') {
           clearLandingFiles()
+          const firstResult = successfulResults[0]
+          if (firstResult?.submission_id) {
+            const params = new URLSearchParams()
+            if (firstResult.filename) {
+              params.set('filename', firstResult.filename)
+            }
+            const query = params.toString()
+            router.push(
+              `/dashboard/documents/file/${firstResult.submission_id}${query ? `?${query}` : ''}`
+            )
+            return
+          }
+          router.push('/dashboard/submissions')
         }
       }
     } catch (err) {
@@ -66,7 +83,7 @@ export function UploadView() {
       setUploading(false)
       setStatusMessage(null)
     }
-  }, [clearLandingFiles, setStagedLandingFiles])
+  }, [clearLandingFiles, router, setStagedLandingFiles])
 
   useEffect(() => {
     if (!stagedLandingFiles.length) {

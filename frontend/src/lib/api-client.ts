@@ -106,8 +106,15 @@ export async function uploadPdf(
     submissionId?: string
   }
 ): Promise<SubmissionResponse> {
+  // Rehydrate the browser File before appending to FormData so
+  // landing-staged files survive the auth/route handoff reliably.
+  const uploadFile = new File([await file.arrayBuffer()], file.name, {
+    type: file.type || 'application/octet-stream',
+    lastModified: file.lastModified,
+  })
+
   const formData = new FormData()
-  formData.append('file', file)
+  formData.append('file', uploadFile)
   if (options?.clientId) {
     formData.append('client_id', options.clientId)
   }
@@ -131,9 +138,10 @@ export async function uploadPdf(
     throw new Error(response.data.error || 'Upload failed')
   }
 
-  const { submission_id, confidence,warnings,data,filename,
+  const payload = response.data.data ?? response.data
+  const { submission_id, confidence, warnings, data, filename,
     status,
-    uploaded_at,field_confidence } = response.data
+    uploaded_at, field_confidence } = payload
   return { submission_id, confidence,warnings,data,filename,
     status,
     uploaded_at, field_confidence  }

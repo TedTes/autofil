@@ -231,6 +231,9 @@ class SubmissionExtractionCoordinator:
                 self.merge_coordinator.merge_inputs(inputs_meta) or json_data
             )
             metadata["data"] = merged_data
+            # Persist the submission once before creating version history so
+            # brand-new uploads have a metadata record to version against.
+            self.repository.save(metadata)
             version_id = self.version_service.create_version(
                 submission_id=submission_id,
                 data=merged_data,

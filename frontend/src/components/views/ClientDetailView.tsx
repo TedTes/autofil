@@ -658,6 +658,7 @@ interface ClientDetailViewProps {
   clientName?: string
   initialSubmissionId?: string
   landingHandoff?: boolean
+  intent?: 'create-submission' | 'upload-files'
   onFileClick?: (submissionId: string, filename?: string, inputId?: string) => void
   onActionsReady?: (actions: ClientDetailActions | null) => void
 }
@@ -667,13 +668,16 @@ export function ClientDetailView({
   clientName,
   initialSubmissionId,
   landingHandoff,
+  intent,
   onFileClick,
   onActionsReady,
 }: ClientDetailViewProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const landingUploadStartedRef = useRef(false)
+  const intentHandledRef = useRef(false)
   const { files: landingFiles, clearFiles: clearLandingFiles } = useLandingUpload()
   const [isLandingSetupRunning, setIsLandingSetupRunning] = useState(false)
+  const [autoOpenUploadAfterCreate, setAutoOpenUploadAfterCreate] = useState(false)
 
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false)
   const {
@@ -984,7 +988,14 @@ const [isCreating, setIsCreating] = useState(false)
   const handleConfirmCreateSubmission = async (name: string) => {
     setIsCreating(true)
     try {
-      await createFolder(name)
+      const created = await createFolder(name)
+      if (autoOpenUploadAfterCreate && created?.submission_id) {
+        setAutoOpenUploadAfterCreate(false)
+        setActivePackageId(created.submission_id)
+        setTimeout(() => {
+          fileInputRef.current?.click()
+        }, 0)
+      }
       setIsCreateModalOpen(false)
     } catch (err) {
       console.error('Failed to create submission:', err)
@@ -1021,6 +1032,38 @@ const [isCreating, setIsCreating] = useState(false)
     handleCreateSubmissionClick,
     triggerFileUpload,
   ])
+
+  useEffect(() => {
+    if (landingHandoff || intentHandledRef.current || loading || !intent) {
+      return
+    }
+
+    if (intent === 'create-submission') {
+      intentHandledRef.current = true
+      setIsCreateModalOpen(true)
+      return
+    }
+
+    if (intent === 'upload-files') {
+      intentHandledRef.current = true
+      if (activePackageId) {
+        fileInputRef.current?.click()
+        return
+      }
+
+      if (packages.length > 0) {
+        const firstPackage = packages[0]
+        setActivePackageId(firstPackage.submission_id)
+        setTimeout(() => {
+          fileInputRef.current?.click()
+        }, 0)
+        return
+      }
+
+      setAutoOpenUploadAfterCreate(true)
+      setIsCreateModalOpen(true)
+    }
+  }, [activePackageId, intent, landingHandoff, loading, packages, setActivePackageId])
 
   const handleViewFile = (submissionId: string, filename?: string, inputId?: string) => {
     if (filename) {

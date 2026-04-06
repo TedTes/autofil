@@ -27,12 +27,13 @@ export type ViewDataMap = {
   'documents': undefined
   'upload': undefined
   'file-detail': { submissionId: string; filename?: string; inputId?: string }
-  'clients': undefined
+  'clients': { intent?: 'create-account' | 'create-submission' | 'upload-files' } | undefined
   'client-detail': {
     clientId: string
     clientName?: string
     initialSubmissionId?: string
     landingHandoff?: boolean
+    intent?: 'create-submission' | 'upload-files'
   }
   'submissions': { status?: string; clientId?: string } | undefined
   'templates': undefined

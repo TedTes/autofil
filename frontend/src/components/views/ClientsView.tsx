@@ -1,17 +1,23 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Users, Plus, Search, Building2, Calendar, AlertCircle, Loader2, FileStack, ChevronRight } from 'lucide-react'
 import type { Client } from '@/types'
 import { getClients, createClient as createClientApi } from '@/lib/api-client'
 import { CreateSubmissionModal } from '@/components'
 
 interface ClientsViewProps {
-  onAccountClick?: (clientId: string, clientName: string) => void
+  initialIntent?: 'create-account' | 'create-submission' | 'upload-files'
+  onAccountClick?: (
+    clientId: string,
+    clientName: string,
+    intent?: 'create-submission' | 'upload-files'
+  ) => void
   onCreateAccount?: () => void
 }
 
-export function ClientsView({ onAccountClick, onCreateAccount }: ClientsViewProps) {
+export function ClientsView({ initialIntent, onAccountClick, onCreateAccount }: ClientsViewProps) {
+  const createAccountIntentHandledRef = useRef(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [clients, setClients] = useState<Client[]>([])
   const [filteredClients, setFilteredClients] = useState<Client[]>([])
@@ -37,6 +43,18 @@ export function ClientsView({ onAccountClick, onCreateAccount }: ClientsViewProp
     }
     void fetchClients()
   }, [])
+
+  useEffect(() => {
+    if (initialIntent !== 'create-account') {
+      createAccountIntentHandledRef.current = false
+      return
+    }
+
+    if (!loading && !isCreateModalOpen && !createAccountIntentHandledRef.current) {
+      createAccountIntentHandledRef.current = true
+      setIsCreateModalOpen(true)
+    }
+  }, [initialIntent, isCreateModalOpen, loading])
 
   // Filter clients by search
   useEffect(() => {
@@ -81,7 +99,11 @@ export function ClientsView({ onAccountClick, onCreateAccount }: ClientsViewProp
   }
 
   const handleAccountClick = (client: Client) => {
-    onAccountClick?.(client.client_id, client.name)
+    const nextIntent =
+      initialIntent === 'create-submission' || initialIntent === 'upload-files'
+        ? initialIntent
+        : undefined
+    onAccountClick?.(client.client_id, client.name, nextIntent)
   }
 
   const hasClients = filteredClients.length > 0

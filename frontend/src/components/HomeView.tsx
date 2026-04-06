@@ -24,6 +24,7 @@ type HomeViewProps = {
   onGoToFile?: (submissionId: string, filename?: string, inputId?: string) => void
   onNavigateToClients?: () => void
   onNavigateToUpload?: () => void
+  onNavigateToNewAccount?: () => void
   onNavigateToSubmissions?: () => void
   onNavigateToNeedsReview?: () => void
   onNavigateToReadyToGenerate?: () => void
@@ -36,6 +37,7 @@ export function HomeView({
   onGoToFile,
   onNavigateToClients,
   onNavigateToUpload,
+  onNavigateToNewAccount,
   onNavigateToSubmissions,
   onNavigateToNeedsReview,
   onNavigateToReadyToGenerate,
@@ -202,7 +204,7 @@ export function HomeView({
             <ArrowUpRight className="h-3.5 w-3.5 flex-shrink-0 text-blue-300 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-white" />
           </button>
 
-          {/* Upload Files */}
+          {/* Upload To Submission */}
           <button
             onClick={onNavigateToUpload}
             className="group flex items-center gap-4 rounded-xl border border-gray-200 bg-white p-5 text-left shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md active:scale-[0.98] active:shadow-sm"
@@ -211,9 +213,9 @@ export function HomeView({
               <Upload className="h-4 w-4 text-gray-500 transition-colors group-hover:text-blue-600" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-gray-900">Upload Files</p>
+              <p className="text-sm font-semibold text-gray-900">Upload to Submission</p>
               <p className="mt-0.5 text-xs text-gray-500 leading-relaxed">
-                Upload documents without selecting an account
+                Choose an account or submission before adding files
               </p>
             </div>
             <ArrowUpRight className="h-3.5 w-3.5 flex-shrink-0 text-gray-300 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-gray-500" />
@@ -221,7 +223,7 @@ export function HomeView({
 
           {/* New Account */}
           <button
-            onClick={onNavigateToClients}
+            onClick={onNavigateToNewAccount}
             className="group flex items-center gap-4 rounded-xl border border-gray-200 bg-white p-5 text-left shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md active:scale-[0.98] active:shadow-sm"
           >
             <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100 transition-colors group-hover:bg-blue-50">

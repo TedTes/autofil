@@ -5,8 +5,7 @@
 
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
-import { Check, X, Calendar, DollarSign } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 
 interface InlineFieldEditorProps {
   fieldPath: string
@@ -19,8 +18,8 @@ interface InlineFieldEditorProps {
 }
 
 export function InlineFieldEditor({
-  fieldPath,
-  label,
+  fieldPath: _fieldPath,
+  label: _label,
   value,
   fieldType = 'text',
   onSave,
@@ -38,6 +37,16 @@ export function InlineFieldEditor({
     inputRef.current?.select()
   }, [])
 
+  const handleSave = useCallback(() => {
+    const parsed = parseValue(editValue, fieldType)
+    
+    if (parsed.isValid) {
+      onSave(parsed.value)
+    } else {
+      setIsValid(false)
+    }
+  }, [editValue, fieldType, onSave])
+
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -51,17 +60,7 @@ export function InlineFieldEditor({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [editValue, onCancel])
-
-  const handleSave = () => {
-    const parsed = parseValue(editValue, fieldType)
-    
-    if (parsed.isValid) {
-      onSave(parsed.value)
-    } else {
-      setIsValid(false)
-    }
-  }
+  }, [handleSave, onCancel])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setEditValue(e.target.value)
@@ -165,29 +164,19 @@ export function InlineFieldEditor({
   }
 
   return (
-    <div className={`flex items-start gap-2 ${className}`}>
-      <div className="flex-1 min-w-0">
+    <div
+      className={`min-w-0 ${className}`}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+          handleSave()
+        }
+      }}
+    >
+      <div className="min-w-0">
         {renderInput()}
         {!isValid && (
           <p className="text-xs text-red-600 mt-1">Invalid value format</p>
         )}
-      </div>
-
-      <div className="flex items-center gap-1 flex-shrink-0 mt-1">
-        <button
-          onClick={handleSave}
-          className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors"
-          title="Save (Enter)"
-        >
-          <Check className="w-4 h-4" />
-        </button>
-        <button
-          onClick={onCancel}
-          className="p-1 text-gray-600 hover:bg-gray-100 rounded transition-colors"
-          title="Cancel (Esc)"
-        >
-          <X className="w-4 h-4" />
-        </button>
       </div>
     </div>
   )
@@ -321,9 +310,6 @@ export function ClickableFieldValue({
     setIsEditing(false)
   }
 
-  // Format display value
-  const displayValue = formatDisplayValue(value, fieldType)
-
   if (isEditing) {
     return (
       <InlineFieldEditor
@@ -341,15 +327,10 @@ export function ClickableFieldValue({
   return (
     <div
       onClick={() => setIsEditing(true)}
-      className={`
-        px-2 py-1 rounded cursor-pointer
-        hover:bg-blue-50 hover:text-blue-700
-        transition-colors text-sm
-        ${className}
-      `}
+      className={`px-2 py-1 rounded cursor-pointer hover:bg-blue-50 hover:text-blue-700 transition-colors text-sm ${className}`}
       title="Click to edit"
     >
-      {displayValue}
+      {formatDisplayValue(value, fieldType)}
     </div>
   )
 }

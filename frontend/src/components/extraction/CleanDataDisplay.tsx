@@ -89,45 +89,11 @@ function formatConfidenceDisplay(confidence?: number): string {
   return `${((confidence || 0) * 100).toFixed(2)}%`
 }
 
-/**
- * Helper: Flatten nested entities structure
- */
-function flattenEntities(data: Record<string, unknown>): Record<string, unknown> {
-  const result: Record<string, unknown> = {}
-  
-  // Check if data has 'entities' key (canonical output format)
-  if ('entities' in data && typeof data.entities === 'object' && data.entities !== null) {
-    const entities = data.entities
-    
-    // Flatten each entity
-    Object.entries(entities).forEach(([entityName, entity]) => {
-      if (entity && typeof entity === 'object' && 'instances' in entity) {
-        const instances = entity.instances as unknown[]
-        
-        if (entity.cardinality === 'zero-to-one' && instances.length > 0) {
-          // Single value entity
-          result[entityName] = instances[0]
-        } else if (entity.cardinality === 'zero-to-many') {
-          // Array of values
-          result[entityName] = instances
-        }
-      } else {
-        // Direct value
-        result[entityName] = entity
-      }
-    })
-    
-    return result
-  }
-  
-  // If no entities structure, return as-is
-  return data
-}
-
 type SemanticFieldValue = {
   value: unknown
   confidence?: number
   tags?: string[]
+  sourcePath: string
 }
 
 type SemanticField = {
@@ -146,7 +112,22 @@ type SemanticSection = {
   fields: SemanticField[]
 }
 
-function normalizeValueEntry(valueEntry: unknown): SemanticFieldValue {
+type DisplayContext = {
+  root: Record<string, unknown>
+  basePath: string[]
+  semanticKey: 'semantic_sections' | 'semanticSections'
+}
+
+type FlatFieldEntry = {
+  rawValue: unknown
+  sourcePath: string
+}
+
+function joinPath(...segments: (string | number)[]): string {
+  return segments.map(String).join('.')
+}
+
+function normalizeValueEntry(valueEntry: unknown, sourcePath: string): SemanticFieldValue {
   if (valueEntry && typeof valueEntry === 'object') {
     const entryObj = valueEntry as Record<string, unknown>
     return {
@@ -154,34 +135,28 @@ function normalizeValueEntry(valueEntry: unknown): SemanticFieldValue {
       confidence:
         typeof entryObj.confidence === 'number' ? entryObj.confidence : undefined,
       tags: Array.isArray(entryObj.tags) ? (entryObj.tags as string[]) : undefined,
+      sourcePath,
     }
   }
 
-  return { value: valueEntry }
+  return { value: valueEntry, sourcePath }
 }
 
-function normalizeSemanticSections(raw: unknown): SemanticSection[] {
-  const sectionsArray: unknown =
-    (raw && typeof raw === 'object' && 'semantic_sections' in raw)
-      ? (raw as Record<string, unknown>).semantic_sections
-      : raw && typeof raw === 'object' && 'semanticSections' in raw
-      ? (raw as Record<string, unknown>).semanticSections
-      : Array.isArray(raw)
-      ? raw
-      : null
+function normalizeSemanticSections(context: DisplayContext): SemanticSection[] {
+  const sectionsArray = context.root[context.semanticKey]
 
   if (!Array.isArray(sectionsArray)) {
     return []
   }
 
   return sectionsArray
-    .map((sectionRaw) => {
+    .map((sectionRaw, sectionIndex) => {
       if (!sectionRaw || typeof sectionRaw !== 'object') return null
       const section = sectionRaw as Record<string, unknown> & { fields?: unknown }
       const rawFields = Array.isArray(section.fields) ? (section.fields as unknown[]) : null
       const fields = rawFields
         ? rawFields
-            .map((fieldRaw) => {
+            .map((fieldRaw, fieldIndex) => {
               if (!fieldRaw || typeof fieldRaw !== 'object') return null
               const field = fieldRaw as Record<string, unknown> & {
                 id?: string
@@ -196,16 +171,42 @@ function normalizeSemanticSections(raw: unknown): SemanticSection[] {
               const rawValues = Array.isArray(field.values)
                 ? (field.values as unknown[])
                 : null
-              const values = rawValues
-                ? rawValues.map((valueEntry) => normalizeValueEntry(valueEntry))
-                : field.value !== undefined
-                ? [{ value: field.value, confidence: field.confidence }]
+              const values = field.value !== undefined
+                ? [{
+                    value: field.value,
+                    confidence: field.confidence,
+                    sourcePath: joinPath(
+                      ...context.basePath,
+                      context.semanticKey,
+                      sectionIndex,
+                      'fields',
+                      fieldIndex,
+                      'value'
+                    ),
+                  }]
                 : []
+              const normalizedValues = rawValues
+                ? rawValues.map((valueEntry, valueIndex) =>
+                    normalizeValueEntry(
+                      valueEntry,
+                      joinPath(
+                        ...context.basePath,
+                        context.semanticKey,
+                        sectionIndex,
+                        'fields',
+                        fieldIndex,
+                        'values',
+                        valueIndex,
+                        'value'
+                      )
+                    )
+                  )
+                : values
               return {
                 id,
                 label,
                 type: field.type,
-                values,
+                values: normalizedValues,
               } as SemanticField
             })
             .filter(Boolean)
@@ -227,9 +228,13 @@ function normalizeSemanticSections(raw: unknown): SemanticSection[] {
     )
 }
 
-function resolveDisplayRoot(data: Record<string, unknown>): Record<string, unknown> {
+function resolveDisplayContext(data: Record<string, unknown>): DisplayContext | null {
   if ('semantic_sections' in data || 'semanticSections' in data || 'entities' in data) {
-    return data
+    return {
+      root: data,
+      basePath: [],
+      semanticKey: 'semanticSections' in data ? 'semanticSections' : 'semantic_sections',
+    }
   }
 
   const nested = data.data
@@ -239,10 +244,18 @@ function resolveDisplayRoot(data: Record<string, unknown>): Record<string, unkno
     !Array.isArray(nested) &&
     ('semantic_sections' in nested || 'semanticSections' in nested || 'entities' in nested)
   ) {
-    return nested as Record<string, unknown>
+    return {
+      root: nested as Record<string, unknown>,
+      basePath: ['data'],
+      semanticKey: 'semanticSections' in nested ? 'semanticSections' : 'semantic_sections',
+    }
   }
 
-  return data
+  return {
+    root: data,
+    basePath: [],
+    semanticKey: 'semantic_sections',
+  }
 }
 
 function isEditablePrimitive(value: unknown): value is string | number | boolean {
@@ -257,22 +270,74 @@ function formatValueForDisplay(value: unknown): ReactElement {
   return <StructuredValue value={value} />
 }
 
+function flattenEntities(data: Record<string, unknown>, basePath: string[]): Record<string, FlatFieldEntry> {
+  const result: Record<string, FlatFieldEntry> = {}
+  
+  if ('entities' in data && typeof data.entities === 'object' && data.entities !== null) {
+    const entities = data.entities as Record<string, unknown>
+    Object.entries(entities).forEach(([entityName, entity]) => {
+      if (
+        entity &&
+        typeof entity === 'object' &&
+        'instances' in entity &&
+        Array.isArray((entity as { instances?: unknown[] }).instances)
+      ) {
+        const entityRecord = entity as Record<string, unknown>
+        const instances = entityRecord.instances as unknown[]
+        if (entityRecord.cardinality === 'zero-to-one' && instances.length > 0) {
+          result[entityName] = {
+            rawValue: instances[0],
+            sourcePath: joinPath(...basePath, 'entities', entityName, 'instances', 0, 'value'),
+          }
+        } else if (entityRecord.cardinality === 'zero-to-many') {
+          result[entityName] = {
+            rawValue: instances,
+            sourcePath: joinPath(...basePath, 'entities', entityName, 'instances'),
+          }
+        }
+      } else {
+        result[entityName] = {
+          rawValue: entity,
+          sourcePath: joinPath(...basePath, 'entities', entityName),
+        }
+      }
+    })
+    
+    return result
+  }
+  
+  Object.entries(data).forEach(([key, value]) => {
+    result[key] = {
+      rawValue: value,
+      sourcePath: joinPath(...basePath, key),
+    }
+  })
+
+  return result
+}
+
 export function CleanDataDisplay({
   data,
   fieldConfidence = {},
   isEditable = false,
   onFieldChange,
 }: CleanDataDisplayProps) {
-  const displayRoot = useMemo(() => resolveDisplayRoot(data as Record<string, unknown>), [data])
+  const displayContext = useMemo(() => resolveDisplayContext(data as Record<string, unknown>), [data])
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
   const [expandedSemanticSections, setExpandedSemanticSections] = useState<Set<string>>(
     new Set()
   )
 
-  const semanticSections = useMemo(() => normalizeSemanticSections(displayRoot), [displayRoot])
+  const semanticSections = useMemo(
+    () => (displayContext ? normalizeSemanticSections(displayContext) : []),
+    [displayContext]
+  )
   
   // Flatten the data structure
-  const flatData = flattenEntities(displayRoot)
+  const flatData = useMemo(
+    () => (displayContext ? flattenEntities(displayContext.root, displayContext.basePath) : {}),
+    [displayContext]
+  )
   const hiddenKeys = new Set([
     'raw',
     'job_id',
@@ -445,7 +510,7 @@ export function CleanDataDisplay({
                                   onFieldChange &&
                                   isEditablePrimitive(entry.value) ? (
                                     <ClickableFieldValue
-                                      fieldPath={`semantic_sections.${sectionIndex}.fields.${fieldIndex}.values.${index}.value`}
+                                      fieldPath={entry.sourcePath}
                                       label={field.label}
                                       value={String(entry.value)}
                                       fieldType={
@@ -457,7 +522,7 @@ export function CleanDataDisplay({
                                       }
                                       onEdit={(newValue) =>
                                         onFieldChange(
-                                          `semantic_sections.${sectionIndex}.fields.${fieldIndex}.values.${index}.value`,
+                                          entry.sourcePath,
                                           field.type === 'number' && typeof entry.value === 'number'
                                             ? Number(newValue)
                                             : newValue
@@ -534,16 +599,16 @@ export function CleanDataDisplay({
               <div className="border-t border-gray-200 p-4">
                 <div className="space-y-3">
                   {Object.entries(sectionData).map(([fieldName, value]) => {
-                    const displayValue = extractFieldValue(value)
-                    const confidence = extractConfidence(value) || fieldConfidence[fieldName]
-                    const fieldPath = section === 'Entities' ? fieldName : `${section}.${fieldName}`
+                    const entry = value as FlatFieldEntry
+                    const displayValue = extractFieldValue(entry.rawValue)
+                    const confidence = extractConfidence(entry.rawValue) || fieldConfidence[fieldName]
                     
                     return (
                       <FieldRow
                         key={fieldName}
-                        fieldPath={fieldPath}
+                        fieldPath={entry.sourcePath}
                         fieldName={fieldName}
-                        rawValue={value}
+                        rawValue={entry.rawValue}
                         displayValue={displayValue}
                         confidence={confidence}
                         isEditable={isEditable}

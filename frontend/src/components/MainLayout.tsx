@@ -7,8 +7,6 @@ import {
   HelpCircle,
   Menu,
   X,
-  Save,
-  Loader2,
   TrendingUp,
   FileText,
   LayoutDashboard,
@@ -33,7 +31,7 @@ import {
 } from '@/lib/api-client'
 import { useAuth } from '@/contexts/AuthContext'
 
-import type { ViewType,  FileDetailActions,ViewDataMap, SubmissionStats } from '@/types'
+import type { ViewType, FileDetailActions, ViewDataMap, SubmissionStats } from '@/types'
 import type { ClientDetailActions } from '@/types'
 import { usePathname, useRouter, useSearchParams, type ReadonlyURLSearchParams } from 'next/navigation'
 
@@ -200,7 +198,7 @@ function mapPathToView(pathname: string, searchParams: URLSearchParams | Readonl
 export default function MainLayout({ children }: MainLayoutProps) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(false)
-  const [fileDetailActions, setFileDetailActions] = useState<FileDetailActions | null>(null)
+  const [, setFileDetailActions] = useState<FileDetailActions | null>(null)
   const [clientDetailActions, setClientDetailActions] = useState<ClientDetailActions | null>(null)
 
   //state to track closing animation
@@ -593,12 +591,6 @@ const handleMobileSidebarClose = () => {
               </div>
 
               <div className="flex items-center gap-3">
-                {currentView.type === 'file-detail' && fileDetailActions && (
-                  <>
-                    <FileDetailActions actions={fileDetailActions} />
-                    <div className="h-6 w-px bg-gray-200 flex-shrink-0" />
-                  </>
-                )}
                 {userLabel && (
                   <span className="hidden sm:block text-sm text-gray-500 font-medium truncate max-w-[180px]">
                     {userLabel}
@@ -871,41 +863,5 @@ function ClientDetailHeaderActions({ actions }: { actions: ClientDetailActions }
         )}
       </button>
     </div>
-  )
-}
-
-function FileDetailActions({ 
-  actions
-}: { 
-  actions: FileDetailActions
-}) {
-  if (!actions) return null
-  
-  const { hasChanges, isSaving, handleSave } = actions
-  
-  return (
-    <>
-      <button
-        onClick={handleSave}
-        disabled={!hasChanges || isSaving}
-        className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-          hasChanges && !isSaving
-            ? 'text-white bg-blue-600 hover:bg-blue-700'
-            : 'text-gray-400 bg-gray-100 cursor-not-allowed'
-        }`}
-      >
-        {isSaving ? (
-          <>
-            <Loader2 className="w-4 h-4 animate-spin" />
-            <span className="hidden sm:inline">Saving...</span>
-          </>
-        ) : (
-          <>
-            <Save className="w-4 h-4" />
-            <span className="hidden sm:inline">Save</span>
-          </>
-        )}
-      </button>
-    </>
   )
 }

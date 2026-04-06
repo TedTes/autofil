@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react'
-import { ArrowLeft, Download, Save, Loader2, Edit, Check, FileSpreadsheet } from 'lucide-react'
+import { ArrowLeft, Download, Save, Loader2, Edit, FileSpreadsheet } from 'lucide-react'
 import { PdfPreview } from '@/components/PdfPreview'
 import { ExtractionDataForm } from '@/components/ExtractionDataForm'
 import {
@@ -353,55 +353,58 @@ export function FileDetailView({
                   {specializedView?.description
                     ? specializedView.description
                     : isEditMode
-                    ? 'Edit the information below and click Save when done'
+                    ? 'Edit the information below and save when you are done.'
                     : 'Review the extracted information or click Edit to make changes'}
                 </p>
               </div>
 
               {/* Edit Mode Toggle Button */}
               {!specializedView?.disableEdit && (
-                <button
-                  onClick={handleToggleEditMode}
-                  disabled={isSavingChanges}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ml-4 ${
-                    isEditMode
-                      ? 'bg-blue-600 text-white hover:bg-blue-700'
-                      : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                  } disabled:opacity-50 disabled:cursor-not-allowed`}
-                >
+                <div className="flex items-center gap-2 ml-4">
                   {isEditMode ? (
                     <>
-                      <Check className="w-4 h-4" />
-                      <span className="hidden sm:inline">Done</span>
+                      <button
+                        onClick={() => void handleSaveChanges()}
+                        disabled={!hasUnsavedChanges || isSavingChanges}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                          hasUnsavedChanges && !isSavingChanges
+                            ? 'bg-blue-600 text-white hover:bg-blue-700'
+                            : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        }`}
+                      >
+                        {isSavingChanges ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span className="hidden sm:inline">Saving...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-4 h-4" />
+                            <span className="hidden sm:inline">Save</span>
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={handleToggleEditMode}
+                        disabled={isSavingChanges}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <span className="hidden sm:inline">Cancel</span>
+                      </button>
                     </>
                   ) : (
-                    <>
+                    <button
+                      onClick={handleToggleEditMode}
+                      disabled={isSavingChanges}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
                       <Edit className="w-4 h-4" />
                       <span className="hidden sm:inline">Edit</span>
-                    </>
+                    </button>
                   )}
-                </button>
+                </div>
               )}
             </div>
-
-            {/* Unsaved Changes Indicator */}
-            {!specializedView?.disableEdit && hasUnsavedChanges && (
-              <div className="mb-4 px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
-                  <span className="text-sm text-orange-800 font-medium">
-                    You have unsaved changes
-                  </span>
-                </div>
-                <button
-                  onClick={handleSaveChanges}
-                  disabled={isSavingChanges}
-                  className="text-sm text-orange-700 hover:text-orange-900 font-medium underline"
-                >
-                  Save now
-                </button>
-              </div>
-            )}
 
             {/* Extraction Data Form */}
             <div>
@@ -463,34 +466,8 @@ export function FileDetailView({
       fieldConfidence={extractedData.field_confidence}
       isEditable={isEditMode}
       onFieldChange={(fieldPath, value) => {
-        // Update the data
-        const keys = fieldPath.split('.')
-        const newData = { ...extractedData.data }
-        
-        // Navigate to nested property and set value
-        let current:Record<string,unknown> = newData
-        for (let i = 0; i < keys.length - 1; i++) {
-          const key = keys[i]
-    const next = current[key]
-    if (typeof next !== 'object' || next === null || Array.isArray(next)) {
-      const newObj: Record<string, unknown> = {}
-      current[key] = newObj
-      current = newObj
-    } else {
-      current = next as Record<string, unknown>
-    }
-      
-         
-          
-        }
-        const lastKey = keys[keys.length - 1]
-        current[lastKey] = value as unknown
-        
-        // Update state
-        setExtractedData({
-          ...extractedData,
-          data: newData
-        })
+        const newData = setAtPath(extractedData.data as Record<string, unknown>, fieldPath.split('.'), value)
+        setExtractedData({ ...extractedData, data: newData })
         setHasUnsavedChanges(true)
       }}
     />
@@ -515,6 +492,30 @@ export function FileDetailView({
 
     </div>
   )
+}
+
+/**
+ * Immutable nested update that correctly handles arrays at any depth.
+ * Path segments that are numeric strings are treated as array indices.
+ */
+function setAtPath(
+  obj: unknown,
+  keys: string[],
+  value: unknown
+): Record<string, unknown> {
+  function update(node: unknown, remaining: string[]): unknown {
+    if (remaining.length === 0) return value
+    const [key, ...rest] = remaining
+    if (Array.isArray(node)) {
+      const idx = parseInt(key, 10)
+      const copy = [...node]
+      copy[idx] = update(copy[idx], rest)
+      return copy
+    }
+    const map = (typeof node === 'object' && node !== null ? node : {}) as Record<string, unknown>
+    return { ...map, [key]: update(map[key], rest) }
+  }
+  return update(obj, keys) as Record<string, unknown>
 }
 
 // Loading State Component

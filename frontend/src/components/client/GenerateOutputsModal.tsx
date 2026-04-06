@@ -23,6 +23,22 @@ import { calculateTemplateReadiness } from '@/lib'
 import { fillMultipleTemplates } from '@/lib/api-client'
 import TemplateFillStatusCard from './TemplateFillStatusCard'
 
+function humanizeTemplateId(templateId: string): string {
+  const normalized = templateId.replace(/[_-]+/g, ' ').trim()
+  return normalized.replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
+function getTemplateDisplayName(template: Pick<OutputTemplate, 'id' | 'name' | 'formType' | 'version'>): string {
+  const name = template.name?.trim()
+  if (name && name !== template.id && !/^[a-z0-9]+(?:[_-][a-z0-9]+)+$/i.test(name)) {
+    return name
+  }
+
+  const formLabel = template.formType?.replace(/_/g, ' ') || humanizeTemplateId(template.id)
+  const versionLabel = template.version ? ` (${template.version.replace(/_/g, '/')})` : ''
+  return `${formLabel}${versionLabel}`.trim()
+}
+
 interface GenerateOutputsModalProps {
   isOpen: boolean
   onClose: () => void
@@ -55,6 +71,17 @@ export default function GenerateOutputsModal({
   const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null)
   const [batchResults, setBatchResults] = useState<MultipleFillResults | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  const selectedTemplates = useMemo(
+    () =>
+      availableTemplates
+        .filter(t => selectedTemplateIds.includes(t.id))
+        .map(t => ({
+          id: t.id,
+          name: getTemplateDisplayName(t),
+        })),
+    [availableTemplates, selectedTemplateIds]
+  )
 
   const estimateMergedFieldCount = useMemo(() => {
     if (!mergedData?.semantic_sections?.length) return 0
@@ -93,11 +120,6 @@ export default function GenerateOutputsModal({
   const unavailableOnly = templateAvailabilities.filter(t => !t.canGenerate)
   const selectedCount = selectedTemplateIds.length
   
-  // Get selected templates
-  const selectedTemplates = availableTemplates
-    .filter(t => selectedTemplateIds.includes(t.id))
-    .map(t => ({ id: t.id, name: t.name }))
-  
   // Handle generate click
   const handleGenerate = async () => {
     if (selectedTemplates.length === 0) return
@@ -115,7 +137,7 @@ export default function GenerateOutputsModal({
         selectedTemplates,
         {
           inputIds,
-          onTemplateStart: (templateId, templateName) => {
+          onTemplateStart: (templateId) => {
             setActiveTemplateId(templateId)
           },
           onProgress: (current, total, result) => {
@@ -130,7 +152,7 @@ export default function GenerateOutputsModal({
               return [...prev, result]
             })
           },
-          onTemplateComplete: (result) => {
+          onTemplateComplete: () => {
             setActiveTemplateId(null)
           }
         }
@@ -204,6 +226,7 @@ export default function GenerateOutputsModal({
           <TemplateProgressView
             templateResults={templateResults}
             activeTemplateId={activeTemplateId}
+            selectedCount={selectedTemplates.length}
             onDownload={handleDownload}
           />
         </ModalContent>
@@ -341,10 +364,12 @@ export default function GenerateOutputsModal({
 function TemplateProgressView({
   templateResults,
   activeTemplateId,
+  selectedCount,
   onDownload,
 }: {
   templateResults: TemplateFillResult[]
   activeTemplateId: string | null
+  selectedCount: number
   onDownload: (url: string, filename: string) => void
 }) {
   return (
@@ -354,7 +379,7 @@ function TemplateProgressView({
           Generating Documents...
         </h2>
         <p className="text-sm text-gray-500 mt-0.5">
-          Processing {templateResults.length} template{templateResults.length !== 1 ? 's' : ''}
+          Processing {selectedCount} template{selectedCount !== 1 ? 's' : ''}
         </p>
       </div>
       
@@ -405,9 +430,6 @@ function ResultsView({
                   results.failed === 0 ? 'text-green-600' : 'text-yellow-600'
                 }`} />
               </div>
-              <span className="text-sm font-medium text-gray-900 hidden sm:inline">
-                {results.successful} document{results.successful !== 1 ? 's' : ''}
-              </span>
             </div>
 
             {/* Document Tabs - styled as labels with divider */}
@@ -572,7 +594,7 @@ function TemplateSelectionCard({
           <div className="flex items-start justify-between gap-3 mb-2">
             <div className="flex-1 min-w-0">
               <h4 className="text-sm font-semibold text-gray-900 truncate">
-                {template.name}
+                {getTemplateDisplayName(template)}
               </h4>
               <p className="text-xs text-gray-500 truncate mt-0.5">
                 {template.description}

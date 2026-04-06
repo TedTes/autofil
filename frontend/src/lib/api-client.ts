@@ -297,6 +297,7 @@ export async function fillPdf(
       if (error.message.includes('404')) {
         throw new Error('Template not found')
       }
+      throw error
     }
     handleApiError(error)
   }

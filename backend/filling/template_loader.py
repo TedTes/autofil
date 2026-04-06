@@ -141,7 +141,7 @@ class TemplateLoader:
         # template assets.
         config = cls._load_from_local(template_id, version)
         if config:
-            return config
+            return cls._ensure_pdf_asset(config, version)
 
         # 2. Try Supabase storage if available
         config = cls._load_from_storage(template_id, version)
@@ -158,7 +158,7 @@ class TemplateLoader:
         if alias_template_id and alias_template_id != template_id:
             config = cls._load_from_local(alias_template_id, version)
             if config:
-                return config
+                return cls._ensure_pdf_asset(config, version)
             config = cls._load_from_storage(alias_template_id, version)
             if config:
                 return config
@@ -168,6 +168,75 @@ class TemplateLoader:
                     return config
 
         return None
+
+    @classmethod
+    def _ensure_pdf_asset(cls, config: TemplateConfig, version: str) -> TemplateConfig:
+        """
+        Local YAML/JSON configs are valid even when the actual fillable PDF lives
+        in Supabase storage. If the resolved local pdf_url is missing, attempt to
+        hydrate that asset from storage and cache it to a temp location.
+        """
+        pdf_url = getattr(config, "pdf_url", None)
+        if not pdf_url:
+            return cls._hydrate_pdf_from_storage(config, version) or config
+
+        if isinstance(pdf_url, str) and pdf_url.startswith(("http://", "https://")):
+            return config
+
+        pdf_path = Path(str(pdf_url))
+        if pdf_path.exists():
+            return config
+
+        hydrated = cls._hydrate_pdf_from_storage(config, version)
+        return hydrated or config
+
+    @classmethod
+    def _hydrate_pdf_from_storage(cls, config: TemplateConfig, version: str) -> Optional[TemplateConfig]:
+        service = getattr(cls, "storage_service", None)
+        if not service or not getattr(service, "enabled", False):
+            return None
+
+        pdf_bytes = None
+        raw_pdf_storage_path = config.raw.get("pdf_storage_path")
+        candidate_paths: List[str] = []
+
+        if isinstance(raw_pdf_storage_path, str) and raw_pdf_storage_path.strip():
+            candidate_paths.append(raw_pdf_storage_path.strip("/"))
+
+        if version and version != "latest":
+            candidate_paths.append(
+                service.build_path(cls.storage_templates_root, config.template_id, version, "template.pdf")
+            )
+
+        candidate_paths.append(
+            service.build_path(cls.storage_templates_root, config.template_id, "template.pdf")
+        )
+
+        seen: set[str] = set()
+        for storage_path in candidate_paths:
+            normalized_path = storage_path.strip("/")
+            if not normalized_path or normalized_path in seen:
+                continue
+            seen.add(normalized_path)
+            pdf_bytes = service.download_file(normalized_path)
+            if pdf_bytes:
+                break
+
+        if not pdf_bytes:
+            return None
+
+        cache_dir = Path(tempfile.gettempdir()) / "template_cache" / config.template_id
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        pdf_local_path = cache_dir / "template.pdf"
+        try:
+            with open(pdf_local_path, "wb") as handle:
+                handle.write(pdf_bytes)
+        except Exception as exc:
+            logger.warning("template_loader failed to cache storage PDF for %s: %s", config.template_id, exc)
+            return None
+
+        config.pdf_url = str(pdf_local_path)
+        return config
 
     @classmethod
     def _resolve_template_alias(cls, template_id: str) -> Optional[str]:

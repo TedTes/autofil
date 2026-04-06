@@ -1,10 +1,10 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
-import { Users, Plus, Search, Building2, Calendar, AlertCircle, Loader2, FileStack, ChevronRight } from 'lucide-react'
+import { Users, Plus, Search, Building2, Calendar, AlertCircle, Loader2, FileStack, ChevronRight, Trash2 } from 'lucide-react'
 import type { Client } from '@/types'
-import { getClients, createClient as createClientApi } from '@/lib/api-client'
-import { CreateSubmissionModal } from '@/components'
+import { getClients, createClient as createClientApi, deleteClient as deleteClientApi } from '@/lib/api-client'
+import { CreateSubmissionModal, DeleteConfirmationModal } from '@/components'
 
 interface ClientsViewProps {
   initialIntent?: 'create-account' | 'create-submission' | 'upload-files'
@@ -25,6 +25,8 @@ export function ClientsView({ initialIntent, onAccountClick, onCreateAccount }: 
   const [error, setError] = useState<string | null>(null)
   const [isCreating, setIsCreating] = useState(false)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [clientPendingDelete, setClientPendingDelete] = useState<Client | null>(null)
+  const [isDeletingClient, setIsDeletingClient] = useState(false)
 
   // Load clients on mount
   useEffect(() => {
@@ -106,6 +108,21 @@ export function ClientsView({ initialIntent, onAccountClick, onCreateAccount }: 
     onAccountClick?.(client.client_id, client.name, nextIntent)
   }
 
+  const handleDeleteAccount = async () => {
+    if (!clientPendingDelete || isDeletingClient) return
+    try {
+      setIsDeletingClient(true)
+      await deleteClientApi(clientPendingDelete.client_id)
+      setClients((prev) => prev.filter((client) => client.client_id !== clientPendingDelete.client_id))
+      setFilteredClients((prev) => prev.filter((client) => client.client_id !== clientPendingDelete.client_id))
+      setClientPendingDelete(null)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete account')
+    } finally {
+      setIsDeletingClient(false)
+    }
+  }
+
   const hasClients = filteredClients.length > 0
 
   return (
@@ -170,10 +187,18 @@ export function ClientsView({ initialIntent, onAccountClick, onCreateAccount }: 
         ) : hasClients ? (
           <div className="grid gap-4">
             {filteredClients.map((client) => (
-              <button
+              <div
                 key={client.client_id}
+                role="button"
+                tabIndex={0}
                 onClick={() => handleAccountClick(client)}
-                className="bg-white border border-gray-200 rounded-xl p-6 text-left hover:border-blue-300 hover:shadow-md transition-all duration-200 group"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    handleAccountClick(client)
+                  }
+                }}
+                className="bg-white border border-gray-200 rounded-xl p-6 text-left hover:border-blue-300 hover:shadow-md transition-all duration-200 group cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4 flex-1 min-w-0">
@@ -200,10 +225,22 @@ export function ClientsView({ initialIntent, onAccountClick, onCreateAccount }: 
                     </div>
                   </div>
 
-                  {/* Arrow Icon */}
-                  <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all flex-shrink-0 ml-4" />
+                  <div className="ml-4 flex items-center gap-2 flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setClientPendingDelete(client)
+                      }}
+                      className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                      aria-label={`Delete ${client.name}`}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                    <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all" />
+                  </div>
                 </div>
-              </button>
+              </div>
             ))}
           </div>
         ) : (
@@ -272,6 +309,20 @@ export function ClientsView({ initialIntent, onAccountClick, onCreateAccount }: 
             <Users className="w-5 h-5 text-blue-600" />
           </div>
         }
+      />
+      <DeleteConfirmationModal
+        isOpen={Boolean(clientPendingDelete)}
+        onClose={() => {
+          if (!isDeletingClient) {
+            setClientPendingDelete(null)
+          }
+        }}
+        onConfirm={handleDeleteAccount}
+        title="Delete Account"
+        message="Delete this account and all submissions under it?"
+        itemName={clientPendingDelete?.name}
+        deleteType="account"
+        isDeleting={isDeletingClient}
       />
 </div>
   )

@@ -577,6 +577,17 @@ export async function createClient(name: string): Promise<Client> {
   }
 }
 
+export async function deleteClient(clientId: string): Promise<void> {
+  try {
+    const response = await api.delete(`/clients/${clientId}`)
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to delete client')
+    }
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
 /**
  * List submissions with pagination/status filters.
  */

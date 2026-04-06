@@ -16,7 +16,7 @@ interface DeleteConfirmationModalProps {
   title: string
   message: string
   itemName?: string
-  deleteType?: 'file' |'input' | 'output' | 'submission' 
+  deleteType?: 'file' |'input' | 'output' | 'submission' | 'account'
   isDeleting?: boolean
 }
 
@@ -82,7 +82,11 @@ export function DeleteConfirmationModal({
           {itemName && (
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4">
               <p className="text-sm text-gray-600 mb-1">
-                {deleteType === 'submission' ? 'Submission:' : 'File:'}
+                {deleteType === 'submission'
+                  ? 'Submission:'
+                  : deleteType === 'account'
+                    ? 'Account:'
+                    : 'File:'}
               </p>
               <p className="text-sm font-medium text-gray-900 break-all">
                 {itemName}
@@ -94,6 +98,7 @@ export function DeleteConfirmationModal({
             <p className="text-sm text-amber-800">
               <strong>Warning:</strong> This action cannot be undone.
               {deleteType === 'submission' && ' All files in this submission will be permanently deleted.'}
+              {deleteType === 'account' && ' All submissions and generated documents under this account will be permanently deleted.'}
             </p>
           </div>
         </div>

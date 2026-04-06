@@ -2,12 +2,13 @@
 'use client'
 
 import { Upload, FileText, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
-import { uploadPdf } from '@/lib/api-client'
+import { createClient, getClients, uploadPdf } from '@/lib/api-client'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLandingUpload } from '@/contexts/LandingUploadContext'
 
 const LANDING_ACCEPT = '.pdf,.xlsx,.xls,.csv'
+const LANDING_DEFAULT_CLIENT_NAME = 'My Workspace'
 
 export function UploadView() {
   const router = useRouter()
@@ -17,8 +18,27 @@ export function UploadView() {
   const [error, setError] = useState<string | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
+  const [landingTransitionActive, setLandingTransitionActive] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const autoUploadStartedRef = useRef(false)
+  const isLandingHandoff = landingTransitionActive || stagedLandingFiles.length > 0 || (uploading && autoUploadStartedRef.current)
+
+  const getOrCreateLandingClient = useCallback(async () => {
+    const clients = await getClients()
+    const exactMatch = clients.find(
+      (client) => client.name.trim().toLowerCase() === LANDING_DEFAULT_CLIENT_NAME.toLowerCase()
+    )
+
+    if (exactMatch) {
+      return exactMatch
+    }
+
+    if (clients.length === 0) {
+      return createClient(LANDING_DEFAULT_CLIENT_NAME)
+    }
+
+    return clients[0]
+  }, [])
 
   const uploadFiles = useCallback(async (files: File[], source: 'manual' | 'landing') => {
     if (!files.length) return
@@ -26,22 +46,36 @@ export function UploadView() {
     setUploading(true)
     setError(null)
     setSuccess(false)
-    setStatusMessage(source === 'landing' ? 'Uploading staged landing files...' : 'Uploading files...')
+    setStatusMessage(source === 'landing' ? 'Preparing your workspace...' : 'Uploading files...')
+    if (source === 'landing') {
+      setLandingTransitionActive(true)
+    }
 
     const failedFiles: File[] = []
     const successfulResults: Array<{ submission_id?: string; filename?: string }> = []
+    let landingClient: Awaited<ReturnType<typeof getOrCreateLandingClient>> | null = null
 
     try {
+      if (source === 'landing') {
+        landingClient = await getOrCreateLandingClient()
+      }
+
       for (let index = 0; index < files.length; index += 1) {
         const file = files[index]
         setStatusMessage(
           source === 'landing'
-            ? `Uploading ${index + 1} of ${files.length}: ${file.name}`
+            ? `Processing ${index + 1} of ${files.length}: ${file.name}`
             : `Uploading ${file.name}`
         )
 
         try {
-          const result = await uploadPdf(file)
+          const result = await uploadPdf(
+            file,
+            undefined,
+            source === 'landing' && landingClient
+              ? { clientId: landingClient.client_id }
+              : undefined
+          )
           successfulResults.push(result)
         } catch (err) {
           failedFiles.push(file)
@@ -63,14 +97,13 @@ export function UploadView() {
         if (source === 'landing') {
           clearLandingFiles()
           const firstResult = successfulResults[0]
-          if (firstResult?.submission_id) {
+          if (firstResult?.submission_id && landingClient) {
             const params = new URLSearchParams()
-            if (firstResult.filename) {
-              params.set('filename', firstResult.filename)
-            }
+            params.set('name', landingClient.name)
+            params.set('submission', firstResult.submission_id)
             const query = params.toString()
             router.push(
-              `/dashboard/documents/file/${firstResult.submission_id}${query ? `?${query}` : ''}`
+              `/dashboard/clients/${landingClient.client_id}${query ? `?${query}` : ''}`
             )
             return
           }
@@ -83,7 +116,7 @@ export function UploadView() {
       setUploading(false)
       setStatusMessage(null)
     }
-  }, [clearLandingFiles, router, setStagedLandingFiles])
+  }, [clearLandingFiles, getOrCreateLandingClient, router, setStagedLandingFiles])
 
   useEffect(() => {
     if (!stagedLandingFiles.length) {
@@ -96,6 +129,7 @@ export function UploadView() {
     }
 
     autoUploadStartedRef.current = true
+    setLandingTransitionActive(true)
     void uploadFiles(stagedLandingFiles, 'landing')
   }, [stagedLandingFiles, uploadFiles, uploading])
 
@@ -118,6 +152,71 @@ export function UploadView() {
 
   return (
     <div className="max-w-2xl py-6 space-y-4">
+      {isLandingHandoff ? (
+        <div className="flex min-h-[70vh] items-center">
+          <div className="w-full rounded-3xl border border-blue-100 bg-white p-10 shadow-sm">
+            <div className="mx-auto max-w-xl text-center">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+                {uploading ? (
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                ) : success ? (
+                  <CheckCircle2 className="h-8 w-8" />
+                ) : error ? (
+                  <AlertCircle className="h-8 w-8 text-red-500" />
+                ) : (
+                  <Upload className="h-8 w-8" />
+                )}
+              </div>
+
+              <div className="mt-6 space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-600">
+                  Setting Up Your Submission
+                </p>
+                <h1 className="text-3xl font-semibold text-gray-900">
+                  {uploading
+                    ? 'Processing your first document'
+                    : success
+                      ? 'Your document is ready'
+                      : error
+                        ? 'We could not finish the handoff'
+                        : 'Preparing your workspace'}
+                </h1>
+                <p className="text-sm text-gray-600">
+                  {uploading
+                    ? statusMessage || 'Uploading your document and creating your workspace.'
+                    : success
+                      ? 'Taking you to your new submission now.'
+                      : error
+                        ? error
+                        : 'Creating a workspace for your uploaded document.'}
+                </p>
+              </div>
+
+              {stagedLandingFiles.length > 0 && (
+                <div className="mt-8 rounded-2xl border border-gray-200 bg-gray-50 px-5 py-4 text-left">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500">
+                    First Submission
+                  </p>
+                  <ul className="mt-3 space-y-2">
+                    {stagedLandingFiles.map((file) => (
+                      <li
+                        key={`${file.name}-${file.size}-${file.lastModified}`}
+                        className="flex items-center justify-between rounded-xl bg-white px-4 py-3 text-sm text-gray-700"
+                      >
+                        <span className="truncate pr-4">{file.name}</span>
+                        <span className="shrink-0 text-xs text-gray-500">
+                          {Math.max(1, Math.round(file.size / 1024))} KB
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
 
       {/* Header */}
       <div>
@@ -211,6 +310,8 @@ export function UploadView() {
         <p className="text-xs text-gray-400 px-1">
           To associate a file with a specific account, open the account and upload from there.
         </p>
+      )}
+        </>
       )}
 
       <input

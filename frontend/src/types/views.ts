@@ -28,7 +28,12 @@ export type ViewDataMap = {
   'upload': undefined
   'file-detail': { submissionId: string; filename?: string; inputId?: string }
   'clients': undefined
-  'client-detail': { clientId: string; clientName?: string; initialSubmissionId?: string }
+  'client-detail': {
+    clientId: string
+    clientName?: string
+    initialSubmissionId?: string
+    landingHandoff?: boolean
+  }
   'submissions': { status?: string; clientId?: string } | undefined
   'templates': undefined
   'reports': undefined

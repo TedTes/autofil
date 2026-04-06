@@ -106,6 +106,7 @@ function buildPathFromView(type: ViewType, data?: ViewStateData): string {
       const params = new URLSearchParams()
       if (detail?.clientName) params.set('name', detail.clientName)
       if (detail?.initialSubmissionId) params.set('submission', detail.initialSubmissionId)
+      if (detail?.landingHandoff) params.set('landing', '1')
       const query = params.toString()
       return `/dashboard/clients/${clientId}${query ? `?${query}` : ''}`
     }
@@ -165,9 +166,10 @@ function mapPathToView(pathname: string, searchParams: URLSearchParams | Readonl
       if (rest[0]) {
         const name = searchParams.get('name') || undefined
         const initialSubmissionId = searchParams.get('submission') || undefined
+        const landingHandoff = searchParams.get('landing') === '1'
         return {
           type: 'client-detail',
-          data: { clientId: rest[0], clientName: name, initialSubmissionId },
+          data: { clientId: rest[0], clientName: name, initialSubmissionId, landingHandoff },
           breadcrumbs: ['Dashboard', 'Accounts', name || 'Account'],
         }
       }
@@ -675,6 +677,7 @@ const handleMobileSidebarClose = () => {
     clientId={currentView.data.clientId}
     clientName={('clientName' in currentView.data ? currentView.data.clientName : undefined)}
     initialSubmissionId={('initialSubmissionId' in currentView.data ? currentView.data.initialSubmissionId : undefined)}
+    landingHandoff={('landingHandoff' in currentView.data ? currentView.data.landingHandoff : undefined)}
     onFileClick={handleFileClick}
     onActionsReady={setClientDetailActions}
   />

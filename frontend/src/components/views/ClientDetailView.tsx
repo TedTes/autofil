@@ -6,6 +6,7 @@ import { fillPdf, downloadPDF, updateSubmissionData} from '@/lib/api-client'
 import {GenerateOutputsModal,UploadOrMergedDataPanel} from "@/components/client"
 import type { ClientSubmissionPackage,UploadedRow, MergedData, ClientDetailActions  } from '@/types'
 import { CreateSubmissionModal,DeleteConfirmationModal } from '@/components'
+import { useLandingUpload } from '@/contexts/LandingUploadContext'
 import {
   Calendar,
   FileText,
@@ -656,6 +657,7 @@ interface ClientDetailViewProps {
   clientId: string
   clientName?: string
   initialSubmissionId?: string
+  landingHandoff?: boolean
   onFileClick?: (submissionId: string, filename?: string, inputId?: string) => void
   onActionsReady?: (actions: ClientDetailActions | null) => void
 }
@@ -664,10 +666,14 @@ export function ClientDetailView({
   clientId,
   clientName,
   initialSubmissionId,
+  landingHandoff,
   onFileClick,
   onActionsReady,
 }: ClientDetailViewProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const landingUploadStartedRef = useRef(false)
+  const { files: landingFiles, clearFiles: clearLandingFiles } = useLandingUpload()
+  const [isLandingSetupRunning, setIsLandingSetupRunning] = useState(false)
 
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false)
   const {
@@ -832,6 +838,59 @@ const [isCreating, setIsCreating] = useState(false)
       setTemplates(libraryTemplates)
     }
   }, [libraryTemplates, setTemplates])
+
+  useEffect(() => {
+    if (!landingHandoff || landingUploadStartedRef.current || landingFiles.length === 0 || loading) {
+      return
+    }
+
+    landingUploadStartedRef.current = true
+    setIsLandingSetupRunning(true)
+
+    void (async () => {
+      try {
+        const createdSubmission =
+          packages.length > 0
+            ? packages[0]
+            : await createFolder(`Submission ${packages.length + 1}`)
+
+        const targetSubmissionId = createdSubmission?.submission_id
+        const targetSubmissionName = createdSubmission?.name || 'Submission 1'
+
+        if (!targetSubmissionId) {
+          throw new Error('Unable to create a submission for the landing upload.')
+        }
+
+        setActivePackageId(targetSubmissionId)
+
+        const result = await uploadFilesToActiveFolder(landingFiles, {
+          submissionId: targetSubmissionId,
+          packageName: targetSubmissionName,
+        })
+
+        if (result?.successCount) {
+          clearLandingFiles()
+        } else {
+          landingUploadStartedRef.current = false
+        }
+      } catch (err) {
+        console.error('Landing handoff upload failed:', err)
+        landingUploadStartedRef.current = false
+      } finally {
+        setIsLandingSetupRunning(false)
+      }
+    })()
+  }, [
+    clearLandingFiles,
+    createFolder,
+    landingFiles,
+    landingHandoff,
+    loading,
+    packages,
+    setActivePackageId,
+    uploadFilesToActiveFolder,
+  ])
+
   const handleSaveMergedData = useCallback(async (nextMergedData: MergedData) => {
     if (!activePackageId) return
     await updateSubmissionData(activePackageId, nextMergedData as unknown as Record<string, unknown>)
@@ -1048,11 +1107,23 @@ const [isCreating, setIsCreating] = useState(false)
             </div>
           ) : (
       <div className="text-center py-12">
-      <FolderOpen className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-      <p className="text-sm text-gray-500 mb-1">No submissions yet</p>
-      <p className="text-xs text-gray-400">
-        Create a submission to organize your files
-      </p>
+      {isLandingSetupRunning ? (
+        <>
+          <Loader2 className="w-12 h-12 text-blue-500 mx-auto mb-3 animate-spin" />
+          <p className="text-sm text-gray-700 mb-1">Setting up your first submission</p>
+          <p className="text-xs text-gray-500">
+            Your landing upload is being added to this workspace
+          </p>
+        </>
+      ) : (
+        <>
+          <FolderOpen className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+          <p className="text-sm text-gray-500 mb-1">No submissions yet</p>
+          <p className="text-xs text-gray-400">
+            Create a submission to organize your files
+          </p>
+        </>
+      )}
     </div>
           )
     ) : (

@@ -8,7 +8,9 @@ import LandingUploadPanel from '@/components/landing/LandingUploadPanel'
 import AuthPromptModal from '@/components/auth/AuthPromptModal'
 import { useAuth } from '@/contexts/AuthContext'
 import { useLandingUpload } from '@/contexts/LandingUploadContext'
-import { previewExtractLandingFile } from '@/lib/api-client'
+import { createClient, getClients, previewExtractLandingFile } from '@/lib/api-client'
+
+const LANDING_DEFAULT_CLIENT_NAME = 'My Workspace'
 
 export default function LandingPage() {
   const router = useRouter()
@@ -34,6 +36,23 @@ export default function LandingPage() {
   const inFlightPreviewKeyRef = useRef<string | null>(null)
   const settledPreviewKeyRef = useRef<string | null>(null)
 
+  const getOrCreateLandingClient = useCallback(async () => {
+    const clients = await getClients()
+    const exactMatch = clients.find(
+      (client) => client.name.trim().toLowerCase() === LANDING_DEFAULT_CLIENT_NAME.toLowerCase()
+    )
+
+    if (exactMatch) {
+      return exactMatch
+    }
+
+    if (clients.length === 0) {
+      return createClient(LANDING_DEFAULT_CLIENT_NAME)
+    }
+
+    return clients[0]
+  }, [])
+
   const previewFile = useMemo(() => {
     if (previewFileIndex === null) return null
     return files[previewFileIndex] ?? null
@@ -44,15 +63,24 @@ export default function LandingPage() {
     return `${previewFile.name}:${previewFile.size}:${previewFile.lastModified}`
   }, [previewFile])
 
-  const handleGetStarted = useCallback((actionLabel = 'start your workspace') => {
+  const handleGetStarted = useCallback(async (actionLabel = 'start your workspace') => {
     if (user) {
-      router.push(hasFiles ? '/dashboard/upload' : '/dashboard')
+      if (!hasFiles) {
+        router.push('/dashboard')
+        return
+      }
+
+      const landingClient = await getOrCreateLandingClient()
+      const params = new URLSearchParams()
+      params.set('name', landingClient.name)
+      params.set('landing', '1')
+      router.push(`/dashboard/clients/${landingClient.client_id}?${params.toString()}`)
       return
     }
 
     setPendingActionLabel(actionLabel)
     setIsAuthPromptOpen(true)
-  }, [hasFiles, router, user])
+  }, [getOrCreateLandingClient, hasFiles, router, user])
 
   useEffect(() => {
     if (!previewFile || !previewKey || user) {
@@ -169,10 +197,19 @@ export default function LandingPage() {
           setPendingActionLabel(null)
           setIsAuthPromptOpen(false)
         }}
-        onAuthenticated={() => {
+        onAuthenticated={async () => {
           setPendingActionLabel(null)
           setIsAuthPromptOpen(false)
-          router.push(hasFiles ? '/dashboard/upload' : '/dashboard')
+          if (!hasFiles) {
+            router.push('/dashboard')
+            return
+          }
+
+          const landingClient = await getOrCreateLandingClient()
+          const params = new URLSearchParams()
+          params.set('name', landingClient.name)
+          params.set('landing', '1')
+          router.push(`/dashboard/clients/${landingClient.client_id}?${params.toString()}`)
         }}
       />
 

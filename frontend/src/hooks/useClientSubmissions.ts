@@ -553,6 +553,7 @@ useEffect(() => {
       if (created?.submission_id) {
         setActivePackageId(created.submission_id)
       }
+      return created
     } catch (err) {
       setWorkflowError(err instanceof Error ? err.message : 'Failed to create folder')
       throw err
@@ -560,9 +561,13 @@ useEffect(() => {
   }
 
   // ---- upload into active folder ----
-  const uploadFilesToActiveFolder = async (files: File[]) => {
+  const uploadFilesToActiveFolder = async (
+    files: File[],
+    options?: { submissionId?: string; packageName?: string }
+  ) => {
     if (!files.length) return
-    if (!activePackageId) {
+    const targetSubmissionId = options?.submissionId || activePackageId
+    if (!targetSubmissionId) {
       setWorkflowError('Create or select a folder before uploading.')
       return
     }
@@ -572,10 +577,10 @@ useEffect(() => {
     setWorkflowError(null)
     setStatusText(null)
 
-  const currentPackage = resolvedPackages.find(pkg => pkg.submission_id === activePackageId)
-  const packageName = currentPackage?.name ?? 'selected package'
+    const currentPackage = resolvedPackages.find(pkg => pkg.submission_id === targetSubmissionId)
+    const packageName = options?.packageName || currentPackage?.name || 'selected package'
     let successCount = 0
-  let failureCount = 0
+    let failureCount = 0
     for (const file of files) {
       const tempId = `tmp-${clientId}-${Date.now()}-${tempIdRef.current++}`
       const uploadedAt = new Date().toISOString()
@@ -599,55 +604,55 @@ useEffect(() => {
             setStatusText(`Uploading ${file.name} (${progress}%)`)
             updateRow(tempId, { uploadPercent: progress,status: 'uploading' })
           },
-          { clientId, submissionId: activePackageId }
+          { clientId, submissionId: targetSubmissionId }
         )
 
-      const extractionPayload = result?.data as Record<string, unknown> | undefined
-      const payloadConfidence =
-        typeof extractionPayload?.['confidence'] === 'number'
-          ? (extractionPayload['confidence'] as number)
-          : undefined
+        const extractionPayload = result?.data as Record<string, unknown> | undefined
+        const payloadConfidence =
+          typeof extractionPayload?.['confidence'] === 'number'
+            ? (extractionPayload['confidence'] as number)
+            : undefined
 
-      setUploadedRows(prev =>
-        prev.map(row =>
-          row.submissionId === tempId
-            ? {
-                ...row,
-                submissionId: result.submission_id,
-                uploadPercent: 100,
-                status: result ? 'extracted' : 'uploaded',
-                extractionStatus: result ? 'extracted' : 'pending',
-                extractionProgress: result ? 100 : 0,
-                confidence: result?.confidence ?? payloadConfidence,
-                extractionData: extractionPayload,
-              }
-            : row
+        setUploadedRows(prev =>
+          prev.map(row =>
+            row.submissionId === tempId
+              ? {
+                  ...row,
+                  submissionId: result.submission_id,
+                  uploadPercent: 100,
+                  status: result ? 'extracted' : 'uploaded',
+                  extractionStatus: result ? 'extracted' : 'pending',
+                  extractionProgress: result ? 100 : 0,
+                  confidence: result?.confidence ?? payloadConfidence,
+                  extractionData: extractionPayload,
+                }
+              : row
+          )
         )
-      )
 
-      successCount += 1
+        successCount += 1
 
-      if (!result) {
-        setMessage(`Uploaded ${file.name} (awaiting extraction)`)
-      } else {
-        setMessage(`Extracted ${file.name}`)
+        if (!result) {
+          setMessage(`Uploaded ${file.name} (awaiting extraction)`)
+        } else {
+          setMessage(`Extracted ${file.name}`)
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Upload failed'
+        failureCount += 1
+        updateRow(tempId, {
+          status: 'error',
+          extractionStatus: 'error',
+          extractionError: msg,
+        })
+        setWorkflowError(msg)
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Upload failed'
-      failureCount += 1
-      updateRow(tempId, {
-        status: 'error',
-        extractionStatus: 'error',
-        extractionError: msg,
-      })
-      setWorkflowError(msg)
     }
-  }
 
-  setIsUploading(false)
-  setStatusText(null)
-  await loadClientData({ silent: true })
-  setUploadedRows([])
+    setIsUploading(false)
+    setStatusText(null)
+    await loadClientData({ silent: true })
+    setUploadedRows([])
 
     if (successCount > 0) {
       const filesWord = successCount === 1 ? 'file' : 'files'
@@ -658,6 +663,8 @@ useEffect(() => {
       const filesWord = failureCount === 1 ? 'file' : 'files'
       toast.error(`Failed to upload ${failureCount} ${filesWord}`)
     }
+
+    return { successCount, failureCount }
   }
 
   /**

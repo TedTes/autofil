@@ -32,6 +32,7 @@ class ExtractorRegistry:
             DocumentType.GENERIC: GenericExtractor,
             DocumentType.UNKNOWN: GenericExtractor,
         })
+        cls._register_if_available(DocumentType.ACORD_25, ".acord_25_extractor", "ACORD25Extractor")
         cls._register_if_available(DocumentType.ACORD_125, ".acord_125_extractor", "ACORD125Extractor")
         cls._register_if_available(DocumentType.ACORD_126, ".acord_126_extractor", "ACORD126Extractor")
         cls._register_if_available(DocumentType.ACORD_130, ".acord_130_extractor", "ACORD130Extractor")

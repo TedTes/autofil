@@ -22,6 +22,25 @@ class KeywordClassifier(IClassifier):
     
     # Keyword patterns for each document type
     KEYWORD_PATTERNS = {
+        DocumentType.ACORD_25: {
+            'required': [
+                r'acord\s*25',
+                r'certificate\s+of\s+liability\s+insurance',
+            ],
+            'strong': [
+                r'certificate\s+holder',
+                r'producer',
+                r'insurer',
+                r'cancellation',
+                r'authorized\s+representative',
+            ],
+            'weak': [
+                r'policy\s+number',
+                r'general\s+liability',
+                r'automobile\s+liability',
+                r'workers?\s+compensation',
+            ]
+        },
         DocumentType.ACORD_126: {
             'required': [
                 r'acord\s*126',

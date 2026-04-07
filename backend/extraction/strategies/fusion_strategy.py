@@ -314,8 +314,9 @@ class FusionStrategy:
         self,
         organized: Dict[DocumentType, List[Tuple[Document, ExtractionResult]]]
     ) -> Optional[Dict[str, Any]]:
-        """Merge data from ACORD forms (126, 125, 130, 140)."""
+        """Merge data from ACORD forms (25, 126, 125, 130, 140)."""
         acord_types = [
+            DocumentType.ACORD_25,
             DocumentType.ACORD_126,
             DocumentType.ACORD_125,
             DocumentType.ACORD_130,
@@ -509,7 +510,7 @@ class FusionStrategy:
         applicant = {}
         
         # Primary source: ACORD forms
-        acord_types = [DocumentType.ACORD_126, DocumentType.ACORD_125]
+        acord_types = [DocumentType.ACORD_25, DocumentType.ACORD_126, DocumentType.ACORD_125]
         
         for acord_type in acord_types:
             if acord_type in organized:

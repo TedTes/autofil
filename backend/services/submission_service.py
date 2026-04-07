@@ -402,6 +402,7 @@ class SubmissionService:
             track_sources=True,
             log_conflicts=True,
             source_priority={
+                "ACORD_25": 3,
                 "ACORD_126": 3,
                 "ACORD_125": 3,
                 "ACORD_130": 3,

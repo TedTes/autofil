@@ -72,6 +72,21 @@ semantic_groups:
         type: date
         aliases: ["Expiration Date", "Exp Date"]
         targets: {}
+      GLPolicyNumber:
+        id: F024
+        type: string
+        aliases: ["GL Policy Number", "General Liability Policy Number"]
+        targets: {}
+      GLEffectiveDate:
+        id: F025
+        type: date
+        aliases: ["GL Effective Date", "General Liability Effective Date"]
+        targets: {}
+      GLExpirationDate:
+        id: F026
+        type: date
+        aliases: ["GL Expiration Date", "General Liability Expiration Date"]
+        targets: {}
       LineOfBusiness:
         id: F023
         type: string
@@ -84,6 +99,21 @@ semantic_groups:
         aliases: ["Carrier", "Insurance Company"]
         targets:
           acord_126_pdf: "Insurer_FullName_A"
+      CarrierNAIC:
+        id: F503
+        type: string
+        aliases: ["Carrier NAIC", "NAIC", "Insurer NAIC"]
+        targets: {}
+      AdditionalCarriers:
+        id: F509
+        type: object
+        cardinality: zero-to-many
+        structure:
+          letter: string
+          name: string
+          naic: string
+        aliases: ["Additional Carriers", "Supporting Carriers", "Insurers"]
+        targets: {}
       SubmissionDate:
         id: F501
         type: date
@@ -219,12 +249,57 @@ semantic_groups:
         aliases: ["Other Coverage Description"]
         targets:
           acord_126_pdf: "GeneralLiability_OtherCoverageDescription_A"
+      CoverageIndicator:
+        id: F708
+        type: boolean
+        aliases: ["Coverage Indicator", "Coverage Included"]
+        targets: {}
+      CoverageOtherIndicatorB:
+        id: F709
+        type: boolean
+        aliases: ["Other Coverage Indicator B"]
+        targets: {}
+      CoverageOtherDescriptionB:
+        id: F710
+        type: string
+        aliases: ["Other Coverage Description B"]
+        targets: {}
       CoverageOwnersAndContractorsProtective:
         id: F164
         type: boolean
         aliases: ["Owners & Contractors Protective", "OCP"]
         targets:
           acord_126_pdf: "GeneralLiability_OwnersAndContractorsProtectiveIndicator_A"
+      GeneralLiabilityInsurerLetter:
+        id: F711
+        type: string
+        aliases: ["General Liability Insurer Letter", "GL Insurer Letter"]
+        targets: {}
+      GeneralAggregatePerPolicyIndicator:
+        id: F712
+        type: boolean
+        aliases: ["General Aggregate Per Policy"]
+        targets: {}
+      GeneralAggregatePerProjectIndicator:
+        id: F713
+        type: boolean
+        aliases: ["General Aggregate Per Project"]
+        targets: {}
+      GeneralAggregatePerLocationIndicator:
+        id: F714
+        type: boolean
+        aliases: ["General Aggregate Per Location"]
+        targets: {}
+      GeneralAggregateOtherIndicator:
+        id: F715
+        type: boolean
+        aliases: ["General Aggregate Other"]
+        targets: {}
+      GeneralAggregateOtherCode:
+        id: F716
+        type: string
+        aliases: ["General Aggregate Other Code"]
+        targets: {}
       GeneralAggregateLimit:
         id: F170
         type: money
@@ -279,6 +354,359 @@ semantic_groups:
         aliases: ["Other Limit Amount"]
         targets:
           acord_126_pdf: "GeneralLiability_OtherCoverageLimitAmount_A"
+      GLAdditionalInsuredCode:
+        id: F717
+        type: string
+        aliases: ["GL Additional Insured", "General Liability Additional Insured Code"]
+        targets: {}
+      GLSubrogationWaivedCode:
+        id: F718
+        type: string
+        aliases: ["GL Subrogation Waived", "General Liability Subrogation Waived Code"]
+        targets: {}
+
+  auto_liability:
+    display_name: "Auto Liability"
+    description: "Automobile liability indicators, policy details, and limits"
+    priority: 6
+    icon: "truck"
+    fields:
+      AutoInsurerLetter:
+        id: F720
+        type: string
+        aliases: ["Auto Insurer Letter", "Automobile Liability Insurer Letter"]
+        targets: {}
+      AutoAnyIndicator:
+        id: F721
+        type: boolean
+        aliases: ["Any Auto"]
+        targets: {}
+      AutoOwnedIndicator:
+        id: F722
+        type: boolean
+        aliases: ["All Owned Autos", "Owned Autos"]
+        targets: {}
+      AutoHiredIndicator:
+        id: F723
+        type: boolean
+        aliases: ["Hired Autos"]
+        targets: {}
+      AutoScheduledIndicator:
+        id: F724
+        type: boolean
+        aliases: ["Scheduled Autos"]
+        targets: {}
+      AutoNonOwnedIndicator:
+        id: F725
+        type: boolean
+        aliases: ["Non-Owned Autos", "Non Owned Autos"]
+        targets: {}
+      AutoOtherIndicator:
+        id: F726
+        type: boolean
+        aliases: ["Other Covered Auto Indicator"]
+        targets: {}
+      AutoOtherDescription:
+        id: F727
+        type: string
+        aliases: ["Other Covered Auto Description"]
+        targets: {}
+      AutoOtherIndicatorB:
+        id: F728
+        type: boolean
+        aliases: ["Other Covered Auto Indicator B"]
+        targets: {}
+      AutoOtherDescriptionB:
+        id: F729
+        type: string
+        aliases: ["Other Covered Auto Description B"]
+        targets: {}
+      AutoAdditionalInsuredCode:
+        id: F730
+        type: string
+        aliases: ["Auto Additional Insured", "Automobile Liability Additional Insured Code"]
+        targets: {}
+      AutoSubrogationWaivedCode:
+        id: F731
+        type: string
+        aliases: ["Auto Subrogation Waived", "Automobile Liability Subrogation Waived Code"]
+        targets: {}
+      AutoPolicyNumber:
+        id: F732
+        type: string
+        aliases: ["Auto Policy Number", "Automobile Liability Policy Number"]
+        targets: {}
+      AutoEffectiveDate:
+        id: F733
+        type: date
+        aliases: ["Auto Effective Date", "Automobile Liability Effective Date"]
+        targets: {}
+      AutoExpirationDate:
+        id: F734
+        type: date
+        aliases: ["Auto Expiration Date", "Automobile Liability Expiration Date"]
+        targets: {}
+      AutoCombinedSingleLimit:
+        id: F735
+        type: money
+        aliases: ["Combined Single Limit"]
+        targets: {}
+      AutoBodilyInjuryPerPersonLimit:
+        id: F736
+        type: money
+        aliases: ["Bodily Injury Per Person"]
+        targets: {}
+      AutoBodilyInjuryPerAccidentLimit:
+        id: F737
+        type: money
+        aliases: ["Bodily Injury Per Accident"]
+        targets: {}
+      AutoPropertyDamageLimit:
+        id: F738
+        type: money
+        aliases: ["Property Damage Per Accident"]
+        targets: {}
+      AutoOtherCoverageDescription:
+        id: F739
+        type: string
+        aliases: ["Auto Other Coverage Description"]
+        targets: {}
+      AutoOtherCoverageLimit:
+        id: F740
+        type: money
+        aliases: ["Auto Other Coverage Limit"]
+        targets: {}
+
+  umbrella_excess:
+    display_name: "Umbrella / Excess Liability"
+    description: "Umbrella and excess liability indicators, policy details, and limits"
+    priority: 7
+    icon: "shield-plus"
+    fields:
+      UmbrellaInsurerLetter:
+        id: F741
+        type: string
+        aliases: ["Umbrella Insurer Letter", "Excess Insurer Letter"]
+        targets: {}
+      UmbrellaPolicyIndicator:
+        id: F742
+        type: boolean
+        aliases: ["Umbrella Policy Indicator"]
+        targets: {}
+      ExcessPolicyIndicator:
+        id: F743
+        type: boolean
+        aliases: ["Excess Policy Indicator"]
+        targets: {}
+      UmbrellaOccurrenceIndicator:
+        id: F744
+        type: boolean
+        aliases: ["Umbrella Occurrence"]
+        targets: {}
+      UmbrellaClaimsMadeIndicator:
+        id: F745
+        type: boolean
+        aliases: ["Umbrella Claims Made"]
+        targets: {}
+      UmbrellaDeductibleIndicator:
+        id: F746
+        type: boolean
+        aliases: ["Umbrella Deductible Indicator"]
+        targets: {}
+      UmbrellaRetentionIndicator:
+        id: F747
+        type: boolean
+        aliases: ["Umbrella Retention Indicator"]
+        targets: {}
+      UmbrellaDeductibleOrRetentionAmount:
+        id: F748
+        type: money
+        aliases: ["Umbrella Deductible Or Retention Amount", "Deductible Or Retention"]
+        targets: {}
+      UmbrellaAdditionalInsuredCode:
+        id: F749
+        type: string
+        aliases: ["Umbrella Additional Insured", "Excess Liability Additional Insured Code"]
+        targets: {}
+      UmbrellaSubrogationWaivedCode:
+        id: F750
+        type: string
+        aliases: ["Umbrella Subrogation Waived", "Excess Liability Subrogation Waived Code"]
+        targets: {}
+      UmbrellaPolicyNumber:
+        id: F751
+        type: string
+        aliases: ["Umbrella Policy Number", "Excess Policy Number"]
+        targets: {}
+      UmbrellaEffectiveDate:
+        id: F752
+        type: date
+        aliases: ["Umbrella Effective Date", "Excess Effective Date"]
+        targets: {}
+      UmbrellaExpirationDate:
+        id: F753
+        type: date
+        aliases: ["Umbrella Expiration Date", "Excess Expiration Date"]
+        targets: {}
+      UmbrellaEachOccurrenceAmount:
+        id: F754
+        type: money
+        aliases: ["Umbrella Each Occurrence Amount"]
+        targets: {}
+      UmbrellaAggregateAmount:
+        id: F755
+        type: money
+        aliases: ["Umbrella Aggregate Amount"]
+        targets: {}
+      UmbrellaOtherCoverageDescription:
+        id: F756
+        type: string
+        aliases: ["Umbrella Other Coverage Description"]
+        targets: {}
+      UmbrellaOtherCoverageLimitAmount:
+        id: F757
+        type: money
+        aliases: ["Umbrella Other Coverage Limit Amount"]
+        targets: {}
+
+  workers_comp:
+    display_name: "Workers Compensation"
+    description: "Workers compensation and employers liability certificate fields"
+    priority: 8
+    icon: "briefcase"
+    fields:
+      WorkersCompInsurerLetter:
+        id: F758
+        type: string
+        aliases: ["Workers Comp Insurer Letter", "WC Insurer Letter"]
+        targets: {}
+      WorkersCompAnyPersonsExcludedIndicator:
+        id: F759
+        type: string
+        aliases: ["Any Persons Excluded"]
+        targets: {}
+      WorkersCompSubrogationWaivedCode:
+        id: F760
+        type: string
+        aliases: ["Workers Comp Subrogation Waived", "WC Subrogation Waived Code"]
+        targets: {}
+      WorkersCompPolicyNumber:
+        id: F761
+        type: string
+        aliases: ["Workers Comp Policy Number", "WC Policy Number"]
+        targets: {}
+      WorkersCompEffectiveDate:
+        id: F762
+        type: date
+        aliases: ["Workers Comp Effective Date", "WC Effective Date"]
+        targets: {}
+      WorkersCompExpirationDate:
+        id: F763
+        type: date
+        aliases: ["Workers Comp Expiration Date", "WC Expiration Date"]
+        targets: {}
+      WorkersCompStatutoryLimitIndicator:
+        id: F764
+        type: boolean
+        aliases: ["Workers Compensation Statutory Limit Indicator", "WC Statutory Limit"]
+        targets: {}
+      WorkersCompOtherCoverageIndicator:
+        id: F765
+        type: boolean
+        aliases: ["Workers Comp Other Coverage Indicator"]
+        targets: {}
+      WorkersCompOtherCoverageDescription:
+        id: F766
+        type: string
+        aliases: ["Workers Comp Other Coverage Description"]
+        targets: {}
+      WorkersCompEachAccidentLimit:
+        id: F767
+        type: money
+        aliases: ["Employers Liability Each Accident"]
+        targets: {}
+      EmployerLiabilityEachEmployeeLimit:
+        id: F768
+        type: money
+        aliases: ["Employers Liability Disease Each Employee"]
+        targets: {}
+      EmployerLiabilityPolicyLimit:
+        id: F769
+        type: money
+        aliases: ["Employers Liability Disease Policy Limit"]
+        targets: {}
+
+  other_policy:
+    display_name: "Other Policy"
+    description: "Miscellaneous policy section carried on the certificate"
+    priority: 9
+    icon: "layers"
+    fields:
+      OtherPolicyInsurerLetter:
+        id: F770
+        type: string
+        aliases: ["Other Policy Insurer Letter"]
+        targets: {}
+      OtherPolicyDescription:
+        id: F771
+        type: string
+        aliases: ["Other Policy Description"]
+        targets: {}
+      OtherPolicyAdditionalInsuredCode:
+        id: F772
+        type: string
+        aliases: ["Other Policy Additional Insured"]
+        targets: {}
+      OtherPolicySubrogationWaivedCode:
+        id: F773
+        type: string
+        aliases: ["Other Policy Subrogation Waived"]
+        targets: {}
+      OtherPolicyPolicyNumber:
+        id: F774
+        type: string
+        aliases: ["Other Policy Number"]
+        targets: {}
+      OtherPolicyEffectiveDate:
+        id: F775
+        type: date
+        aliases: ["Other Policy Effective Date"]
+        targets: {}
+      OtherPolicyExpirationDate:
+        id: F776
+        type: date
+        aliases: ["Other Policy Expiration Date"]
+        targets: {}
+      OtherPolicyCoverageCodeA:
+        id: F777
+        type: string
+        aliases: ["Other Policy Coverage Code A"]
+        targets: {}
+      OtherPolicyCoverageLimitA:
+        id: F778
+        type: money
+        aliases: ["Other Policy Coverage Limit A"]
+        targets: {}
+      OtherPolicyCoverageCodeB:
+        id: F779
+        type: string
+        aliases: ["Other Policy Coverage Code B"]
+        targets: {}
+      OtherPolicyCoverageLimitB:
+        id: F780
+        type: money
+        aliases: ["Other Policy Coverage Limit B"]
+        targets: {}
+      OtherPolicyCoverageCodeC:
+        id: F781
+        type: string
+        aliases: ["Other Policy Coverage Code C"]
+        targets: {}
+      OtherPolicyCoverageLimitC:
+        id: F782
+        type: money
+        aliases: ["Other Policy Coverage Limit C"]
+        targets: {}
 
   claims_made:
     display_name: "Claims-Made Details"
@@ -476,3 +904,89 @@ semantic_groups:
         aliases: ["Producer", "Agent Name", "Broker"]
         targets:
           acord_126_pdf: "Producer_FullName_A"
+      ProducerAddress:
+        id: F504
+        type: object
+        structure:
+          street: string
+          line_two: string
+          city: string
+          state: string
+          zip: string
+          country: string
+        aliases: ["Producer Address", "Agency Address", "Broker Address"]
+        targets: {}
+      ProducerContactName:
+        id: F505
+        type: string
+        aliases: ["Producer Contact", "Agency Contact", "Contact Name"]
+        targets: {}
+      ProducerPhone:
+        id: F506
+        type: string
+        aliases: ["Producer Phone", "Agency Phone", "Phone"]
+        targets: {}
+      ProducerFax:
+        id: F507
+        type: string
+        aliases: ["Producer Fax", "Agency Fax", "Fax"]
+        targets: {}
+      ProducerEmail:
+        id: F508
+        type: string
+        aliases: ["Producer Email", "Agency Email", "Email"]
+        targets: {}
+
+  certificate:
+    display_name: "Certificate Details"
+    description: "Certificate metadata, holder details, and sign-off"
+    priority: 12
+    icon: "badge-check"
+    fields:
+      FormEdition:
+        id: F700
+        type: string
+        aliases: ["Form Edition", "Edition"]
+        targets: {}
+      FormCompletionDate:
+        id: F701
+        type: date
+        aliases: ["Form Completion Date", "Completion Date"]
+        targets: {}
+      CertificateNumber:
+        id: F702
+        type: string
+        aliases: ["Certificate Number"]
+        targets: {}
+      RevisionNumber:
+        id: F703
+        type: string
+        aliases: ["Revision Number"]
+        targets: {}
+      CertificateHolderName:
+        id: F704
+        type: string
+        aliases: ["Certificate Holder", "Holder Name"]
+        targets: {}
+      CertificateHolderAddress:
+        id: F705
+        type: object
+        structure:
+          street: string
+          line_two: string
+          city: string
+          state: string
+          zip: string
+          country: string
+        aliases: ["Certificate Holder Address", "Holder Address"]
+        targets: {}
+      DescriptionOfOperations:
+        id: F706
+        type: string
+        aliases: ["Description Of Operations", "Remarks", "Operations Description"]
+        targets: {}
+      AuthorizedRepresentativeSignature:
+        id: F707
+        type: string
+        aliases: ["Authorized Representative", "Authorized Representative Signature"]
+        targets: {}

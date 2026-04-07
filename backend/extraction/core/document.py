@@ -13,6 +13,7 @@ import uuid
 
 class DocumentType(Enum):
     """Enumeration of supported document types."""
+    ACORD_25 = "acord_25"
     ACORD_126 = "acord_126"
     ACORD_125 = "acord_125"
     ACORD_130 = "acord_130"

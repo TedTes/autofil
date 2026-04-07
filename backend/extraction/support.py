@@ -16,6 +16,7 @@ from .core.document import Document, DocumentType
 
 
 SUPPORTED_DOCUMENT_TYPES = {
+    DocumentType.ACORD_25,
     DocumentType.ACORD_125,
     DocumentType.ACORD_126,
     DocumentType.ACORD_130,

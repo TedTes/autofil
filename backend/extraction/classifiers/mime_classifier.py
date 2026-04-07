@@ -34,6 +34,7 @@ class MimeClassifier(IClassifier):
     # MIME type to likely document type mapping
     MIME_TYPE_HINTS = {
         'application/pdf': [
+            DocumentType.ACORD_25,
             DocumentType.ACORD_126,
             DocumentType.ACORD_125,
             DocumentType.ACORD_130,
@@ -74,6 +75,7 @@ class MimeClassifier(IClassifier):
     # File extension hints (fallback if MIME unknown)
     EXTENSION_HINTS = {
         '.pdf': [
+            DocumentType.ACORD_25,
             DocumentType.ACORD_126,
             DocumentType.LOSS_RUN,
             DocumentType.FINANCIAL_STATEMENT,

@@ -97,6 +97,7 @@ class MLClassifier(IClassifier):
             All types (when implemented)
         """
         return [
+            DocumentType.ACORD_25,
             DocumentType.ACORD_126,
             DocumentType.ACORD_125,
             DocumentType.ACORD_130,

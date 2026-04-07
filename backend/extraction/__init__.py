@@ -80,7 +80,7 @@ __all__ = [
 ]
 
 _optional_import("strategies", "FusionStrategy", "DocumentGroup")
-_optional_import("extractors", "ACORD126Extractor", "ACORD125Extractor", "ACORD130Extractor", "ACORD140Extractor", "LossRunExtractor", "SovExtractor", "FinancialStatementExtractor", "GenericExtractor", "SupplementalExtractor")
+_optional_import("extractors", "ACORD126Extractor", "ACORD25Extractor", "ACORD125Extractor", "ACORD130Extractor", "ACORD140Extractor", "LossRunExtractor", "SovExtractor", "FinancialStatementExtractor", "GenericExtractor", "SupplementalExtractor")
 _optional_import("parsers", "PdfFieldParser", "OcrParser", "OcrFallbackParser", "TableParser", "ExcelParser", "ImageParser")
 _optional_import("classifiers", "MimeClassifier", "KeywordClassifier", "MLClassifier", "TableClassifier")
 

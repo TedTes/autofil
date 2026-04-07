@@ -8,7 +8,6 @@
 export type ViewType = 
   | 'dashboard'      // Main overview page
   | 'documents'      // Document library - searchable files (inputs + outputs)
-  | 'upload'         // Upload view
   | 'file-detail'    // File detail view
   | 'clients'        // Clients list view
   | 'client-detail'  // Individual client detail with submissions
@@ -25,7 +24,6 @@ export type ViewType =
 export type ViewDataMap = {
   'dashboard': undefined
   'documents': undefined
-  'upload': undefined
   'file-detail': { submissionId: string; filename?: string; inputId?: string }
   'clients': { intent?: 'create-account' | 'create-submission' | 'upload-files' } | undefined
   'client-detail': {

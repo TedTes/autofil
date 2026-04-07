@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef, useLayoutEffect } from 'react'
 import React from 'react'
+import dynamic from 'next/dynamic'
 import {
   Settings,
   HelpCircle,
@@ -16,26 +17,60 @@ import {
   BarChart3,
   ChevronRight,
 } from 'lucide-react'
-import {
-  HomeView
-} from './'
-import { FileDetailView, DocumentsView,  ClientsView,
-  SubmissionsView,   
-  TemplatesView,   
-  ReportsView,   
-  HelpView ,ClientDetailView  } from './views'
+import { DashboardStartActions } from './DashboardStartActions'
 
 import {
   getSubmissionStats,
-  getClients,
-  createClient as createClientApi,
 } from '@/lib/api-client'
 import { useAuth } from '@/contexts/AuthContext'
-import { CreateSubmissionModal } from './CreateSubmissionmodal'
 
-import type { ViewType, FileDetailActions, ViewDataMap, SubmissionStats, Client } from '@/types'
+import type { ViewType, FileDetailActions, ViewDataMap, SubmissionStats } from '@/types'
 import type { ClientDetailActions } from '@/types'
 import { usePathname, useRouter, useSearchParams, type ReadonlyURLSearchParams } from 'next/navigation'
+
+const ViewLoadingFallback = () => (
+  <div className="p-8 text-sm text-gray-500">Loading...</div>
+)
+
+const FileDetailView = dynamic(
+  () => import('./views/FileDetailView').then((module) => module.FileDetailView),
+  { loading: () => <ViewLoadingFallback /> }
+)
+
+const DocumentsView = dynamic(
+  () => import('./views/DocumentsView').then((module) => module.DocumentsView),
+  { loading: () => <ViewLoadingFallback /> }
+)
+
+const ClientsView = dynamic(
+  () => import('./views/ClientsView').then((module) => module.ClientsView),
+  { loading: () => <ViewLoadingFallback /> }
+)
+
+const SubmissionsView = dynamic(
+  () => import('./views/SubmissionsView').then((module) => module.SubmissionsView),
+  { loading: () => <ViewLoadingFallback /> }
+)
+
+const TemplatesView = dynamic(
+  () => import('./views/TemplatesView').then((module) => module.TemplatesView),
+  { loading: () => <ViewLoadingFallback /> }
+)
+
+const ReportsView = dynamic(
+  () => import('./views/ReportsView').then((module) => module.ReportsView),
+  { loading: () => <ViewLoadingFallback /> }
+)
+
+const HelpView = dynamic(
+  () => import('./views/HelpView').then((module) => module.HelpView),
+  { loading: () => <ViewLoadingFallback /> }
+)
+
+const ClientDetailView = dynamic(
+  () => import('./views/ClientDetailView').then((module) => module.ClientDetailView),
+  { loading: () => <ViewLoadingFallback /> }
+)
 
 type ViewState = {
   type: ViewType
@@ -52,7 +87,6 @@ type ViewStateData = ViewDataMap[ViewType]
 const breadcrumbViewMap: Record<string, ViewType> = {
   Dashboard: 'dashboard',
   Documents: 'documents',
-  Upload: 'upload',
   Accounts: 'clients',
   Submissions: 'submissions',
   Templates: 'templates',
@@ -83,8 +117,6 @@ function buildPathFromView(type: ViewType, data?: ViewStateData): string {
       return '/dashboard'
     case 'documents':
       return '/dashboard/documents'
-    case 'upload':
-      return '/dashboard/clients'
     case 'file-detail': {
       const detail = data as ViewDataMap['file-detail'] | undefined
       const submissionId = detail?.submissionId
@@ -155,9 +187,6 @@ function mapPathToView(pathname: string, searchParams: URLSearchParams | Readonl
 
   switch (section) {
     case 'documents': {
-      if (rest[0] === 'upload') {
-        return { type: 'upload', breadcrumbs: ['Dashboard', 'Upload'] }
-      }
       if (rest[0] === 'file' && rest[1]) {
         const filename = searchParams.get('filename') ?? undefined
         const inputId = searchParams.get('inputId') ?? undefined
@@ -169,8 +198,6 @@ function mapPathToView(pathname: string, searchParams: URLSearchParams | Readonl
       }
       return { type: 'documents', breadcrumbs: ['Dashboard', 'Documents'] }
     }
-    case 'upload':
-      return { type: 'clients', breadcrumbs: ['Dashboard', 'Accounts'] }
     case 'clients': {
       if (rest[0]) {
         const name = searchParams.get('name') || undefined
@@ -215,12 +242,6 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(false)
   const [, setFileDetailActions] = useState<FileDetailActions | null>(null)
   const [clientDetailActions, setClientDetailActions] = useState<ClientDetailActions | null>(null)
-  const [accountPickerIntent, setAccountPickerIntent] = useState<'create-submission' | 'upload-files' | null>(null)
-  const [dashboardClients, setDashboardClients] = useState<Client[]>([])
-  const [dashboardClientsLoading, setDashboardClientsLoading] = useState(false)
-  const [dashboardClientsError, setDashboardClientsError] = useState<string | null>(null)
-  const [isCreateAccountModalOpen, setIsCreateAccountModalOpen] = useState(false)
-  const [isCreatingAccount, setIsCreatingAccount] = useState(false)
 
   //state to track closing animation
   const [isMobileClosing, setIsMobileClosing] = useState(false)
@@ -268,27 +289,6 @@ export default function MainLayout({ children }: MainLayoutProps) {
       }
     })()
   }, [user])
-
-  const loadDashboardClients = useCallback(async () => {
-    try {
-      setDashboardClientsLoading(true)
-      setDashboardClientsError(null)
-      const data = await getClients()
-      setDashboardClients(data)
-      return data
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load accounts'
-      setDashboardClientsError(message)
-      return []
-    } finally {
-      setDashboardClientsLoading(false)
-    }
-  }, [])
-
-  const openAccountPicker = useCallback((intent: 'create-submission' | 'upload-files') => {
-    setAccountPickerIntent(intent)
-    void loadDashboardClients()
-  }, [loadDashboardClients])
 
   useEffect(() => {
     if (mobileSidebarOpen) {
@@ -345,34 +345,6 @@ export default function MainLayout({ children }: MainLayoutProps) {
     const target = buildPathFromView(type, data as ViewStateData)
     router.push(target)
   }, [router])
-
-  const handleSelectClientForIntent = useCallback((clientId: string, clientName: string) => {
-    if (!accountPickerIntent) return
-    const nextIntent = accountPickerIntent
-    setAccountPickerIntent(null)
-    navigateTo('client-detail', { clientId, clientName, intent: nextIntent }, ['Dashboard', 'Accounts', clientName])
-  }, [accountPickerIntent, navigateTo])
-
-  const handleCreateAccountFromDashboard = useCallback(async (name: string) => {
-    if (isCreatingAccount) return
-    try {
-      setIsCreatingAccount(true)
-      const newClient = await createClientApi(name)
-      setDashboardClients((prev) => [newClient, ...prev.filter((client) => client.client_id !== newClient.client_id)])
-      setIsCreateAccountModalOpen(false)
-
-      if (accountPickerIntent) {
-        const nextIntent = accountPickerIntent
-        setAccountPickerIntent(null)
-        navigateTo('client-detail', { clientId: newClient.client_id, clientName: newClient.name, intent: nextIntent }, ['Dashboard', 'Accounts', newClient.name])
-        return
-      }
-
-      navigateTo('client-detail', { clientId: newClient.client_id, clientName: newClient.name }, ['Dashboard', 'Accounts', newClient.name])
-    } finally {
-      setIsCreatingAccount(false)
-    }
-  }, [accountPickerIntent, isCreatingAccount, navigateTo])
 
 //  Update close handler
 const handleMobileSidebarClose = () => {
@@ -687,22 +659,19 @@ const handleMobileSidebarClose = () => {
             
             {/* Home View */}
             {currentView.type === 'dashboard' && (
-  <HomeView
-    submissionStats={submissionStats}
-    isAuthenticated={Boolean(user)}
-    onGoToFile={handleFileClick}
-    onNavigateToClients={() => openAccountPicker('create-submission')}
-    onNavigateToUpload={() => openAccountPicker('upload-files')}
-    onNavigateToNewAccount={() => {
-      setAccountPickerIntent(null)
-      setIsCreateAccountModalOpen(true)
-    }}
-    onNavigateToSubmissions={() => navigateTo('submissions', undefined, ['Dashboard', 'Submissions'])}
-    onNavigateToNeedsReview={() => navigateTo('submissions', { status: 'error' }, ['Dashboard', 'Submissions'])}
-    onNavigateToReadyToGenerate={() => navigateTo('submissions', { status: 'ready' }, ['Dashboard', 'Submissions'])}
-    onNavigateToTemplates={() => navigateTo('templates', undefined, ['Dashboard', 'Templates'])}
-  />
-)}
+              <DashboardStartActions
+                submissionStats={submissionStats}
+                isAuthenticated={Boolean(user)}
+                onGoToFile={handleFileClick}
+                onNavigateToSubmissions={() => navigateTo('submissions', undefined, ['Dashboard', 'Submissions'])}
+                onNavigateToNeedsReview={() => navigateTo('submissions', { status: 'error' }, ['Dashboard', 'Submissions'])}
+                onNavigateToReadyToGenerate={() => navigateTo('submissions', { status: 'ready' }, ['Dashboard', 'Submissions'])}
+                onNavigateToTemplates={() => navigateTo('templates', undefined, ['Dashboard', 'Templates'])}
+                onOpenClientDetail={(clientId, clientName, intent) => {
+                  navigateTo('client-detail', { clientId, clientName, intent }, ['Dashboard', 'Accounts', clientName])
+                }}
+              />
+            )}
 
             {/* Documents View */}
             {currentView.type === 'documents' && (
@@ -805,104 +774,6 @@ const handleMobileSidebarClose = () => {
           </div>
         </main>
       </div>
-
-      {accountPickerIntent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">
-                  {accountPickerIntent === 'create-submission' ? 'Choose Account for New Submission' : 'Choose Account to Upload Files'}
-                </h2>
-                <p className="mt-1 text-sm text-gray-500">
-                  {accountPickerIntent === 'create-submission'
-                    ? 'Pick the account that should own the new submission.'
-                    : 'Pick the account you want to upload files into.'}
-                </p>
-              </div>
-              <button
-                onClick={() => setAccountPickerIntent(null)}
-                className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
-                aria-label="Close"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="max-h-[60vh] overflow-y-auto p-6">
-              {dashboardClientsLoading ? (
-                <div className="py-12 text-center text-sm text-gray-500">Loading accounts...</div>
-              ) : dashboardClientsError ? (
-                <div className="space-y-4 rounded-xl border border-red-200 bg-red-50 p-4">
-                  <p className="text-sm text-red-700">{dashboardClientsError}</p>
-                  <button
-                    onClick={() => void loadDashboardClients()}
-                    className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors"
-                  >
-                    Retry
-                  </button>
-                </div>
-              ) : dashboardClients.length > 0 ? (
-                <div className="space-y-3">
-                  {dashboardClients.map((client) => {
-                    const submissionCount = client.submission_count ?? client.submissions?.length ?? 0
-                    return (
-                      <button
-                        key={client.client_id}
-                        onClick={() => handleSelectClientForIntent(client.client_id, client.name)}
-                        className="flex w-full items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-4 text-left hover:border-blue-300 hover:bg-blue-50/40 transition-colors"
-                      >
-                        <div>
-                          <p className="text-sm font-semibold text-gray-900">{client.name}</p>
-                          <p className="mt-1 text-xs text-gray-500">
-                            {submissionCount} submission{submissionCount !== 1 ? 's' : ''}
-                          </p>
-                        </div>
-                        <ChevronRight className="h-4 w-4 text-gray-400" />
-                      </button>
-                    )
-                  })}
-                </div>
-              ) : (
-                <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-8 text-center">
-                  <p className="text-sm font-medium text-gray-900">No accounts yet</p>
-                  <p className="mt-1 text-sm text-gray-500">Create an account first to continue.</p>
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center justify-between border-t border-gray-200 bg-gray-50 px-6 py-4">
-              <button
-                onClick={() => setAccountPickerIntent(null)}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => setIsCreateAccountModalOpen(true)}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
-              >
-                New Account
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <CreateSubmissionModal
-        isOpen={isCreateAccountModalOpen}
-        onClose={() => {
-          if (!isCreatingAccount) {
-            setIsCreateAccountModalOpen(false)
-          }
-        }}
-        onConfirm={handleCreateAccountFromDashboard}
-        isCreating={isCreatingAccount}
-        existingNames={dashboardClients.map((client) => client.name)}
-        title="New Account"
-        confirmButtonText="Create Account"
-        inputLabel="Account Name"
-      />
 
       </div>
   )

@@ -103,19 +103,23 @@ class TemplateConfig:
 
 class TemplateLoader:
     """
-    Loads template JSON files from:
+    Loads template definitions from:
         - Local filesystem (default)
-        - Cloud storage (if TEMPLATE_CLOUD_BASE_URL is set)
+        - Supabase storage (preferred remote source)
+        - Cloud URL override (optional)
+
+    YAML is the intended authoring/source-of-truth format. JSON remains a
+    legacy fallback only.
 
     Local layouts supported under backend/templates:
 
     1) Versioned:
-        backend/templates/acord_126_2016/v2016_09/template.json
+        backend/templates/acord_126_2016/v2016_09/template.yaml
         backend/templates/acord_126_2016/v2016_09/template.pdf
 
     2) Simple (no version folders):
-        backend/templates/acord_126_2016/template.json
-        backend/templates/acord_126_2016/template.pdf
+        backend/templates/acord_126_2016.yaml
+        backend/templates/acord_126_2016.pdf
     """
 
     local_template_dir = Path(__file__).resolve().parent.parent / "templates"
@@ -128,37 +132,36 @@ class TemplateLoader:
         """
         High-level loader:
             1) Normalize template_id
-            2) Try cloud (if configured)
-            3) Fallback to local disk
+            2) Try Supabase storage when enabled
+            3) Try cloud (if configured)
+            4) Fallback to local disk
         """
 
         # Normalize: accept "acord_126_2016.pdf" or "acord_126_2016"
         requested_template_id = Path(template_id).stem
         template_id = requested_template_id
 
-        # Prefer local YAML/JSON templates for launch stability. Remote storage
-        # remains a fallback for deployments that intentionally externalize
-        # template assets.
-        config = cls._load_from_local(template_id, version)
-        if config:
-            return cls._ensure_pdf_asset(config, version)
-
-        # 2. Try Supabase storage if available
+        # Prefer storage-backed templates when Supabase is configured so the
+        # selected frontend template id resolves against the same source of
+        # truth used by the template library UI.
         config = cls._load_from_storage(template_id, version)
         if config:
             return config
 
-        # 3. Try cloud URL override
+        # 2. Try cloud URL override
         if cls.cloud_base_url:
             config = cls._load_from_cloud(template_id, version)
             if config:
                 return config
 
+        # 3. Fallback to local disk only when remote sources do not have the
+        # template. This avoids local/cloud drift while preserving dev support.
+        config = cls._load_from_local(template_id, version)
+        if config:
+            return cls._ensure_pdf_asset(config, version)
+
         alias_template_id = cls._resolve_template_alias(requested_template_id)
         if alias_template_id and alias_template_id != template_id:
-            config = cls._load_from_local(alias_template_id, version)
-            if config:
-                return cls._ensure_pdf_asset(config, version)
             config = cls._load_from_storage(alias_template_id, version)
             if config:
                 return config
@@ -166,6 +169,9 @@ class TemplateLoader:
                 config = cls._load_from_cloud(alias_template_id, version)
                 if config:
                     return config
+            config = cls._load_from_local(alias_template_id, version)
+            if config:
+                return cls._ensure_pdf_asset(config, version)
 
         return None
 
@@ -304,7 +310,10 @@ class TemplateLoader:
             )
 
         config = TemplateConfig(
-            template_id=raw_data.get("template_id", template_id),
+            # The requested/discovered template id is authoritative. This keeps
+            # the selected frontend id, storage folder name, and runtime fill
+            # path aligned even if a YAML file still contains stale metadata.
+            template_id=template_id,
             form_type=raw_data.get("form_type") or raw_data.get("formType") or "CUSTOM",
             field_map=field_map,
             repeaters=repeaters,
@@ -348,19 +357,27 @@ class TemplateLoader:
             paths.append(service.build_path(cls.storage_templates_root, template_id, filename))
             return paths
 
-        json_text = None
+        config_text = None
         raw_data: Dict[str, Any] = {}
 
-        for json_path in build_paths("template.json"):
-            json_text = service.download_text(json_path)
-            if json_text:
-                try:
-                    raw_data = json.loads(json_text)
-                    break
-                except json.JSONDecodeError:
-                    json_text = None
+        config_candidates = []
+        for name in ("template.yaml", "template.yml", "template.json"):
+            config_candidates.extend(build_paths(name))
 
-        if not json_text:
+        for config_path in config_candidates:
+            config_text = service.download_text(config_path)
+            if not config_text:
+                continue
+            try:
+                if config_path.endswith((".yaml", ".yml")):
+                    raw_data = yaml.safe_load(config_text) or {}
+                else:
+                    raw_data = json.loads(config_text)
+                break
+            except (json.JSONDecodeError, yaml.YAMLError):
+                config_text = None
+
+        if not config_text:
             logger.debug(
                 "template_loader storage config not found for template=%s version=%s",
                 template_id,
@@ -418,21 +435,35 @@ class TemplateLoader:
         version_path = version if version != "latest" else "latest"
 
         base = cls.cloud_base_url.rstrip("/")
-        json_url = f"{base}/{template_id}/{version_path}/template.json"
+        config_urls = [
+            f"{base}/{template_id}/{version_path}/template.yaml",
+            f"{base}/{template_id}/{version_path}/template.yml",
+            f"{base}/{template_id}/{version_path}/template.json",
+        ]
 
         try:
-            r = requests.get(json_url, timeout=5)
-            if r.status_code != 200:
-                logger.warning("template_loader cloud missing JSON: %s", json_url)
-                return None
+            for config_url in config_urls:
+                r = requests.get(config_url, timeout=5)
+                if r.status_code != 200:
+                    continue
 
-            raw = r.json()
-            return cls._build_config(
-                raw,
-                template_id=template_id,
-                version=version,
-                pdf_url=raw.get("pdf_url"),
+                if config_url.endswith((".yaml", ".yml")):
+                    raw = yaml.safe_load(r.text) or {}
+                else:
+                    raw = r.json()
+                return cls._build_config(
+                    raw,
+                    template_id=template_id,
+                    version=version,
+                    pdf_url=raw.get("pdf_url"),
+                )
+
+            logger.warning(
+                "template_loader cloud missing config for template=%s version=%s",
+                template_id,
+                version,
             )
+            return None
 
         except Exception as e:
             logger.warning("template_loader cloud load error: %s", e)
@@ -447,9 +478,9 @@ class TemplateLoader:
         Local template layout inside backend/templates:
 
         Versioned:
-            templates/{template_id}/{version}/template.json
+            templates/{template_id}/{version}/template.yaml
         Simple:
-            templates/{template_id}/template.json
+            templates/{template_id}/template.yaml
         """
 
         template_dir = cls.local_template_dir / template_id

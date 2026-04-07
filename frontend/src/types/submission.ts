@@ -1,8 +1,8 @@
+import type { Submission } from './client'
+
 /**
  * TypeScript types for submission data.
  */
-import { Submission, SubmissionFile } from './client'
-
 export interface CardSubmission {
   id: string
   folderId: string

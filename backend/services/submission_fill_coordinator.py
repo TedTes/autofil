@@ -84,6 +84,7 @@ class SubmissionFillCoordinator:
                 output_path=output_path,
                 template_id=resolved_template_id,
             )
+            fill_report.warnings.extend(self._low_confidence_warnings(canonical_data))
             output_entry: Dict[str, Any] = {
                 "template_id": resolved_template_id,
                 "generated_at": datetime.utcnow().isoformat(),
@@ -141,3 +142,40 @@ class SubmissionFillCoordinator:
             ".csv": "text/csv",
             ".json": "application/json",
         }.get(ext.lower(), "application/octet-stream")
+
+    @staticmethod
+    def _low_confidence_warnings(
+        canonical_data: Dict[str, Any],
+        threshold: float = 0.8,
+    ) -> List[str]:
+        sections = canonical_data.get("semantic_sections") or canonical_data.get("semanticSections") or []
+        warnings: List[str] = []
+        for section in sections:
+            if not isinstance(section, dict):
+                continue
+            for field in section.get("fields") or []:
+                if not isinstance(field, dict):
+                    continue
+                values = field.get("values") or []
+                if not isinstance(values, list):
+                    values = [values]
+
+                low_confidences: List[float] = []
+                for value in values:
+                    payload = value if isinstance(value, dict) else {}
+                    if payload.get("value") in (None, ""):
+                        continue
+                    try:
+                        confidence = float(payload.get("confidence"))
+                    except (TypeError, ValueError):
+                        continue
+                    if confidence < threshold:
+                        low_confidences.append(confidence)
+
+                if low_confidences:
+                    label = field.get("label") or field.get("id") or "Unknown field"
+                    warnings.append(
+                        f"Low confidence field used for output: {label} ({min(low_confidences) * 100:.0f}%)"
+                    )
+
+        return warnings[:20]

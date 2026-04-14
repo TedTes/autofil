@@ -6,7 +6,6 @@ import {
   FileText,
   CheckCircle2,
   AlertCircle,
-  Loader2,
   Download,
   Check,
 } from 'lucide-react'
@@ -37,6 +36,41 @@ function getTemplateDisplayName(template: Pick<OutputTemplate, 'id' | 'name' | '
   const formLabel = template.formType?.replace(/_/g, ' ') || humanizeTemplateId(template.id)
   const versionLabel = template.version ? ` (${template.version.replace(/_/g, '/')})` : ''
   return `${formLabel}${versionLabel}`.trim()
+}
+
+type LowConfidenceField = {
+  fieldId: string
+  label: string
+  confidence: number
+}
+
+function findLowConfidenceFields(mergedData: MergedData | null, threshold = 0.8): LowConfidenceField[] {
+  if (!mergedData?.semantic_sections?.length) return []
+
+  const fields: LowConfidenceField[] = []
+  for (const section of mergedData.semantic_sections) {
+    for (const field of section.fields || []) {
+      const values = field.values || []
+      const confidences = values
+        .map((value) => value.confidence)
+        .filter((confidence): confidence is number => typeof confidence === 'number')
+      if (!confidences.length) continue
+
+      const lowestConfidence = Math.min(...confidences)
+      const hasUsableValue = values.some(
+        (value) => value.value !== null && value.value !== undefined && value.value !== ''
+      )
+      if (hasUsableValue && lowestConfidence < threshold) {
+        fields.push({
+          fieldId: field.id,
+          label: field.label || humanizeTemplateId(field.id),
+          confidence: lowestConfidence,
+        })
+      }
+    }
+  }
+
+  return fields.sort((a, b) => a.confidence - b.confidence)
 }
 
 interface GenerateOutputsModalProps {
@@ -119,6 +153,10 @@ export default function GenerateOutputsModal({
   const availableOnly = templateAvailabilities.filter(t => t.canGenerate)
   const unavailableOnly = templateAvailabilities.filter(t => !t.canGenerate)
   const selectedCount = selectedTemplateIds.length
+  const lowConfidenceFields = useMemo(
+    () => findLowConfidenceFields(mergedData),
+    [mergedData]
+  )
   
   // Handle generate click
   const handleGenerate = async () => {
@@ -267,6 +305,38 @@ export default function GenerateOutputsModal({
               <div className="flex-1">
                 <p className="text-sm font-medium text-red-900">Generation Failed</p>
                 <p className="text-sm text-red-700 mt-1">{error}</p>
+              </div>
+            </div>
+          )}
+
+          {selectedCount > 0 && lowConfidenceFields.length > 0 && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-amber-900">
+                    Review recommended before generating
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-amber-800">
+                    {lowConfidenceFields.length} extracted field{lowConfidenceFields.length !== 1 ? 's' : ''} used in
+                    merged data are below 80% confidence.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {lowConfidenceFields.slice(0, 5).map((field) => (
+                      <span
+                        key={field.fieldId}
+                        className="rounded-full bg-white px-2 py-1 text-xs font-medium text-amber-800 ring-1 ring-amber-200"
+                      >
+                        {field.label}: {Math.round(field.confidence * 100)}%
+                      </span>
+                    ))}
+                    {lowConfidenceFields.length > 5 && (
+                      <span className="rounded-full bg-white px-2 py-1 text-xs font-medium text-amber-800 ring-1 ring-amber-200">
+                        +{lowConfidenceFields.length - 5} more
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -524,7 +594,6 @@ function ModalOverlay({
 
 function ModalContent({ 
   children, 
-  onClose,
   isWide = false
 }: { 
   children: React.ReactNode
@@ -607,6 +676,12 @@ function TemplateSelectionCard({
               </p>
             </div>
           </div>
+          <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+            <div
+              className={`h-full ${disabled ? 'bg-gray-300' : 'bg-blue-500'}`}
+              style={{ width: `${Math.max(0, Math.min(completeness, 100))}%` }}
+            />
+          </div>
           
           {/* Warning */}
           {warning && (
@@ -618,38 +693,5 @@ function TemplateSelectionCard({
         </div>
       </div>
     </button>
-  )
-}
-
-function GeneratingView({ templates }: { templates: OutputTemplate[] }) {
-  return (
-    <div className="text-center py-8">
-      <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-        <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-      </div>
-      <h3 className="text-lg font-semibold text-gray-900 mb-2">
-        Creating Your Documents
-      </h3>
-      <p className="text-sm text-gray-600 mb-6">
-        Filling {templates.length} template{templates.length !== 1 ? 's' : ''} with your merged data...
-      </p>
-      
-      <div className="space-y-2 max-w-md mx-auto">
-        {templates.map(template => (
-          <div 
-            key={template.id}
-            className="flex items-center gap-3 text-left bg-gray-50 rounded-lg p-3"
-          >
-            <Loader2 className="w-4 h-4 text-blue-600 animate-spin flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">
-                {template.name}
-              </p>
-              <p className="text-xs text-gray-500">Processing...</p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
   )
 }

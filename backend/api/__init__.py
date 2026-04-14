@@ -29,6 +29,7 @@ def create_app():
     from api.folders import folder_bp
     from api.templates import template_bp
     from api.metadata import metadata_bp
+    from api.ingest import ingest_bp
 
 
     app.register_blueprint(submission_bp, url_prefix='/api/submissions')
@@ -40,13 +41,14 @@ def create_app():
     app.register_blueprint(client_bp, url_prefix='/api/clients')
     app.register_blueprint(template_bp, url_prefix='/api/templates')
     app.register_blueprint(metadata_bp, url_prefix='/api/metadata')
+    app.register_blueprint(ingest_bp, url_prefix='/api/ingest')
     
     # Enable CORS for frontend
     CORS(app, resources={
         r"/api/*": {
             "origins": os.environ.get("CORS_ORIGINS","http://localhost:3000").split(","), 
             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS","PATCH"],
-            "allow_headers": ["Content-Type", "Authorization"]
+            "allow_headers": ["Content-Type", "Authorization", "X-Ingest-Token", "X-Webhook-Token"]
         }
     })
     # Configuration

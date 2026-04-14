@@ -624,6 +624,11 @@ class SubmissionService:
         if not metadata:
             raise ValueError("Submission not found")
 
+        changed_fields = self._diff_semantic_field_values(
+            metadata.get("data") or {},
+            data or {},
+        )
+
         version_id = self.version_service.create_version(
             submission_id=submission_id,
             data=data,
@@ -636,6 +641,8 @@ class SubmissionService:
         metadata['current_version_id'] = version_id
         metadata['last_edited_at'] = datetime.utcnow().isoformat()
         metadata['last_edited_by'] = user
+        if changed_fields:
+            self._record_field_corrections(metadata, changed_fields)
 
         self._persist_submission_metadata(metadata)
 
@@ -1316,6 +1323,257 @@ class SubmissionService:
 
         return {"items": items, "total": total}
 
+    def _iter_semantic_fields(
+        self,
+        data: Dict[str, Any],
+        default_document_type: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Flatten semantic sections into reportable field observations."""
+        if not isinstance(data, dict):
+            return []
+
+        sections = data.get("semantic_sections") or data.get("semanticSections") or []
+        fields: List[Dict[str, Any]] = []
+        for section in sections:
+            if not isinstance(section, dict):
+                continue
+            for field in section.get("fields") or []:
+                if not isinstance(field, dict):
+                    continue
+                field_id = field.get("id")
+                if not field_id:
+                    continue
+
+                values = field.get("values") or []
+                if not isinstance(values, list):
+                    values = [values]
+                if not values:
+                    values = [None]
+
+                for value_entry in values:
+                    payload = value_entry if isinstance(value_entry, dict) else {"value": value_entry}
+                    value = payload.get("value")
+                    if value is None or (isinstance(value, str) and not value.strip()):
+                        continue
+
+                    confidence = payload.get("confidence")
+                    try:
+                        confidence_value = float(confidence) if confidence is not None else None
+                    except (TypeError, ValueError):
+                        confidence_value = None
+
+                    fields.append({
+                        "field_id": str(field_id),
+                        "label": field.get("label") or str(field_id).replace("_", " ").title(),
+                        "value": value,
+                        "confidence": confidence_value,
+                        "document_type": self._normalize_report_document_type(
+                            payload.get("source_type") or default_document_type
+                        ),
+                    })
+
+        return fields
+
+    def _normalize_report_document_type(self, value: Optional[Any]) -> str:
+        if value is None:
+            return "unknown"
+        text = str(value).strip()
+        if not text:
+            return "unknown"
+        if "." in text:
+            text = text.rsplit(".", 1)[-1]
+        return text.lower()
+
+    def _is_known_report_document_type(self, value: Optional[Any]) -> bool:
+        normalized = self._normalize_report_document_type(value)
+        return normalized not in {"unknown", "generic", "none", "null"}
+
+    def _extract_nested_report_document_type(self, data: Dict[str, Any]) -> Optional[str]:
+        if not isinstance(data, dict):
+            return None
+
+        candidates = [
+            data.get("document_type"),
+            data.get("documentType"),
+            (data.get("source") or {}).get("document_type") if isinstance(data.get("source"), dict) else None,
+            (data.get("source") or {}).get("documentType") if isinstance(data.get("source"), dict) else None,
+            (data.get("metadata") or {}).get("document_type") if isinstance(data.get("metadata"), dict) else None,
+            (data.get("metadata") or {}).get("documentType") if isinstance(data.get("metadata"), dict) else None,
+        ]
+        for candidate in candidates:
+            if self._is_known_report_document_type(candidate):
+                return self._normalize_report_document_type(candidate)
+        return None
+
+    def _infer_report_document_type_from_filename(self, filename: Optional[Any]) -> Optional[str]:
+        if not filename:
+            return None
+        normalized = str(filename).lower()
+        patterns = [
+            (r"\bacord[\s_-]*25\b|\b25\s+certificate\b|certificate\s+of\s+liability", "acord_25"),
+            (r"\bacord[\s_-]*126\b|\b126\b", "acord_126"),
+            (r"\bacord[\s_-]*125\b|\b125\b", "acord_125"),
+            (r"\bacord[\s_-]*130\b|\b130\b", "acord_130"),
+            (r"\bacord[\s_-]*140\b|\b140\b", "acord_140"),
+            (r"loss[\s_-]*run", "loss_run"),
+            (r"\bsov\b|statement\s+of\s+values", "sov"),
+        ]
+        for pattern, document_type in patterns:
+            if re.search(pattern, normalized):
+                return document_type
+        return None
+
+    def _infer_report_document_type_from_fields(self, data: Dict[str, Any]) -> Optional[str]:
+        field_ids = [
+            str(field["field_id"])
+            for field in self._iter_semantic_fields(data)
+            if field.get("field_id")
+        ]
+        if not field_ids:
+            return None
+
+        tokens: set[str] = set()
+        compact_ids: set[str] = set()
+        for field_id in field_ids:
+            spaced = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", field_id)
+            tokens.update(re.findall(r"[a-z0-9]+", spaced.lower()))
+            compact_ids.add(re.sub(r"[^a-z0-9]", "", field_id.lower()))
+
+        if (
+            {"general", "liability"}.issubset(tokens)
+            or "deductible" in tokens
+            or "hazard" in tokens
+            or any(
+                compact.startswith(("generalliability", "productandcompleted", "claimsmade", "employeebenefits"))
+                for compact in compact_ids
+            )
+        ):
+            return "acord_126"
+        if (
+            "certificate" in tokens
+            or "producer" in tokens
+            or "umbrella" in tokens
+            or "auto" in tokens
+            or any(compact.startswith(("workerscomp", "otherpolicy")) for compact in compact_ids)
+        ):
+            return "acord_25"
+        if {"property", "building", "location"} & tokens:
+            return "acord_140"
+        if {"claim", "loss"} & tokens:
+            return "loss_run"
+        return None
+
+    def _infer_report_document_type(self, input_entry: Dict[str, Any]) -> str:
+        explicit = input_entry.get("document_type") or input_entry.get("documentType")
+        if self._is_known_report_document_type(explicit):
+            return self._normalize_report_document_type(explicit)
+
+        data = input_entry.get("data") or {}
+        nested = self._extract_nested_report_document_type(data)
+        if nested:
+            return nested
+
+        from_filename = self._infer_report_document_type_from_filename(input_entry.get("filename"))
+        if from_filename:
+            return from_filename
+
+        from_fields = self._infer_report_document_type_from_fields(data)
+        if from_fields:
+            return from_fields
+
+        return "unknown"
+
+    def _normalize_report_value(self, value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: self._normalize_report_value(value[key])
+                for key in sorted(value.keys())
+            }
+        if isinstance(value, list):
+            return [self._normalize_report_value(item) for item in value]
+        if isinstance(value, str):
+            collapsed = re.sub(r"\s+", " ", value.strip().lower())
+            numeric_candidate = re.sub(r"[,$]", "", collapsed)
+            if re.fullmatch(r"[-+]?\d+(\.\d+)?", numeric_candidate):
+                try:
+                    return float(numeric_candidate)
+                except ValueError:
+                    return collapsed
+            return collapsed
+        return value
+
+    def _best_semantic_field_map(self, data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+        best_by_field: Dict[str, Dict[str, Any]] = {}
+        for field in self._iter_semantic_fields(data):
+            field_id = field["field_id"]
+            existing = best_by_field.get(field_id)
+            confidence = field.get("confidence") or 0
+            existing_confidence = (existing or {}).get("confidence") or 0
+            if not existing or confidence >= existing_confidence:
+                best_by_field[field_id] = field
+        return best_by_field
+
+    def _diff_semantic_field_values(
+        self,
+        before: Dict[str, Any],
+        after: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        before_fields = self._best_semantic_field_map(before)
+        after_fields = self._best_semantic_field_map(after)
+        changed: List[Dict[str, Any]] = []
+
+        for field_id, after_field in after_fields.items():
+            before_field = before_fields.get(field_id)
+            if not before_field:
+                continue
+            if self._normalize_report_value(before_field.get("value")) == self._normalize_report_value(after_field.get("value")):
+                continue
+            changed.append({
+                "field_id": field_id,
+                "label": after_field.get("label") or before_field.get("label") or field_id,
+                "document_type": after_field.get("document_type") or before_field.get("document_type") or "unknown",
+                "confidence": before_field.get("confidence"),
+                "old_value": before_field.get("value"),
+                "new_value": after_field.get("value"),
+            })
+
+        return changed
+
+    def _record_field_corrections(
+        self,
+        metadata: Dict[str, Any],
+        changed_fields: List[Dict[str, Any]],
+    ) -> None:
+        corrections = metadata.setdefault("field_corrections", {})
+        timestamp = datetime.utcnow().isoformat()
+        for field in changed_fields:
+            field_id = field.get("field_id")
+            if not field_id:
+                continue
+            entry = corrections.setdefault(str(field_id), {
+                "field_id": str(field_id),
+                "label": field.get("label") or str(field_id),
+                "document_type": field.get("document_type") or "unknown",
+                "edit_count": 0,
+            })
+            previous_count = int(entry.get("edit_count") or 0)
+            next_count = previous_count + 1
+            entry["label"] = field.get("label") or entry.get("label") or str(field_id)
+            entry["document_type"] = field.get("document_type") or entry.get("document_type") or "unknown"
+            entry["edit_count"] = next_count
+            entry["last_edited_at"] = timestamp
+            entry["last_old_value"] = field.get("old_value")
+            entry["last_new_value"] = field.get("new_value")
+            if field.get("confidence") is not None:
+                try:
+                    confidence = float(field.get("confidence"))
+                    previous_average = float(entry.get("average_confidence") or 0.0)
+                    entry["average_confidence"] = (
+                        (previous_average * previous_count + confidence) / next_count
+                    )
+                except (TypeError, ValueError):
+                    pass
+
     def get_reports_summary(self, range_days: int = 30) -> Dict[str, Any]:
         """
         Aggregate submission metrics for the reports dashboard.
@@ -1337,12 +1595,21 @@ class SubmissionService:
         total = len(records)
         status_counts: Dict[str, int] = {}
         client_counts: Dict[str, Dict[str, Any]] = {}
+        doc_type_stats: Dict[str, Dict[str, Any]] = {}
+        weakest_fields: Dict[str, Dict[str, Any]] = {}
 
         completed_statuses = {"filled", "extracted"}
         completed = 0
 
         turnaround_minutes = []
         volume_by_day: Dict[str, int] = {}
+        recent_activity: Dict[str, Dict[str, int]] = {}
+        total_documents = 0
+        total_fields = 0
+        confidence_sum = 0.0
+        confidence_count = 0
+        total_field_edits = 0
+        generated_outputs = 0
 
         for record in records:
             status = record.get("status") or "created"
@@ -1352,12 +1619,124 @@ class SubmissionService:
 
             uploaded_dt = record.get("_uploaded_dt")
             filled_dt = record.get("_filled_dt")
+            day_key = uploaded_dt.date().isoformat() if uploaded_dt else "unknown"
             if uploaded_dt:
-                day_key = uploaded_dt.date().isoformat()
                 volume_by_day[day_key] = volume_by_day.get(day_key, 0) + 1
+                recent_activity.setdefault(day_key, {
+                    "documents_processed": 0,
+                    "fields_extracted": 0,
+                    "generated_outputs": 0,
+                })
             if uploaded_dt and filled_dt and filled_dt >= uploaded_dt:
                 minutes = (filled_dt - uploaded_dt).total_seconds() / 60.0
                 turnaround_minutes.append(minutes)
+
+            outputs = record.get("outputs") or []
+            generated_outputs += len(outputs)
+            if day_key != "unknown":
+                recent_activity.setdefault(day_key, {
+                    "documents_processed": 0,
+                    "fields_extracted": 0,
+                    "generated_outputs": 0,
+                })["generated_outputs"] += len(outputs)
+
+            input_fields_by_id: Dict[str, Dict[str, Any]] = {}
+            for input_entry in record.get("inputs") or []:
+                total_documents += 1
+                if day_key != "unknown":
+                    recent_activity.setdefault(day_key, {
+                        "documents_processed": 0,
+                        "fields_extracted": 0,
+                        "generated_outputs": 0,
+                    })["documents_processed"] += 1
+
+                document_type = self._infer_report_document_type(input_entry)
+                input_fields = self._iter_semantic_fields(
+                    input_entry.get("data") or {},
+                    default_document_type=document_type,
+                )
+
+                doc_stats = doc_type_stats.setdefault(document_type, {
+                    "document_type": document_type,
+                    "documents": 0,
+                    "fields_extracted": 0,
+                    "confidence_sum": 0.0,
+                    "confidence_count": 0,
+                    "fields_edited": 0,
+                })
+                doc_stats["documents"] += 1
+
+                for field in input_fields:
+                    field_id = field["field_id"]
+                    existing = input_fields_by_id.get(field_id)
+                    if not existing or (field.get("confidence") or 0) >= (existing.get("confidence") or 0):
+                        input_fields_by_id[field_id] = field
+
+                    total_fields += 1
+                    if day_key != "unknown":
+                        recent_activity[day_key]["fields_extracted"] += 1
+                    doc_stats["fields_extracted"] += 1
+                    confidence = field.get("confidence")
+                    if confidence is not None:
+                        confidence_sum += confidence
+                        confidence_count += 1
+                        doc_stats["confidence_sum"] += confidence
+                        doc_stats["confidence_count"] += 1
+
+            corrections = record.get("field_corrections") or {}
+            if not corrections and record.get("inputs"):
+                # Historical records created before field_corrections existed can
+                # only infer edits when current data differs from merged inputs.
+                original_data = self._merge_input_data(record.get("inputs") or [])
+                corrections = {
+                    field["field_id"]: {
+                        **field,
+                        "edit_count": 1,
+                        "average_confidence": field.get("confidence"),
+                    }
+                    for field in self._diff_semantic_field_values(
+                        original_data,
+                        record.get("data") or {},
+                    )
+                }
+
+            for field_id, correction in corrections.items():
+                edit_count = int(correction.get("edit_count") or 0)
+                if edit_count <= 0:
+                    continue
+                total_field_edits += edit_count
+                field_meta = input_fields_by_id.get(field_id) or {}
+                document_type = self._normalize_report_document_type(
+                    correction.get("document_type") or field_meta.get("document_type")
+                )
+                doc_stats = doc_type_stats.setdefault(document_type, {
+                    "document_type": document_type,
+                    "documents": 0,
+                    "fields_extracted": 0,
+                    "confidence_sum": 0.0,
+                    "confidence_count": 0,
+                    "fields_edited": 0,
+                })
+                doc_stats["fields_edited"] += edit_count
+
+                weakness = weakest_fields.setdefault(str(field_id), {
+                    "field_key": str(field_id),
+                    "label": correction.get("label") or field_meta.get("label") or str(field_id),
+                    "document_type": document_type,
+                    "edit_count": 0,
+                    "confidence_sum": 0.0,
+                    "confidence_count": 0,
+                })
+                weakness["edit_count"] += edit_count
+                confidence = correction.get("average_confidence")
+                if confidence is None:
+                    confidence = field_meta.get("confidence")
+                if confidence is not None:
+                    try:
+                        weakness["confidence_sum"] += float(confidence)
+                        weakness["confidence_count"] += 1
+                    except (TypeError, ValueError):
+                        pass
 
             client_id = record.get("client_id") or "unknown"
             client_name = record.get("client_name")
@@ -1388,12 +1767,62 @@ class SubmissionService:
             {"date": day, "count": volume_by_day[day]}
             for day in sorted(volume_by_day.keys())
         ]
+        average_confidence = (confidence_sum / confidence_count * 100.0) if confidence_count else 0.0
+        correction_rate = (total_field_edits / total_fields * 100.0) if total_fields else 0.0
+        fields_accepted = max(total_fields - total_field_edits, 0)
+
+        by_document_type = []
+        for stats in doc_type_stats.values():
+            fields_extracted = int(stats.get("fields_extracted") or 0)
+            fields_edited = int(stats.get("fields_edited") or 0)
+            avg_doc_conf = (
+                stats["confidence_sum"] / stats["confidence_count"] * 100.0
+                if stats.get("confidence_count")
+                else 0.0
+            )
+            by_document_type.append({
+                "document_type": stats["document_type"],
+                "documents": int(stats.get("documents") or 0),
+                "fields_extracted": fields_extracted,
+                "average_confidence": round(avg_doc_conf, 2),
+                "fields_edited": fields_edited,
+                "correction_rate": round((fields_edited / fields_extracted * 100.0) if fields_extracted else 0.0, 2),
+            })
+        by_document_type.sort(key=lambda item: (item["fields_extracted"], item["documents"]), reverse=True)
+
+        weakest_field_rows = []
+        for field in weakest_fields.values():
+            avg_field_conf = (
+                field["confidence_sum"] / field["confidence_count"] * 100.0
+                if field.get("confidence_count")
+                else 0.0
+            )
+            weakest_field_rows.append({
+                "field_key": field["field_key"],
+                "label": field["label"],
+                "document_type": field["document_type"],
+                "edit_count": field["edit_count"],
+                "average_confidence": round(avg_field_conf, 2),
+            })
+        weakest_field_rows.sort(key=lambda item: item["edit_count"], reverse=True)
+
+        recent_activity_series = [
+            {"date": day, **recent_activity[day]}
+            for day in sorted(recent_activity.keys())
+        ]
 
         return {
             "totals": {
                 "total_submissions": total,
                 "completed": completed,
                 "success_rate": round(success_rate, 2),
+                "documents_processed": total_documents,
+                "fields_extracted": total_fields,
+                "average_confidence": round(average_confidence, 2),
+                "fields_edited": total_field_edits,
+                "fields_accepted_without_edits": fields_accepted,
+                "correction_rate": round(correction_rate, 2),
+                "generated_outputs": generated_outputs,
             },
             "status_breakdown": status_counts,
             "turnaround": {
@@ -1402,6 +1831,9 @@ class SubmissionService:
             },
             "submission_volume": volume_series,
             "top_clients": top_clients,
+            "by_document_type": by_document_type,
+            "weakest_fields": weakest_field_rows[:10],
+            "recent_activity": recent_activity_series,
         }
 
 

@@ -213,6 +213,7 @@ class SubmissionExtractionCoordinator:
             input_entry = {
                 "input_id": str(uuid.uuid4()),
                 "filename": filename,
+                "document_type": str(doc.document_type),
                 "uploaded_at": timestamp,
                 "extraction_status": "extracted",
                 "included_in_merge": True,

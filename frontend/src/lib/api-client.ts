@@ -5,8 +5,6 @@ import axios, { AxiosError } from 'axios'
 import type {
   ApiResponse,
   SubmissionResponse,
-  FillResponse,
-  SubmissionDetail,
   Folder,
   FillReport,
   RecentSubmissionFile,
@@ -519,6 +517,13 @@ export interface ReportsSummary {
     total_submissions: number
     completed: number
     success_rate: number
+    documents_processed: number
+    fields_extracted: number
+    average_confidence: number
+    fields_edited: number
+    fields_accepted_without_edits: number
+    correction_rate: number
+    generated_outputs: number
   }
   status_breakdown: Record<string, number>
   turnaround: {
@@ -527,6 +532,27 @@ export interface ReportsSummary {
   }
   submission_volume: { date: string; count: number }[]
   top_clients: { client_id?: string; client_name?: string; submissions: number }[]
+  by_document_type: Array<{
+    document_type: string
+    documents: number
+    fields_extracted: number
+    average_confidence: number
+    fields_edited: number
+    correction_rate: number
+  }>
+  weakest_fields: Array<{
+    field_key: string
+    label: string
+    document_type: string
+    edit_count: number
+    average_confidence: number
+  }>
+  recent_activity: Array<{
+    date: string
+    documents_processed: number
+    fields_extracted: number
+    generated_outputs: number
+  }>
 }
 
 export async function getReportsSummary(rangeDays?: number): Promise<ReportsSummary> {

@@ -5,6 +5,7 @@
 export interface Client {
     client_id: string
     name: string
+    ingestion_email?: string
     created_at: string
     updated_at: string
     submission_count: number

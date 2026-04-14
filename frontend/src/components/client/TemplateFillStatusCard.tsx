@@ -11,7 +11,6 @@
 
 import React, { useState } from 'react'
 import {
-  FileText,
   CheckCircle2,
   XCircle,
   Loader2,
@@ -22,6 +21,7 @@ import {
   Download,
 } from 'lucide-react'
 import type { TemplateFillResult } from '@/types/'
+import { safeMessage } from '@/lib/format-utils'
 
 interface TemplateFillStatusCardProps {
   result: TemplateFillResult
@@ -235,7 +235,7 @@ export default function TemplateFillStatusCard({
                         className="text-xs text-yellow-700 bg-yellow-50 px-2 py-1 rounded flex items-start gap-1"
                       >
                         <AlertTriangle className="w-3 h-3 flex-shrink-0 mt-0.5" />
-                        <span>{warning.message}</span>
+                        <span>{safeMessage(warning, 'Warning')}</span>
                       </div>
                     ))}
                   </div>
@@ -255,7 +255,7 @@ export default function TemplateFillStatusCard({
                         className="text-xs text-red-700 bg-red-50 px-2 py-1 rounded flex items-start gap-1"
                       >
                         <XCircle className="w-3 h-3 flex-shrink-0 mt-0.5" />
-                        <span>{error.message}</span>
+                        <span>{safeMessage(error, 'Error')}</span>
                       </div>
                     ))}
                   </div>

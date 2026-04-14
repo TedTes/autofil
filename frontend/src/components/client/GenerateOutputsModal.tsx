@@ -20,6 +20,7 @@ import type {
 
 import { calculateTemplateReadiness } from '@/lib'
 import { fillMultipleTemplates } from '@/lib/api-client'
+import { safeMessage } from '@/lib/format-utils'
 import TemplateFillStatusCard from './TemplateFillStatusCard'
 
 function humanizeTemplateId(templateId: string): string {
@@ -42,6 +43,12 @@ type LowConfidenceField = {
   fieldId: string
   label: string
   confidence: number
+}
+
+type GenerationWarningSummary = {
+  lowConfidenceFields: LowConfidenceField[]
+  missingRequiredSections: string[]
+  affectedTemplateNames: string[]
 }
 
 function findLowConfidenceFields(mergedData: MergedData | null, threshold = 0.8): LowConfidenceField[] {
@@ -153,10 +160,23 @@ export default function GenerateOutputsModal({
   const availableOnly = templateAvailabilities.filter(t => t.canGenerate)
   const unavailableOnly = templateAvailabilities.filter(t => !t.canGenerate)
   const selectedCount = selectedTemplateIds.length
-  const lowConfidenceFields = useMemo(
-    () => findLowConfidenceFields(mergedData),
-    [mergedData]
-  )
+  const generationWarnings = useMemo<GenerationWarningSummary>(() => {
+    const selectedAvailability = templateAvailabilities.filter(({ template }) =>
+      selectedTemplateIds.includes(template.id)
+    )
+    const missingRequiredSections = Array.from(
+      new Set(selectedAvailability.flatMap((item) => item.missingRequired))
+    ).map(humanizeTemplateId)
+    const affectedTemplateNames = selectedAvailability
+      .filter((item) => item.missingRequired.length > 0)
+      .map(({ template }) => getTemplateDisplayName(template))
+
+    return {
+      lowConfidenceFields: findLowConfidenceFields(mergedData),
+      missingRequiredSections,
+      affectedTemplateNames,
+    }
+  }, [mergedData, selectedTemplateIds, templateAvailabilities])
   
   // Handle generate click
   const handleGenerate = async () => {
@@ -309,7 +329,9 @@ export default function GenerateOutputsModal({
             </div>
           )}
 
-          {selectedCount > 0 && lowConfidenceFields.length > 0 && (
+          {selectedCount > 0 &&
+            (generationWarnings.lowConfidenceFields.length > 0 ||
+              generationWarnings.missingRequiredSections.length > 0) && (
             <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
               <div className="flex items-start gap-2">
                 <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
@@ -317,25 +339,38 @@ export default function GenerateOutputsModal({
                   <p className="text-sm font-semibold text-amber-900">
                     Review recommended before generating
                   </p>
-                  <p className="mt-1 text-xs leading-5 text-amber-800">
-                    {lowConfidenceFields.length} extracted field{lowConfidenceFields.length !== 1 ? 's' : ''} used in
-                    merged data are below 80% confidence.
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {lowConfidenceFields.slice(0, 5).map((field) => (
-                      <span
-                        key={field.fieldId}
-                        className="rounded-full bg-white px-2 py-1 text-xs font-medium text-amber-800 ring-1 ring-amber-200"
-                      >
-                        {field.label}: {Math.round(field.confidence * 100)}%
-                      </span>
-                    ))}
-                    {lowConfidenceFields.length > 5 && (
-                      <span className="rounded-full bg-white px-2 py-1 text-xs font-medium text-amber-800 ring-1 ring-amber-200">
-                        +{lowConfidenceFields.length - 5} more
-                      </span>
-                    )}
-                  </div>
+                  {generationWarnings.missingRequiredSections.length > 0 && (
+                    <p className="mt-1 text-xs leading-5 text-amber-800">
+                      Missing required data: {generationWarnings.missingRequiredSections.join(', ')}
+                      {generationWarnings.affectedTemplateNames.length > 0
+                        ? ` for ${generationWarnings.affectedTemplateNames.join(', ')}.`
+                        : '.'}
+                    </p>
+                  )}
+                  {generationWarnings.lowConfidenceFields.length > 0 && (
+                    <>
+                      <p className="mt-1 text-xs leading-5 text-amber-800">
+                        {generationWarnings.lowConfidenceFields.length} extracted field
+                        {generationWarnings.lowConfidenceFields.length !== 1 ? 's' : ''} in merged data are below 80%
+                        confidence.
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {generationWarnings.lowConfidenceFields.slice(0, 5).map((field) => (
+                          <span
+                            key={field.fieldId}
+                            className="rounded-full bg-white px-2 py-1 text-xs font-medium text-amber-800 ring-1 ring-amber-200"
+                          >
+                            {field.label}: {Math.round(field.confidence * 100)}%
+                          </span>
+                        ))}
+                        {generationWarnings.lowConfidenceFields.length > 5 && (
+                          <span className="rounded-full bg-white px-2 py-1 text-xs font-medium text-amber-800 ring-1 ring-amber-200">
+                            +{generationWarnings.lowConfidenceFields.length - 5} more
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -484,6 +519,7 @@ function ResultsView({
   const selectedResult = templateResults.find(
     r => r.report?.output.url === selectedPreview
   )
+  const selectedWarnings = selectedResult?.report?.warnings || []
 
   return (
     <div className="flex flex-col h-[95vh]">
@@ -554,6 +590,33 @@ function ResultsView({
 
       {/* Preview Area - Full Height */}
       <div className="flex-1 p-3 sm:p-4 bg-gray-50 overflow-hidden min-h-0">
+        {selectedWarnings.length > 0 && (
+          <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-amber-900">
+                  Generated with {selectedWarnings.length} warning{selectedWarnings.length !== 1 ? 's' : ''}
+                </p>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {selectedWarnings.slice(0, 3).map((warning, index) => (
+                    <span
+                      key={index}
+                      className="rounded-full bg-white px-2 py-0.5 text-xs text-amber-800 ring-1 ring-amber-200"
+                    >
+                      {safeMessage(warning)}
+                    </span>
+                  ))}
+                  {selectedWarnings.length > 3 && (
+                    <span className="rounded-full bg-white px-2 py-0.5 text-xs text-amber-800 ring-1 ring-amber-200">
+                      +{selectedWarnings.length - 3} more
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         {selectedPreview ? (
           <div className="h-full bg-white rounded-lg shadow-lg overflow-hidden">
             <iframe

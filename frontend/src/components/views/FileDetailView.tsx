@@ -85,6 +85,7 @@ export function FileDetailView({
   const selectedSourcePage = selectedFieldSource?.source?.page
     ? Number(selectedFieldSource.source.page)
     : undefined
+  const selectedSourceBbox = selectedFieldSource?.source?.bbox
 
 
   // Fetch submission data
@@ -312,6 +313,7 @@ export function FileDetailView({
                 fileUrl={previewUrl || 'about:blank'}
                 filename={resolvedFilename}
                 targetPage={selectedSourcePage}
+                sourceBbox={selectedSourceBbox}
                 onDownload={handleDownloadOriginal}
               />
             ) : (
@@ -452,6 +454,7 @@ export function FileDetailView({
           </div>
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-blue-800">
             {selectedSourcePage && <span>Page {selectedSourcePage}</span>}
+            {selectedSourceBbox && <span>Exact source location available</span>}
             {selectedFieldSource.confidence !== undefined && (
               <span>{Math.round(selectedFieldSource.confidence * 100)}% confidence</span>
             )}

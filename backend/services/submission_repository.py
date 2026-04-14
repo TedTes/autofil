@@ -33,7 +33,15 @@ class SubmissionRepository:
         if self.enabled:
             self.db.delete_submission_metadata(submission_id, user_id=self.current_user_id)
 
-    def list_all(self) -> List[Dict[str, Any]]:
+    def list_all(
+        self,
+        limit: Optional[int] = None,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
         if not self.enabled:
             return []
-        return self.db.list_submissions_metadata(user_id=self.current_user_id)
+        return self.db.list_submissions_metadata(
+            user_id=self.current_user_id,
+            limit=limit,
+            offset=offset,
+        )

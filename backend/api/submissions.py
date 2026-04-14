@@ -266,6 +266,40 @@ def update_submission_input_inclusion(submission_id, input_id):
         return internal_server_error(logger, "Failed to update input inclusion", exc)
 
 
+@submission_bp.route("/<submission_id>/inputs/include", methods=["PATCH"])
+@require_auth
+def update_submission_inputs_inclusion(submission_id):
+    """Include or exclude multiple submission inputs from merged review data."""
+    try:
+        submission_service = _submission_service()
+        merged_data_service = _merged_data_service(submission_service)
+        payload = request.get_json(silent=True) or {}
+        input_ids = payload.get("input_ids")
+        if not isinstance(input_ids, list):
+            return jsonify({"error": "input_ids must be an array"}), 400
+        if "included" not in payload:
+            return jsonify({"error": "included is required"}), 400
+
+        updated = submission_service.set_inputs_included(
+            submission_id,
+            [str(input_id) for input_id in input_ids if input_id],
+            bool(payload.get("included")),
+        )
+        merged_data = merged_data_service.get_merged_data(submission_id)
+        return jsonify({
+            "success": True,
+            "data": {
+                "package": updated,
+                "mergedData": merged_data,
+            },
+            "message": "Input inclusion updated",
+        }), 200
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return internal_server_error(logger, "Failed to update input inclusion", exc)
+
+
 @submission_bp.route("/<submission_id>/outputs/<output_id>", methods=["DELETE"])
 @require_auth
 def delete_submission_output(submission_id, output_id):
@@ -780,18 +814,22 @@ def list_all_submissions():
     try:
         submission_service = _submission_service()
   
-        limit = int(request.args.get("limit", 100))
+        limit = min(int(request.args.get("limit", 50)), 200)
         offset = int(request.args.get("offset", 0))
         status_filter = request.args.get("status")
+        statuses = [
+            status.strip()
+            for status in (status_filter or "").split(",")
+            if status.strip()
+        ] or None
 
-        all_subs = submission_service.list_submission_summaries()
- 
-        if status_filter:
-            statuses = [s.strip() for s in status_filter.split(",")]
-            all_subs = [s for s in all_subs if s.get("status") in statuses]
+        page = submission_service.list_submission_summaries(
+            limit=limit,
+            offset=offset,
+            statuses=statuses,
+        )
+        subs = page.get("items", [])
 
-        total = len(all_subs)
-        submissions = all_subs[offset : offset + limit]
         submission_list = [
             {
                 "submission_id": s.get("submission_id"),
@@ -806,14 +844,14 @@ def list_all_submissions():
                 "input_id": s.get("input_id"),
                 "file_count": s.get("file_count"),
             }
-            for s in submissions
+            for s in subs
         ]
 
         return jsonify({
             "success": True,
             "data": {
                 "submissions": submission_list,
-                "total": total,
+                "total": page.get("total", len(submission_list)),
                 "limit": limit,
                 "offset": offset,
             },
@@ -829,28 +867,14 @@ def get_submissions_stats():
     """Get aggregate statistics about submissions."""
     try:
         submission_service = _submission_service()
-        all_subs = submission_service.get_all_submissions()
-        total = len(all_subs)
-        by_status = {}
-        total_confidence = 0
-        confidence_count = 0
-
-        for sub in all_subs:
-            status = sub.get("status", "unknown")
-            by_status[status] = by_status.get(status, 0) + 1
-            confidence = sub.get("confidence")
-            if confidence is not None:
-                total_confidence += confidence
-                confidence_count += 1
-
-        avg_conf = (total_confidence / confidence_count) if confidence_count else 0
+        stats = submission_service.get_submission_stats_summary()
 
         return jsonify({
             "success": True,
             "data": {
-                "total_submissions": total,
-                "by_status": by_status,
-                "average_confidence": round(avg_conf, 2),
+                "total_submissions": stats.get("total_submissions", 0),
+                "by_status": stats.get("by_status", {}),
+                "average_confidence": stats.get("average_confidence", 0),
                 "last_updated": datetime.utcnow().isoformat(),
             },
         }), 200

@@ -19,7 +19,17 @@ class SubmissionQueryService:
         self.repository = repository
         self.get_submission = get_submission
 
-    def list_submission_summaries(self) -> List[Dict[str, Any]]:
+    def list_submission_summaries(
+        self,
+        limit: Optional[int] = None,
+        offset: int = 0,
+        statuses: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        normalized_statuses = {
+            status.strip().lower()
+            for status in (statuses or [])
+            if status and status.strip()
+        }
         summaries: List[Dict[str, Any]] = []
         for metadata in self.repository.list_all():
             if not metadata:
@@ -36,6 +46,10 @@ class SubmissionQueryService:
                 or f"Submission {submission_id[:8]}"
             )
 
+            status = metadata.get("status") or metadata.get("workflow_status") or "uploaded"
+            if normalized_statuses and str(status).lower() not in normalized_statuses:
+                continue
+
             summaries.append({
                 "submission_id": submission_id,
                 "name": submission_name,
@@ -46,7 +60,7 @@ class SubmissionQueryService:
                     or "Untitled.pdf"
                 ),
                 "input_id": (primary_input or {}).get("input_id"),
-                "status": metadata.get("status") or metadata.get("workflow_status") or "uploaded",
+                "status": status,
                 "uploaded_at": (primary_input or {}).get("uploaded_at") or metadata.get("uploaded_at") or metadata.get("created_at"),
                 "confidence": metadata.get("confidence"),
                 "folder_id": metadata.get("folder_id"),
@@ -56,7 +70,13 @@ class SubmissionQueryService:
                 "template_metadata": metadata.get("template_metadata"),
                 "file_count": metadata.get("file_count", 0),
             })
-        return summaries
+
+        summaries.sort(key=lambda item: item.get("uploaded_at") or "", reverse=True)
+        total = len(summaries)
+        if limit is not None:
+            start = max(offset, 0)
+            summaries = summaries[start : start + max(limit, 0)]
+        return {"items": summaries, "total": total}
 
     def get_all_submissions(self) -> List[Dict[str, Any]]:
         submissions: List[Dict[str, Any]] = []

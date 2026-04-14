@@ -860,6 +860,49 @@ class SubmissionService:
         self._persist_submission_metadata(metadata)
         return self.get_submission_package(submission_id) or metadata
 
+    def set_inputs_included(
+        self,
+        submission_id: str,
+        input_ids: List[str],
+        included: bool,
+    ) -> Dict[str, Any]:
+        metadata = self.get_submission_metadata(submission_id)
+        if not metadata:
+            raise ValueError("Submission not found")
+
+        requested_ids = {input_id for input_id in input_ids if input_id}
+        if not requested_ids:
+            raise ValueError("input_ids must include at least one input")
+
+        inputs = metadata.get("inputs") or []
+        found_ids = set()
+        for entry in inputs:
+            input_id = entry.get("input_id")
+            if input_id in requested_ids:
+                entry["included_in_merge"] = bool(included)
+                found_ids.add(input_id)
+
+        missing_ids = requested_ids - found_ids
+        if missing_ids:
+            raise ValueError(f"Input file not found: {', '.join(sorted(missing_ids))}")
+
+        metadata["updated_at"] = datetime.utcnow().isoformat()
+        merged_data = self._merge_input_data(inputs)
+        metadata["data"] = merged_data
+
+        outputs = metadata.get("outputs") or []
+        if outputs:
+            metadata["status"] = "filled"
+        elif merged_data:
+            metadata["status"] = "ready"
+        elif inputs:
+            metadata["status"] = "extracted"
+        else:
+            metadata["status"] = "created"
+
+        self._persist_submission_metadata(metadata)
+        return self.get_submission_package(submission_id) or metadata
+
     def delete_input(self, submission_id: str, input_id: str) -> bool:
         metadata = self.get_submission_metadata(submission_id)
         if not metadata:
@@ -1161,11 +1204,51 @@ class SubmissionService:
         raise NotImplementedError("Dynamic form generation has not been implemented")
 
 
-    def list_submission_summaries(self) -> List[Dict[str, Any]]:
+    def list_submission_summaries(
+        self,
+        limit: Optional[int] = None,
+        offset: int = 0,
+        statuses: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
         """
         Return lightweight submission metadata records without loading full JSON data.
         """
-        return self.query_service.list_submission_summaries()
+        return self.query_service.list_submission_summaries(
+            limit=limit,
+            offset=offset,
+            statuses=statuses,
+        )
+
+    def get_submission_stats_summary(self) -> Dict[str, Any]:
+        """
+        Return aggregate stats from lightweight submission summaries.
+
+        This avoids the N+1 full submission loads used by get_all_submissions().
+        """
+        page = self.list_submission_summaries(limit=None, offset=0)
+        summaries = page.get("items", [])
+        by_status: Dict[str, int] = {}
+        total_confidence = 0.0
+        confidence_count = 0
+
+        for summary in summaries:
+            status = summary.get("status") or "unknown"
+            by_status[status] = by_status.get(status, 0) + 1
+            confidence = summary.get("confidence")
+            if confidence is None:
+                continue
+            try:
+                total_confidence += float(confidence)
+                confidence_count += 1
+            except (TypeError, ValueError):
+                continue
+
+        avg_confidence = (total_confidence / confidence_count) if confidence_count else 0
+        return {
+            "total_submissions": len(summaries),
+            "by_status": by_status,
+            "average_confidence": round(avg_confidence, 2),
+        }
 
 
     def get_all_submissions(self) -> List[Dict[str, Any]]:

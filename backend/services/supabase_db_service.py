@@ -281,7 +281,12 @@ class SupabaseDatabaseService:
         except Exception as exc:
             logger.warning("supabase-db failed to delete submission %s: %s", submission_id, exc)
 
-    def list_submissions_metadata(self, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    def list_submissions_metadata(
+        self,
+        user_id: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
         self._require_remote()
         if not self._client:
             rows = self._http_select("submissions_metadata") or []
@@ -293,18 +298,93 @@ class SupabaseDatabaseService:
             ]
         for attempt in range(2):
             try:
-                rows = self._execute(
-                    self._client.table("submissions_metadata")
-                    .select("metadata")
+                # Prefer a projected summary query so dashboard list/stats pages do not
+                # download full extraction blobs. If the PostgREST projection syntax is
+                # unsupported by the deployed Supabase version, fall back to metadata.
+                summary_fields = (
+                    "submission_id,"
+                    "client_id,"
+                    "updated_at,"
+                    "m_submission_id:metadata->>submission_id,"
+                    "name:metadata->>name,"
+                    "title:metadata->>title,"
+                    "status:metadata->>status,"
+                    "workflow_status:metadata->>workflow_status,"
+                    "uploaded_at:metadata->>uploaded_at,"
+                    "created_at:metadata->>created_at,"
+                    "confidence:metadata->>confidence,"
+                    "folder_id:metadata->>folder_id,"
+                    "m_client_id:metadata->>client_id,"
+                    "client_name:metadata->>client_name,"
+                    "owner_user_id:metadata->>owner_user_id,"
+                    "file_count:metadata->>file_count,"
+                    "template_type:metadata->>template_type,"
+                    "last_input:metadata->inputs->-1"
                 )
-                if not rows:
-                    return []
-                return [
-                    self._claim_submission_if_unowned(meta, user_id)
-                    for meta in
-                    (row.get("metadata") for row in rows)
-                    if meta and self._is_visible_to_user(meta, user_id) and (meta.get("file_count") or 0) > 0
-                ]
+                try:
+                    rows = self._execute(
+                        self._client.table("submissions_metadata")
+                        .select(summary_fields)
+                        .order("updated_at", desc=True)
+                    )
+                    if not rows:
+                        return []
+                    result = []
+                    for row in rows:
+                        last_input = row.get("last_input") or {}
+                        if isinstance(last_input, str):
+                            try:
+                                last_input = json.loads(last_input)
+                            except Exception:
+                                last_input = {}
+                        meta = {
+                            "submission_id": row.get("m_submission_id") or row.get("submission_id"),
+                            "name": row.get("name"),
+                            "title": row.get("title"),
+                            "status": row.get("status"),
+                            "workflow_status": row.get("workflow_status"),
+                            "uploaded_at": row.get("uploaded_at") or row.get("updated_at"),
+                            "created_at": row.get("created_at"),
+                            "confidence": row.get("confidence"),
+                            "folder_id": row.get("folder_id"),
+                            "client_id": row.get("m_client_id") or row.get("client_id"),
+                            "client_name": row.get("client_name"),
+                            "owner_user_id": row.get("owner_user_id"),
+                            "file_count": row.get("file_count"),
+                            "template_type": row.get("template_type"),
+                            "inputs": [last_input] if last_input else [],
+                        }
+                        if not self._is_visible_to_user(meta, user_id):
+                            continue
+                        try:
+                            file_count = int(meta.get("file_count") or 0)
+                        except (TypeError, ValueError):
+                            file_count = 0
+                        if file_count <= 0 and last_input:
+                            file_count = 1
+                        if file_count <= 0:
+                            continue
+                        meta["file_count"] = file_count
+                        result.append(meta)
+                    return result
+                except Exception as projected_exc:
+                    logger.warning(
+                        "supabase-db projected submission list failed; falling back to metadata: %s",
+                        projected_exc,
+                    )
+                    rows = self._execute(
+                        self._client.table("submissions_metadata")
+                        .select("metadata")
+                        .order("updated_at", desc=True)
+                    )
+                    if not rows:
+                        return []
+                    return [
+                        self._claim_submission_if_unowned(meta, user_id)
+                        for meta in
+                        (row.get("metadata") for row in rows)
+                        if meta and self._is_visible_to_user(meta, user_id) and (meta.get("file_count") or 0) > 0
+                    ]
             except Exception as exc:
                 logger.warning("supabase-db failed to list submissions: %s", exc)
                 if attempt == 0 and self._should_retry(exc) and self._reset_client():

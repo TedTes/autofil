@@ -19,8 +19,8 @@ class FillReport:
     coverage: float                # 0.0 → 1.0
     filled_fields: int
     unmapped_fields: List[str]
-    warnings: List[str]
-    errors: List[str]
+    warnings: List[Any]
+    errors: List[Any]
 
 
 class BaseFiller:

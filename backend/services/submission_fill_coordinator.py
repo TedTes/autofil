@@ -84,7 +84,9 @@ class SubmissionFillCoordinator:
                 output_path=output_path,
                 template_id=resolved_template_id,
             )
-            fill_report.warnings.extend(self._low_confidence_warnings(canonical_data))
+            fill_report.warnings.extend(
+                self._low_confidence_warnings(canonical_data, template_config)
+            )
             output_entry: Dict[str, Any] = {
                 "template_id": resolved_template_id,
                 "generated_at": datetime.utcnow().isoformat(),
@@ -146,36 +148,113 @@ class SubmissionFillCoordinator:
     @staticmethod
     def _low_confidence_warnings(
         canonical_data: Dict[str, Any],
+        template_config: Optional[Any] = None,
         threshold: float = 0.8,
-    ) -> List[str]:
+    ) -> List[Dict[str, Any]]:
         sections = canonical_data.get("semantic_sections") or canonical_data.get("semanticSections") or []
-        warnings: List[str] = []
+        template_field_ids = set()
+        repeater_field_ids = set()
+        if template_config is not None:
+            template_field_ids.update((template_config.field_map or {}).keys())
+            repeater_field_ids.update((template_config.repeaters or {}).keys())
+            template_field_ids.update(repeater_field_ids)
+
+        warnings: List[Dict[str, Any]] = []
+        seen_fields = set()
         for section in sections:
             if not isinstance(section, dict):
                 continue
             for field in section.get("fields") or []:
                 if not isinstance(field, dict):
                     continue
-                values = field.get("values") or []
-                if not isinstance(values, list):
-                    values = [values]
+                field_id = str(field.get("id") or "")
+                if template_field_ids and field_id not in template_field_ids:
+                    continue
+                if field_id in seen_fields:
+                    continue
 
-                low_confidences: List[float] = []
-                for value in values:
-                    payload = value if isinstance(value, dict) else {}
-                    if payload.get("value") in (None, ""):
-                        continue
-                    try:
-                        confidence = float(payload.get("confidence"))
-                    except (TypeError, ValueError):
-                        continue
-                    if confidence < threshold:
-                        low_confidences.append(confidence)
-
-                if low_confidences:
-                    label = field.get("label") or field.get("id") or "Unknown field"
-                    warnings.append(
-                        f"Low confidence field used for output: {label} ({min(low_confidences) * 100:.0f}%)"
+                lowest_confidence, lowest_payload, nested_field = (
+                    SubmissionFillCoordinator._lowest_confidence_payload(
+                        field.get("values") or [],
+                        threshold,
+                        inspect_nested=field_id in repeater_field_ids,
                     )
+                )
+
+                if lowest_confidence is not None:
+                    label = str(field.get("label") or field_id or "Unknown field")
+                    if nested_field:
+                        label = f"{label} {nested_field}".strip()
+                    source = lowest_payload.get("source") if isinstance(lowest_payload, dict) else {}
+                    source_document = None
+                    if isinstance(source, dict):
+                        source_document = (
+                            source.get("source_file")
+                            or source.get("file_name")
+                            or source.get("filename")
+                        )
+                    warnings.append({
+                        "field_id": field_id or None,
+                        "field_name": label,
+                        "message": (
+                            f"Review recommended: {label} was filled from "
+                            f"{lowest_confidence * 100:.0f}% confidence source data."
+                        ),
+                        "severity": "medium",
+                        "confidence": round(lowest_confidence, 4),
+                        "value": lowest_payload.get("value"),
+                        "source_document": source_document,
+                        "reason": "source_confidence_below_threshold",
+                    })
+                    seen_fields.add(field_id)
 
         return warnings[:20]
+
+    @staticmethod
+    def _lowest_confidence_payload(
+        values: Any,
+        threshold: float,
+        *,
+        inspect_nested: bool = False,
+    ) -> Tuple[Optional[float], Dict[str, Any], Optional[str]]:
+        if not isinstance(values, list):
+            values = [values]
+
+        lowest_confidence = None
+        lowest_payload: Dict[str, Any] = {}
+        nested_field = None
+
+        for value in values:
+            payload = value if isinstance(value, dict) else {}
+            candidates: List[Tuple[Dict[str, Any], Optional[str]]] = [(payload, None)]
+            raw_value = payload.get("value")
+
+            if inspect_nested and isinstance(raw_value, dict):
+                candidates.extend(
+                    (
+                        {
+                            "value": nested_value,
+                            "confidence": payload.get("confidence"),
+                            "source": payload.get("source"),
+                        },
+                        str(nested_key),
+                    )
+                    for nested_key, nested_value in raw_value.items()
+                    if nested_value not in (None, "")
+                )
+
+            for candidate, candidate_nested_field in candidates:
+                if candidate.get("value") in (None, ""):
+                    continue
+                try:
+                    confidence = float(candidate.get("confidence"))
+                except (TypeError, ValueError):
+                    continue
+                if confidence < threshold and (
+                    lowest_confidence is None or confidence < lowest_confidence
+                ):
+                    lowest_confidence = confidence
+                    lowest_payload = candidate
+                    nested_field = candidate_nested_field
+
+        return lowest_confidence, lowest_payload, nested_field

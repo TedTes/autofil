@@ -95,6 +95,10 @@ export interface FillWarning {
   field_name?: string
   message: string
   severity?: 'low' | 'medium' | 'high'
+  confidence?: number
+  value?: unknown
+  source_document?: string | null
+  reason?: string
 }
 
 /**

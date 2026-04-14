@@ -21,7 +21,7 @@ import {
   Download,
 } from 'lucide-react'
 import type { TemplateFillResult } from '@/types/'
-import { safeMessage } from '@/lib/format-utils'
+import { safeMessage, safeNumber, safeStringField, truncateText } from '@/lib/format-utils'
 
 interface TemplateFillStatusCardProps {
   result: TemplateFillResult
@@ -79,6 +79,7 @@ export default function TemplateFillStatusCard({
   }
 
   const hasDetails = result.status === 'success' || result.status === 'error'
+  const warningCount = result.report?.warnings.length || 0
 
   return (
     <div
@@ -134,11 +135,11 @@ export default function TemplateFillStatusCard({
             {/* Warnings/Errors Badge */}
             {result.status === 'success' && result.report && (
               <div className="flex items-center gap-2">
-                {result.report.warnings.length > 0 && (
+                {warningCount > 0 && (
                   <span className="px-2 py-1 text-xs bg-yellow-100 text-yellow-700 rounded flex items-center gap-1">
                     <AlertTriangle className="w-3 h-3" />
-                    {result.report.warnings.length} warning
-                    {result.report.warnings.length !== 1 ? 's' : ''}
+                    {warningCount} review warning
+                    {warningCount !== 1 ? 's' : ''}
                   </span>
                 )}
                 {result.report.errors.length > 0 && (
@@ -235,7 +236,10 @@ export default function TemplateFillStatusCard({
                         className="text-xs text-yellow-700 bg-yellow-50 px-2 py-1 rounded flex items-start gap-1"
                       >
                         <AlertTriangle className="w-3 h-3 flex-shrink-0 mt-0.5" />
-                        <span>{safeMessage(warning, 'Warning')}</span>
+                        <div className="min-w-0">
+                          <p>{safeMessage(warning, 'Warning')}</p>
+                          <WarningDetailLine warning={warning} />
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -281,5 +285,25 @@ export default function TemplateFillStatusCard({
         </div>
       )}
     </div>
+  )
+}
+
+function WarningDetailLine({ warning }: { warning: unknown }) {
+  const confidence = warning && typeof warning === 'object'
+    ? safeNumber((warning as Record<string, unknown>).confidence)
+    : undefined
+  const sourceDocument = safeStringField(warning, 'source_document')
+  const value = safeStringField(warning, 'value')
+
+  if (confidence === undefined && !sourceDocument && !value) return null
+
+  return (
+    <p className="mt-0.5 text-[11px] leading-4 text-yellow-800/80">
+      {confidence !== undefined && <span>{Math.round(confidence * 100)}% confidence</span>}
+      {confidence !== undefined && (sourceDocument || value) && <span> · </span>}
+      {sourceDocument && <span>{sourceDocument}</span>}
+      {sourceDocument && value && <span> · </span>}
+      {value && <span>Value: {truncateText(value)}</span>}
+    </p>
   )
 }

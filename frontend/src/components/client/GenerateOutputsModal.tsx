@@ -20,7 +20,7 @@ import type {
 
 import { calculateTemplateReadiness } from '@/lib'
 import { fillMultipleTemplates } from '@/lib/api-client'
-import { safeMessage } from '@/lib/format-utils'
+import { safeMessage, safeNumber, safeStringField } from '@/lib/format-utils'
 import TemplateFillStatusCard from './TemplateFillStatusCard'
 
 function humanizeTemplateId(templateId: string): string {
@@ -520,6 +520,9 @@ function ResultsView({
     r => r.report?.output.url === selectedPreview
   )
   const selectedWarnings = selectedResult?.report?.warnings || []
+  const reviewWarningCount = selectedWarnings.filter((warning) =>
+    safeStringField(warning, 'reason') === 'source_confidence_below_threshold'
+  ).length
 
   return (
     <div className="flex flex-col h-[95vh]">
@@ -596,15 +599,27 @@ function ResultsView({
               <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-amber-900">
-                  Generated with {selectedWarnings.length} warning{selectedWarnings.length !== 1 ? 's' : ''}
+                  Review recommended
                 </p>
+                {reviewWarningCount > 0 && (
+                  <p className="mt-0.5 text-xs text-amber-800">
+                    {reviewWarningCount} filled field{reviewWarningCount !== 1 ? 's were' : ' was'} generated from
+                    low-confidence source data.
+                  </p>
+                )}
+                {reviewWarningCount === 0 && (
+                  <p className="mt-0.5 text-xs text-amber-800">
+                    Generated with {selectedWarnings.length} warning
+                    {selectedWarnings.length !== 1 ? 's' : ''}. Review before using this output.
+                  </p>
+                )}
                 <div className="mt-1 flex flex-wrap gap-1.5">
                   {selectedWarnings.slice(0, 3).map((warning, index) => (
                     <span
                       key={index}
                       className="rounded-full bg-white px-2 py-0.5 text-xs text-amber-800 ring-1 ring-amber-200"
                     >
-                      {safeMessage(warning)}
+                      {formatPreviewWarning(warning)}
                     </span>
                   ))}
                   {selectedWarnings.length > 3 && (
@@ -636,6 +651,19 @@ function ResultsView({
       </div>
     </div>
   )
+}
+
+function formatPreviewWarning(warning: unknown): string {
+  const fieldName = safeStringField(warning, 'field_name')
+  const confidence = warning && typeof warning === 'object'
+    ? safeNumber((warning as Record<string, unknown>).confidence)
+    : undefined
+
+  if (fieldName && confidence !== undefined) {
+    return `${fieldName}: ${Math.round(confidence * 100)}%`
+  }
+
+  return safeMessage(warning)
 }
 
 function ModalOverlay({ 

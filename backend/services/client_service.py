@@ -99,7 +99,7 @@ class ClientService:
         metadata['submission_count'] = len(metadata['submissions'])
         return metadata
     
-    def list_clients(self) -> List[Dict[str, Any]]:
+    def list_clients(self, include_submissions: bool = False) -> List[Dict[str, Any]]:
         """
         List all clients.
         
@@ -108,10 +108,11 @@ class ClientService:
         """
         clients = self.db.list_clients_metadata(user_id=self.current_user_id)
         for metadata in clients:
-            self._ensure_ingestion_email(metadata)
+            self._ensure_ingestion_email(metadata, persist=False)
             metadata.setdefault('submissions', [])
-            metadata['submissions_detailed'] = self._build_submission_packages(metadata)
             metadata['submission_count'] = len(metadata['submissions'])
+            if include_submissions:
+                metadata['submissions_detailed'] = self._build_submission_packages(metadata)
         clients.sort(key=lambda x: x.get('name', '').lower())
         return clients
     

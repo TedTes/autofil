@@ -33,13 +33,17 @@ def _template_library() -> TemplateLibraryService:
 @require_auth
 def list_clients():
     """
-    List all clients with their submissions.
+    List all clients.
+
+    Query params:
+      - include_submissions=true to include nested submission packages.
     
     Returns:
-        JSON with list of clients and nested submissions
+        JSON with list of clients
     """
     try:
-        clients = _client_service().list_clients()
+        include_submissions = request.args.get("include_submissions", "").lower() == "true"
+        clients = _client_service().list_clients(include_submissions=include_submissions)
         
         return jsonify({
             'success': True,

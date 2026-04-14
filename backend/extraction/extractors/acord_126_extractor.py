@@ -45,8 +45,13 @@ class ACORD126Extractor(BaseExtractor):
 
         # 1) Raw fields from fillable PDF
         raw_fields: Dict[str, Any] = {}
+        field_metadata: Dict[str, Dict[str, Any]] = {}
         if self.pdf_parser.is_fillable(doc.file_path):
-            raw_fields = self.pdf_parser.extract_fields(doc.file_path)
+            field_metadata = self.pdf_parser.extract_field_metadata(doc.file_path)
+            raw_fields = {
+                field_name: metadata.get("value")
+                for field_name, metadata in field_metadata.items()
+            }
             if raw_fields:
                 confidence = 0.98
                 extraction_method = "fillable_pdf_alias"
@@ -59,7 +64,7 @@ class ACORD126Extractor(BaseExtractor):
 
         # 2) Map fields using template (with alias fallback)
         if raw_fields:
-            self._map_fields(raw_fields, entities, confidence, template_config)
+            self._map_fields(raw_fields, entities, confidence, template_config, field_metadata)
 
         # 3) Use OCR/text-layer content for scanned forms or to patch missing fields.
         if doc.raw_text:
@@ -121,6 +126,7 @@ class ACORD126Extractor(BaseExtractor):
         entities: Dict[str, List[EntityValue]],
         confidence: float,
         template_config: Optional[TemplateConfig],
+        field_metadata: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> None:
         """
         Map each raw PDF field name to a canonical_id by:
@@ -136,7 +142,13 @@ class ACORD126Extractor(BaseExtractor):
 
             # Example: treat certain patterns as Classification table
             if self._looks_like_classification_field(field_name):
-                self._map_classification_field(field_name, value, entities, confidence)
+                self._map_classification_field(
+                    field_name,
+                    value,
+                    entities,
+                    confidence,
+                    field_metadata,
+                )
                 continue
 
             canonical_id: Optional[str] = None
@@ -158,8 +170,9 @@ class ACORD126Extractor(BaseExtractor):
             ev = EntityValue(
                 value=cleaned_value,
                 confidence=confidence,
-                source=SourceRef(
-                    page=1,
+                source=self._source_ref_for_pdf_field(
+                    field_name,
+                    field_metadata,
                     extraction_rule="pdf_field_alias",
                 ),
                 tags=["fillable_pdf", "alias"],
@@ -222,6 +235,7 @@ class ACORD126Extractor(BaseExtractor):
         value: Any,
         entities: Dict[str, List[EntityValue]],
         confidence: float,
+        field_metadata: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> None:
         """
         Simple heuristic: group classification row fields by trailing index/letter.
@@ -272,8 +286,9 @@ class ACORD126Extractor(BaseExtractor):
                 EntityValue(
                     value={},  # row dict
                     confidence=confidence,
-                    source=SourceRef(
-                        page=1,
+                    source=self._source_ref_for_pdf_field(
+                        field_name,
+                        field_metadata,
                         extraction_rule="pdf_field_classification",
                     ),
                     tags=["fillable_pdf", "classification"],

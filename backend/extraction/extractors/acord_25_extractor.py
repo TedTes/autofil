@@ -40,8 +40,13 @@ class ACORD25Extractor(BaseExtractor):
         extraction_method = "ocr_text_alias"
 
         raw_fields: Dict[str, Any] = {}
+        field_metadata: Dict[str, Dict[str, Any]] = {}
         if self.pdf_parser.is_fillable(doc.file_path):
-            raw_fields = self.pdf_parser.extract_fields(doc.file_path)
+            field_metadata = self.pdf_parser.extract_field_metadata(doc.file_path)
+            raw_fields = {
+                field_name: metadata.get("value")
+                for field_name, metadata in field_metadata.items()
+            }
             if raw_fields:
                 confidence = 0.98
                 extraction_method = "fillable_pdf_alias"
@@ -50,7 +55,13 @@ class ACORD25Extractor(BaseExtractor):
         if raw_fields:
             detected = self.template_recognizer.detect(raw_fields.keys()) or "acord_25_2016"
             template_config = self.template_loader.load(detected)
-            self._extract_from_pdf_fields(raw_fields, entities, confidence, template_config)
+            self._extract_from_pdf_fields(
+                raw_fields,
+                entities,
+                confidence,
+                template_config,
+                field_metadata,
+            )
 
         if doc.raw_text:
             missing_field_ids = set(self._relevant_field_ids(template_config))
@@ -105,6 +116,7 @@ class ACORD25Extractor(BaseExtractor):
         entities: Dict[str, List[EntityValue]],
         confidence: float,
         template_config: Optional[TemplateConfig],
+        field_metadata: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> None:
         for field_name, value in raw_fields.items():
             if value is None or str(value).strip() in ("", "/Off", "Off"):
@@ -122,7 +134,11 @@ class ACORD25Extractor(BaseExtractor):
                 EntityValue(
                     value=self._clean_value(canonical_id, str(value)),
                     confidence=confidence,
-                    source=SourceRef(page=1, extraction_rule="pdf_field_alias"),
+                    source=self._source_ref_for_pdf_field(
+                        field_name,
+                        field_metadata,
+                        extraction_rule="pdf_field_alias",
+                    ),
                     tags=["fillable_pdf", "alias"],
                 )
             )

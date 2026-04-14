@@ -4,12 +4,25 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
 from ..core.document import Document
-from ..core.schema import CanonicalOutput
+from ..core.schema import CanonicalOutput, SourceRef
 from ..models.extraction_result import ExtractionResult
 from ..utils.semantic_section_builder import SemanticSectionBuilder
 
 
 class BaseExtractor(ABC):
+    def _source_ref_for_pdf_field(
+        self,
+        field_name: str,
+        field_metadata: Optional[Dict[str, Dict[str, Any]]],
+        extraction_rule: str,
+    ) -> SourceRef:
+        metadata = (field_metadata or {}).get(field_name) or {}
+        return SourceRef(
+            page=metadata.get("page") or 1,
+            bbox=metadata.get("bbox"),
+            extraction_rule=extraction_rule,
+        )
+
     def _build_field_provenance(self, canonical: CanonicalOutput) -> Dict[str, List[Dict[str, Any]]]:
         entity_map = SemanticSectionBuilder.flatten(canonical.semantic_sections)
         raw = canonical.raw or {}

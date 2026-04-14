@@ -1,11 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react'
-import { ArrowLeft, Download, Save, Loader2, Edit, FileSpreadsheet } from 'lucide-react'
+import { Download, Save, Loader2, Edit, FileSpreadsheet, MapPin } from 'lucide-react'
 import { PdfPreview } from '@/components/PdfPreview'
-import { ExtractionDataForm } from '@/components/ExtractionDataForm'
 import {
-  type ExtractedField,
   type ExtractionData,
   type FileDetailActions,
 } from '../../types'
@@ -16,9 +14,8 @@ import {
   updateSubmissionData,
   getInputPreviewBlob,
 } from '@/lib/api-client'
-import { transformFormFieldsToApi, fieldsToNestedObject } from '../../lib'
 import { ExportModal } from '../ExportModal'
-import { CleanDataDisplay } from '../extraction/CleanDataDisplay'
+import { CleanDataDisplay, type FieldSourceSelection } from '../extraction/CleanDataDisplay'
 import { SovScheduleView, getSovScheduleData } from '../extraction/SovSchedule'
 
 type SpecializedViewConfig = {
@@ -65,8 +62,8 @@ export function FileDetailView({
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [isFilling, setIsFilling] = useState(false)
-  const [showFillModal, setShowFillModal] = useState(false)
+  const [isFilling] = useState(false)
+  const [, setShowFillModal] = useState(false)
   // Edit mode state
   const [isEditMode, setIsEditMode] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
@@ -77,6 +74,7 @@ export function FileDetailView({
   const [isExporting, setIsExporting] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [isLoadingPreview, setIsLoadingPreview] = useState(false)
+  const [selectedFieldSource, setSelectedFieldSource] = useState<FieldSourceSelection | null>(null)
   const resolvedFilename = extractedData?.filename || filename
   const specializedView = useMemo(
     () => resolveSpecializedView(extractedData?.data),
@@ -84,6 +82,9 @@ export function FileDetailView({
   )
   const hasSpecializedView = Boolean(specializedView)
   const isPdfPreview = !!resolvedFilename && resolvedFilename.toLowerCase().endsWith('.pdf')
+  const selectedSourcePage = selectedFieldSource?.source?.page
+    ? Number(selectedFieldSource.source.page)
+    : undefined
 
 
   // Fetch submission data
@@ -165,23 +166,6 @@ export function FileDetailView({
       })
     }
   }, [hasUnsavedChanges, isSavingChanges, isExporting, isFilling, handleSaveChanges, onActionsReady])
-  // Handle field changes from the form
-  const handleFieldsChange = useCallback((updatedFields: ExtractedField[]) => {
-    setExtractedData((prev) => {
-      if (!prev) return prev
-      const updatedData = transformFormFieldsToApi
-      ? transformFormFieldsToApi(updatedFields)
-      : fieldsToNestedObject(updatedFields)
-     return { ...prev ,
-      data: updatedData
-    }})
-    setHasUnsavedChanges(true)
-  }, [])
-
-  
-  // Save changes to database
-
-
   // Toggle edit mode
   const handleToggleEditMode = () => {
     if (specializedView?.disableEdit) {
@@ -210,7 +194,7 @@ export function FileDetailView({
       // Download original PDF logic
       setSuccessMessage('✓ Original PDF downloaded')
       setTimeout(() => setSuccessMessage(null), 3000)
-    } catch (err) {
+    } catch {
       setErrorMessage('Failed to download original PDF')
     }
   }
@@ -327,6 +311,7 @@ export function FileDetailView({
               <PdfPreview
                 fileUrl={previewUrl || 'about:blank'}
                 filename={resolvedFilename}
+                targetPage={selectedSourcePage}
                 onDownload={handleDownloadOriginal}
               />
             ) : (
@@ -457,6 +442,29 @@ export function FileDetailView({
     </div>
   )}
 
+  {selectedFieldSource && (
+    <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
+      <div className="flex items-start gap-3">
+        <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-600" />
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-blue-950">
+            Source selected: {selectedFieldSource.fieldLabel}
+          </div>
+          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-blue-800">
+            {selectedSourcePage && <span>Page {selectedSourcePage}</span>}
+            {selectedFieldSource.confidence !== undefined && (
+              <span>{Math.round(selectedFieldSource.confidence * 100)}% confidence</span>
+            )}
+            {selectedFieldSource.source?.extraction_rule && (
+              <span>{String(selectedFieldSource.source.extraction_rule).replace(/_/g, ' ')}</span>
+            )}
+            {!selectedSourcePage && <span>Source page unavailable for this field</span>}
+          </div>
+        </div>
+      </div>
+    </div>
+  )}
+
   {/* Clean Data Display */}
   {hasSpecializedView && specializedView ? (
     specializedView.render
@@ -465,6 +473,8 @@ export function FileDetailView({
       data={extractedData.data}
       fieldConfidence={extractedData.field_confidence}
       isEditable={isEditMode}
+      selectedFieldPath={selectedFieldSource?.fieldPath}
+      onFieldSelect={setSelectedFieldSource}
       onFieldChange={(fieldPath, value) => {
         const newData = setAtPath(extractedData.data as Record<string, unknown>, fieldPath.split('.'), value)
         setExtractedData({ ...extractedData, data: newData })
@@ -516,53 +526,4 @@ function setAtPath(
     return { ...map, [key]: update(map[key], rest) }
   }
   return update(obj, keys) as Record<string, unknown>
-}
-
-// Loading State Component
-function LoadingState() {
-  return (
-    <div className="h-full flex items-center justify-center bg-gray-50">
-      <div className="text-center">
-        <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">Loading document...</h3>
-        <p className="text-sm text-gray-600">Please wait while we fetch the details</p>
-      </div>
-    </div>
-  )
-}
-
-// Error State Component
-function ErrorState({ error, onBack }: { error: string; onBack?: () => void }) {
-  return (
-    <div className="h-full flex items-center justify-center bg-gray-50">
-      <div className="text-center max-w-md">
-        <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <svg
-            className="w-8 h-8 text-red-600"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-        </div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">Failed to load document</h3>
-        <p className="text-sm text-gray-600 mb-6">{error}</p>
-        {onBack && (
-          <button
-            onClick={onBack}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Go Back
-          </button>
-        )}
-      </div>
-    </div>
-  )
 }

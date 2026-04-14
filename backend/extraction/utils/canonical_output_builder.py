@@ -12,6 +12,7 @@ from ..core.schema import (
     SemanticField,
     SemanticSection,
     SourceInfo,
+    SourceRef,
 )
 
 
@@ -115,10 +116,28 @@ def _coerce_entity_value(value: Any, default_confidence: float) -> Optional[Enti
     if isinstance(value, EntityValue):
         return value
 
-    # Allow dicts shaped like {"value": ..., "confidence": ...}
+    # Allow dicts shaped like {"value": ..., "confidence": ..., "source": ...}
     if isinstance(value, dict) and "value" in value:
         confidence = float(value.get("confidence", default_confidence))
-        return EntityValue(value=value.get("value"), confidence=confidence)
+        source_payload = value.get("source") or {}
+        if isinstance(source_payload, SourceRef):
+            source = source_payload
+        else:
+            try:
+                source = SourceRef.model_validate(source_payload)
+            except Exception:
+                source = None
+
+        tags = value.get("tags") or []
+        if not isinstance(tags, list):
+            tags = [tags]
+
+        return EntityValue(
+            value=value.get("value"),
+            confidence=confidence,
+            source=source,
+            tags=tags,
+        )
 
     # Any other object/dict is treated as the extracted value itself
     return EntityValue(value=value, confidence=default_confidence)

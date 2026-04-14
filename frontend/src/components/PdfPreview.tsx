@@ -6,13 +6,15 @@ import { Loader2, ZoomIn, ZoomOut, Maximize2, Download, AlertCircle } from 'luci
 interface PdfPreviewProps {
   fileUrl: string
   filename?: string
+  targetPage?: number
   onDownload?: () => void
 }
 
-export function PdfPreview({ fileUrl, filename, onDownload }: PdfPreviewProps) {
+export function PdfPreview({ fileUrl, filename, targetPage, onDownload }: PdfPreviewProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [hasError, setHasError] = useState(false)
   const [zoom, setZoom] = useState(100)
+  const pageFragment = targetPage && targetPage > 0 ? `page=${targetPage}&` : ''
 
   const handleLoad = () => {
     setIsLoading(false)
@@ -139,7 +141,7 @@ export function PdfPreview({ fileUrl, filename, onDownload }: PdfPreviewProps) {
     </div>
   )}
   <iframe
-    src={`${fileUrl}#view=FitH&toolbar=0&navpanes=0&scrollbar=0`}
+    src={`${fileUrl}#${pageFragment}view=FitH&toolbar=0&navpanes=0&scrollbar=0`}
     className="w-full shadow-2xl"
     style={{
       width: `${zoom}%`,

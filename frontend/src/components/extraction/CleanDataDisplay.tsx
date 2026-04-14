@@ -14,6 +14,23 @@ interface CleanDataDisplayProps {
   fieldConfidence?: Record<string, number>
   isEditable?: boolean
   onFieldChange?: (fieldPath: string, value: unknown) => void
+  selectedFieldPath?: string | null
+  onFieldSelect?: (source: FieldSourceSelection) => void
+}
+
+export type FieldSourceSelection = {
+  fieldId: string
+  fieldLabel: string
+  fieldPath: string
+  value: unknown
+  confidence?: number
+  source?: {
+    page?: number
+    bbox?: [number, number, number, number]
+    text_block_index?: number
+    extraction_rule?: string
+    [key: string]: unknown
+  }
 }
 
 /**
@@ -71,6 +88,16 @@ function extractConfidence(value: unknown): number | undefined {
   return undefined
 }
 
+function extractSource(value: unknown): FieldSourceSelection['source'] | undefined {
+  if (typeof value === 'object' && value !== null && 'source' in value) {
+    const source = (value as { source?: unknown }).source
+    return source && typeof source === 'object'
+      ? (source as FieldSourceSelection['source'])
+      : undefined
+  }
+  return undefined
+}
+
 /**
  * Helper: Format field name for display
  */
@@ -93,6 +120,7 @@ type SemanticFieldValue = {
   value: unknown
   confidence?: number
   tags?: string[]
+  source?: FieldSourceSelection['source']
   sourcePath: string
 }
 
@@ -135,6 +163,10 @@ function normalizeValueEntry(valueEntry: unknown, sourcePath: string): SemanticF
       confidence:
         typeof entryObj.confidence === 'number' ? entryObj.confidence : undefined,
       tags: Array.isArray(entryObj.tags) ? (entryObj.tags as string[]) : undefined,
+      source:
+        entryObj.source && typeof entryObj.source === 'object'
+          ? (entryObj.source as FieldSourceSelection['source'])
+          : undefined,
       sourcePath,
     }
   }
@@ -321,6 +353,8 @@ export function CleanDataDisplay({
   fieldConfidence = {},
   isEditable = false,
   onFieldChange,
+  selectedFieldPath,
+  onFieldSelect,
 }: CleanDataDisplayProps) {
   const displayContext = useMemo(() => resolveDisplayContext(data as Record<string, unknown>), [data])
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
@@ -378,6 +412,10 @@ export function CleanDataDisplay({
   }, {} as Record<string, Record<string, unknown>>)
   
   const sections = Object.keys(groupedData)
+
+  const handleSelectField = (selection: FieldSourceSelection) => {
+    onFieldSelect?.(selection)
+  }
   
   const toggleSection = (section: string) => {
     setExpandedSections((prev) => {
@@ -416,7 +454,7 @@ export function CleanDataDisplay({
   if (semanticSections.length > 0) {
     return (
       <div className="space-y-4 max-h-[calc(100vh-220px)] overflow-y-auto pr-1">
-        {semanticSections.map((section, sectionIndex) => {
+        {semanticSections.map((section) => {
           const sectionKey = section.displayName || section.key || 'section'
           const isExpanded = expandedSemanticSections.has(sectionKey)
 
@@ -454,7 +492,7 @@ export function CleanDataDisplay({
 
               {isExpanded && (
                 <div className="border-t border-gray-100 divide-y divide-gray-100">
-                  {section.fields.map((field, fieldIndex) => {
+                  {section.fields.map((field) => {
                     const confidenceOverride = fieldConfidence[field.id]
                     const fieldValues = field.values && field.values.length > 0 ? field.values : null
                     const tableData = fieldValues ? buildTabularFromFieldValues(fieldValues) : null
@@ -466,7 +504,24 @@ export function CleanDataDisplay({
                         {fieldValues ? (
                           <div className="mt-2 flex flex-col gap-2">
                             {tableData ? (
-                              <div className="flex flex-col gap-2">
+                              <div
+                                onClick={() => {
+                                  const firstValue = fieldValues[0]
+                                  handleSelectField({
+                                    fieldId: field.id,
+                                    fieldLabel: field.label,
+                                    fieldPath: firstValue.sourcePath,
+                                    value: firstValue.value,
+                                    confidence: firstValue.confidence ?? confidenceOverride,
+                                    source: firstValue.source,
+                                  })
+                                }}
+                                className={`flex flex-col gap-2 rounded-lg border p-2 transition-colors cursor-pointer ${
+                                  selectedFieldPath === fieldValues[0]?.sourcePath
+                                    ? 'border-blue-300 bg-blue-50 ring-1 ring-blue-200'
+                                    : 'border-transparent hover:border-blue-200 hover:bg-blue-50/40'
+                                }`}
+                              >
                                 {renderObjectTable(tableData, 0)}
                                 {fieldValues.some(
                                   (entry) =>
@@ -504,7 +559,21 @@ export function CleanDataDisplay({
                               fieldValues.map((entry, index) => (
                                 <div
                                   key={`${field.id}-${index}`}
-                                  className="flex flex-col gap-1 bg-gray-50 rounded-lg p-3 border border-gray-100"
+                                  onClick={() =>
+                                    handleSelectField({
+                                      fieldId: field.id,
+                                      fieldLabel: field.label,
+                                      fieldPath: entry.sourcePath,
+                                      value: entry.value,
+                                      confidence: entry.confidence ?? confidenceOverride,
+                                      source: entry.source,
+                                    })
+                                  }
+                                  className={`flex flex-col gap-1 rounded-lg p-3 border transition-colors cursor-pointer ${
+                                    selectedFieldPath === entry.sourcePath
+                                      ? 'bg-blue-50 border-blue-300 ring-1 ring-blue-200'
+                                      : 'bg-gray-50 border-gray-100 hover:border-blue-200 hover:bg-blue-50/40'
+                                  }`}
                                 >
                                   {isEditable &&
                                   onFieldChange &&
@@ -611,8 +680,11 @@ export function CleanDataDisplay({
                         rawValue={entry.rawValue}
                         displayValue={displayValue}
                         confidence={confidence}
+                        source={extractSource(entry.rawValue)}
+                        selected={selectedFieldPath === entry.sourcePath}
                         isEditable={isEditable}
                         onFieldChange={onFieldChange}
+                        onFieldSelect={handleSelectField}
                       />
                     )
                   })}
@@ -642,16 +714,22 @@ function FieldRow({
   rawValue,
   displayValue,
   confidence,
+  source,
+  selected,
   isEditable,
   onFieldChange,
+  onFieldSelect,
 }: {
   fieldPath: string
   fieldName: string
   rawValue: unknown
   displayValue: string
   confidence?: number
+  source?: FieldSourceSelection['source']
+  selected?: boolean
   isEditable: boolean
   onFieldChange?: (fieldPath: string, value: unknown) => void
+  onFieldSelect?: (source: FieldSourceSelection) => void
 }) {
   // Infer field type from field name
   const inferFieldType = (): 'text' | 'number' | 'date' => {
@@ -664,7 +742,23 @@ function FieldRow({
   const formattedLabel = formatFieldName(fieldName)
   
   return (
-    <div className="flex items-start gap-4">
+    <div
+      onClick={() =>
+        onFieldSelect?.({
+          fieldId: fieldName,
+          fieldLabel: formattedLabel,
+          fieldPath,
+          value: rawValue,
+          confidence,
+          source,
+        })
+      }
+      className={`flex items-start gap-4 rounded-lg border p-2 transition-colors cursor-pointer ${
+        selected
+          ? 'border-blue-300 bg-blue-50 ring-1 ring-blue-200'
+          : 'border-transparent hover:border-blue-200 hover:bg-blue-50/40'
+      }`}
+    >
       {/* Label */}
       <div className="flex-shrink-0 w-40">
         <span className="text-sm font-medium text-gray-600">

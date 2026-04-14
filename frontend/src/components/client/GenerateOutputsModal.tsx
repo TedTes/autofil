@@ -18,7 +18,7 @@ import type {
   MultipleFillResults 
 } from '@/types'
 
-import { calculateTemplateReadiness } from '@/lib'
+import { calculateTemplateReadiness } from '@/lib/merged-data'
 import { fillMultipleTemplates } from '@/lib/api-client'
 import { safeMessage, safeNumber, safeStringField } from '@/lib/format-utils'
 import TemplateFillStatusCard from './TemplateFillStatusCard'

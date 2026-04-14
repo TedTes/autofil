@@ -11,12 +11,6 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react'
-import * as pdfjsLib from 'pdfjs-dist'
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.mjs',
-  import.meta.url
-).toString()
 
 type BBox = [number, number, number, number]
 
@@ -97,6 +91,11 @@ export function PdfPreview({
       setHighlightRect(null)
 
       try {
+        const pdfjsLib = await import('pdfjs-dist')
+        pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+          'pdfjs-dist/build/pdf.worker.mjs',
+          import.meta.url
+        ).toString()
         const loadingTask = pdfjsLib.getDocument(fileUrl)
         const doc = (await loadingTask.promise) as unknown as PdfDocument
         loadedDoc = doc

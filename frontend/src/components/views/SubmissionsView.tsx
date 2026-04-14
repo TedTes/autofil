@@ -4,10 +4,12 @@
 
 'use client'
 
-import React, { useMemo, useEffect, useState } from 'react'
+import React, { useMemo, useEffect, useState, useCallback } from 'react'
 import { FileStack, Eye, Search, AlertCircle, Loader2, AlertTriangle, CheckCircle2, Clock } from 'lucide-react'
 import type { SubmissionListItem, SubmissionStats } from '@/types'
 import { listSubmissions, getSubmissionStats } from '@/lib/api-client'
+
+const PAGE_SIZE = 50
 
 // Maps each filter option value to the raw backend statuses it should include
 const STATUS_GROUPS: Record<string, string[]> = {
@@ -55,18 +57,25 @@ export function SubmissionsView({ initialStatusFilter, onSubmissionClick }: Subm
   const [submissions, setSubmissions] = useState<SubmissionListItem[]>([])
   const [stats, setStats] = useState<SubmissionStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const statusFilterParam = useMemo(() => {
+    if (statusFilter === 'all') return undefined
+    return (STATUS_GROUPS[statusFilter] ?? [statusFilter]).join(',')
+  }, [statusFilter])
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true)
         const [listRes, statsRes] = await Promise.all([
-          listSubmissions({ limit: 500 }),
+          listSubmissions({ limit: PAGE_SIZE, offset: 0, status_filter: statusFilterParam }),
           getSubmissionStats(),
         ])
         setSubmissions(listRes.submissions)
+        setHasMore(listRes.submissions.length < listRes.total)
         setStats(statsRes)
         setError(null)
       } catch (err) {
@@ -76,7 +85,24 @@ export function SubmissionsView({ initialStatusFilter, onSubmissionClick }: Subm
       }
     }
     void fetchData()
-  }, [refreshKey])
+  }, [refreshKey, statusFilterParam])
+
+  const handleLoadMore = useCallback(async () => {
+    try {
+      setLoadingMore(true)
+      const res = await listSubmissions({
+        limit: PAGE_SIZE,
+        offset: submissions.length,
+        status_filter: statusFilterParam,
+      })
+      setSubmissions((prev) => [...prev, ...res.submissions])
+      setHasMore(submissions.length + res.submissions.length < res.total)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load more')
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [statusFilterParam, submissions.length])
 
   useEffect(() => {
     setStatusFilter(initialStatusFilter || 'all')
@@ -84,10 +110,6 @@ export function SubmissionsView({ initialStatusFilter, onSubmissionClick }: Subm
 
   const filteredSubmissions = useMemo(() => {
     let filtered = submissions
-    if (statusFilter !== 'all') {
-      const allowed = STATUS_GROUPS[statusFilter] ?? [statusFilter]
-      filtered = filtered.filter((sub) => allowed.includes((sub.status || '').toLowerCase()))
-    }
     if (searchQuery) {
       const lower = searchQuery.toLowerCase()
       filtered = filtered.filter(
@@ -99,7 +121,7 @@ export function SubmissionsView({ initialStatusFilter, onSubmissionClick }: Subm
       )
     }
     return filtered
-  }, [submissions, statusFilter, searchQuery])
+  }, [submissions, searchQuery])
 
   const byStatus = stats?.by_status || {}
   const statusSummary = [
@@ -210,6 +232,7 @@ export function SubmissionsView({ initialStatusFilter, onSubmissionClick }: Subm
             </p>
           </div>
         ) : (
+          <>
           <div className="bg-white rounded-xl border border-gray-200">
             {/* Mobile Card List */}
             <div className="md:hidden divide-y divide-gray-100">
@@ -303,6 +326,19 @@ export function SubmissionsView({ initialStatusFilter, onSubmissionClick }: Subm
               </table>
             </div>
           </div>
+          {hasMore && (
+            <div className="p-4 text-center border-t border-gray-100">
+              <button
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                className="px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50 flex items-center gap-2 mx-auto"
+              >
+                {loadingMore && <Loader2 className="w-4 h-4 animate-spin" />}
+                {loadingMore ? 'Loading...' : 'Load more'}
+              </button>
+            </div>
+          )}
+          </>
         )}
       </div>
     </div>

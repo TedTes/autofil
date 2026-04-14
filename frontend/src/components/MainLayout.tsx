@@ -250,6 +250,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
 
   const router = useRouter()
   const { user, signOut } = useAuth()
+  const userId = user?.id
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const currentView = useMemo(
@@ -275,7 +276,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
   }, [])
 
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       setSubmissionStats(null)
       return
     }
@@ -288,7 +289,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
         console.warn('Failed to load submission stats', err)
       }
     })()
-  }, [user])
+  }, [userId])
 
   useEffect(() => {
     if (mobileSidebarOpen) {
@@ -368,6 +369,19 @@ const handleMobileSidebarClose = () => {
       { submissionId, filename, inputId },
       ['Dashboard', 'Documents', filename || 'File']
     )
+  }, [navigateTo])
+
+  const handleLogout = useCallback(async () => {
+    await signOut()
+    router.push('/login')
+  }, [router, signOut])
+
+  const handleSettings = useCallback(() => {
+    navigateTo('settings', undefined, ['Dashboard', 'Settings'])
+  }, [navigateTo])
+
+  const handleHelp = useCallback(() => {
+    navigateTo('help', undefined, ['Dashboard', 'Help'])
   }, [navigateTo])
 
   const navigationItems = useMemo(
@@ -584,12 +598,9 @@ const handleMobileSidebarClose = () => {
                 <AvatarMenu
                   accountLabel={currentAccountLabel}
                   userLabel={userLabel}
-                  onLogout={async () => {
-                    await signOut()
-                    router.push('/login')
-                  }}
-                  onSettings={() => navigateTo('settings', undefined, ['Dashboard', 'Settings'])}
-                  onHelp={() => navigateTo('help', undefined, ['Dashboard', 'Help'])}
+                  onLogout={handleLogout}
+                  onSettings={handleSettings}
+                  onHelp={handleHelp}
                 />
               </div>
             ) : (
@@ -640,12 +651,9 @@ const handleMobileSidebarClose = () => {
                 )}
                 <AvatarMenu
                   userLabel={userLabel}
-                  onLogout={async () => {
-                    await signOut()
-                    router.push('/login')
-                  }}
-                  onSettings={() => navigateTo('settings', undefined, ['Dashboard', 'Settings'])}
-                  onHelp={() => navigateTo('help', undefined, ['Dashboard', 'Help'])}
+                  onLogout={handleLogout}
+                  onSettings={handleSettings}
+                  onHelp={handleHelp}
                 />
               </div>
             </div>

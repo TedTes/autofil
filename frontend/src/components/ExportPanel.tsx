@@ -41,7 +41,7 @@ export default function ExportPanel() {
     try {
       // Fetch submissions list
       const submissionsRes = await fetch(
-        `/api/submissions/list?limit=1000${statusFilter !== 'all' ? `&status=${statusFilter}` : ''}`
+        `/api/submissions/list?limit=200${statusFilter !== 'all' ? `&status=${statusFilter}` : ''}`
       )
       const submissionsData = await submissionsRes.json()
 

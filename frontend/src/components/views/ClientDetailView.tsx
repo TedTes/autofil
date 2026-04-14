@@ -1,9 +1,10 @@
 'use client'
 
 import React, { useRef, useState, useEffect,useCallback, useMemo } from 'react'
+import dynamic from 'next/dynamic'
 import { useClientSubmissions,useTemplateLibrary } from '@/hooks'
 import { fillPdf, downloadPDF, updateSubmissionData} from '@/lib/api-client'
-import {GenerateOutputsModal,UploadOrMergedDataPanel} from "@/components/client"
+import UploadOrMergedDataPanel from "@/components/client/UploadOrMergedDataPanel"
 import type { ClientSubmissionPackage,UploadedRow, MergedData, ClientDetailActions  } from '@/types'
 import { CreateSubmissionModal,DeleteConfirmationModal } from '@/components'
 import { useLandingUpload } from '@/contexts/LandingUploadContext'
@@ -31,6 +32,11 @@ import {
   Copy,
   Mail
 } from 'lucide-react'
+
+const GenerateOutputsModal = dynamic(
+  () => import('@/components/client/GenerateOutputsModal'),
+  { ssr: false }
+)
 
 function getFileIcon(filename: string) {
   if (!filename) return null

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
+import dynamic from 'next/dynamic'
 import { 
   Search, Download, Trash2, RefreshCw, 
   Grid3x3, List, Loader2, FolderOpen, FileText,
@@ -10,13 +11,21 @@ import {
   type LucideIcon
 } from 'lucide-react'
 
-import { 
-  getAllSubmissions, bulkDeleteSubmissions, exportSingleSubmission,
-  deleteSubmission, downloadBlob, formatDate, bulkExportAsZip
-} from '@/lib'
+import {
+  getAllSubmissions,
+  exportSingleSubmission,
+  deleteSubmission,
+  downloadBlob,
+  bulkExportAsZip,
+} from '@/lib/api-client'
+import { formatDate } from '@/lib/utils'
 import type { ViewType, SubmissionListItem } from "../../types"
 import { ConfidenceBadgeCompact } from '@/components/ConfidenceBadge'
-import { BulkExportProgressModal } from "../BulkExportProgressModal"
+
+const BulkExportProgressModal = dynamic(
+  () => import('../BulkExportProgressModal').then((module) => module.BulkExportProgressModal),
+  { ssr: false }
+)
 
 interface DocumentsViewProps {
   onNavigate: (type: ViewType, data?: unknown, breadcrumbs?: string[]) => void

@@ -1,6 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Client, ClientSubmissionPackage,OutputTemplate, TemplateSelection, GenerateOutputsResponse } from '@/types'
-import {deleteInput, deleteOutput, deleteSubmission, generateOutputs as generateOutputsAPI, getClientById, getClientSubmissions, createClientSubmission, uploadPdf, getMergedData,calculateTemplateReadiness, getSubmissionPackage, updateSubmissionInputInclusion} from '@/lib'
+import type { Client, ClientSubmissionPackage, OutputTemplate, GenerateOutputsResponse } from '@/types'
+import {
+  createClientSubmission,
+  deleteInput,
+  deleteOutput,
+  deleteSubmission,
+  generateOutputs as generateOutputsAPI,
+  getClientById,
+  getClientSubmissions,
+  getMergedData,
+  getSubmissionPackage,
+  updateSubmissionInputInclusion,
+  updateSubmissionInputsInclusion,
+  uploadPdf,
+} from '@/lib/api-client'
+import { calculateTemplateReadiness } from '@/lib/merged-data'
 import useToast from '@/hooks/useToast' 
 import type { MergedData,UploadedRow } from '@/types'
 
@@ -383,13 +397,9 @@ useEffect(() => {
     setMergedDataError(null)
 
     try {
-      let latestPackage: ClientSubmissionPackage | null = null
-      let latestMergedData: MergedData | null = null
-      for (const inputId of available) {
-        const result = await updateSubmissionInputInclusion(submissionId, inputId, targetIncluded)
-        latestPackage = result.package
-        latestMergedData = result.mergedData
-      }
+      const result = await updateSubmissionInputsInclusion(submissionId, available, targetIncluded)
+      const latestPackage = result.package
+      const latestMergedData = result.mergedData
       if (latestPackage) {
         replacePackageSnapshot(latestPackage)
       }

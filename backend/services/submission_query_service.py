@@ -32,44 +32,13 @@ class SubmissionQueryService:
         }
         summaries: List[Dict[str, Any]] = []
         for metadata in self.repository.list_all():
-            if not metadata:
+            summary = self.build_submission_summary(metadata)
+            if not summary:
                 continue
-            submission_id = metadata.get("submission_id")
-            if not submission_id:
-                continue
-
-            inputs_meta = metadata.get("inputs") or []
-            primary_input = inputs_meta[-1] if inputs_meta else None
-            submission_name = (
-                metadata.get("name")
-                or metadata.get("title")
-                or f"Submission {submission_id[:8]}"
-            )
-
-            status = metadata.get("status") or metadata.get("workflow_status") or "uploaded"
+            status = summary.get("status")
             if normalized_statuses and str(status).lower() not in normalized_statuses:
                 continue
-
-            summaries.append({
-                "submission_id": submission_id,
-                "name": submission_name,
-                "filename": (
-                    (primary_input or {}).get("filename")
-                    or metadata.get("filename")
-                    or metadata.get("name")
-                    or "Untitled.pdf"
-                ),
-                "input_id": (primary_input or {}).get("input_id"),
-                "status": status,
-                "uploaded_at": (primary_input or {}).get("uploaded_at") or metadata.get("uploaded_at") or metadata.get("created_at"),
-                "confidence": metadata.get("confidence"),
-                "folder_id": metadata.get("folder_id"),
-                "client_id": metadata.get("client_id"),
-                "client_name": metadata.get("client_name"),
-                "template_type": metadata.get("template_type"),
-                "template_metadata": metadata.get("template_metadata"),
-                "file_count": metadata.get("file_count", 0),
-            })
+            summaries.append(summary)
 
         summaries.sort(key=lambda item: item.get("uploaded_at") or "", reverse=True)
         total = len(summaries)
@@ -77,6 +46,47 @@ class SubmissionQueryService:
             start = max(offset, 0)
             summaries = summaries[start : start + max(limit, 0)]
         return {"items": summaries, "total": total}
+
+    def build_submission_summary(self, metadata: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        if not metadata:
+            return None
+        submission_id = metadata.get("submission_id")
+        if not submission_id:
+            return None
+
+        inputs_meta = metadata.get("inputs") or []
+        primary_input = inputs_meta[-1] if inputs_meta else None
+        submission_name = (
+            metadata.get("name")
+            or metadata.get("title")
+            or f"Submission {submission_id[:8]}"
+        )
+        status = metadata.get("status") or metadata.get("workflow_status") or "uploaded"
+
+        return {
+            "submission_id": submission_id,
+            "name": submission_name,
+            "filename": (
+                (primary_input or {}).get("filename")
+                or metadata.get("filename")
+                or metadata.get("name")
+                or "Untitled.pdf"
+            ),
+            "input_id": (primary_input or {}).get("input_id"),
+            "status": status,
+            "uploaded_at": (primary_input or {}).get("uploaded_at") or metadata.get("uploaded_at") or metadata.get("created_at"),
+            "last_edited_at": metadata.get("last_edited_at"),
+            "filled_at": metadata.get("filled_at"),
+            "updated_at": metadata.get("updated_at"),
+            "confidence": metadata.get("confidence"),
+            "folder_id": metadata.get("folder_id"),
+            "client_id": metadata.get("client_id"),
+            "client_name": metadata.get("client_name"),
+            "document_type": (primary_input or {}).get("document_type") or metadata.get("document_type"),
+            "template_type": metadata.get("template_type"),
+            "template_metadata": metadata.get("template_metadata"),
+            "file_count": metadata.get("file_count", 0),
+        }
 
     def get_all_submissions(self) -> List[Dict[str, Any]]:
         submissions: List[Dict[str, Any]] = []

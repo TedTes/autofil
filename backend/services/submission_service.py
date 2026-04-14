@@ -1342,9 +1342,19 @@ class SubmissionService:
         Returns submissions sorted by latest activity desc.
         Activity = max(uploaded_at, last_edited_at, filled_at, updated_at) that exists.
         """
+        can_page_at_storage = not status and not folder_id and not since
+        metadata_rows = self.repository.list_all(
+            limit=limit if can_page_at_storage else None,
+            offset=offset if can_page_at_storage else 0,
+        )
         subs = [
-            s for s in self.get_all_submissions()
-            if (s.get("file_count") or 0) > 0
+            summary
+            for summary in (
+                self.query_service.build_submission_summary(metadata)
+                for metadata in metadata_rows
+            )
+            if summary
+            if (summary.get("file_count") or 0) > 0
         ]
 
         # optional filters
@@ -1381,7 +1391,7 @@ class SubmissionService:
         annotated.sort(key=lambda x: x["last_activity_at"], reverse=True)
 
         total = len(annotated)
-        page = annotated[offset: offset + limit]
+        page = annotated if can_page_at_storage else annotated[offset: offset + limit]
 
         # return compact rows (add any fields you want in the list)
         items = [
@@ -1398,6 +1408,7 @@ class SubmissionService:
                 "updated_at": r.get("updated_at"),
                 "last_activity_at": r.get("last_activity_at"),
                 "confidence": r.get("confidence"),
+                "document_type": r.get("document_type"),
                 "template_type": r.get("template_type"),
                 "template_metadata": r.get("template_metadata"),
             }

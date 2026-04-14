@@ -112,6 +112,8 @@ class SupabaseDatabaseService:
         *,
         filters: Optional[Dict[str, str]] = None,
         order: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: int = 0,
         maybe_single: bool = False,
     ) -> Optional[List[Dict[str, Any]]]:
         try:
@@ -121,6 +123,9 @@ class SupabaseDatabaseService:
                     params[key] = f"eq.{value}"
             if order:
                 params["order"] = order
+            if limit is not None:
+                params["limit"] = str(max(limit, 0))
+                params["offset"] = str(max(offset, 0))
             headers = self._rest_headers(
                 prefer="return=representation" + (",plurality=singular" if maybe_single else "")
             )
@@ -289,7 +294,12 @@ class SupabaseDatabaseService:
     ) -> List[Dict[str, Any]]:
         self._require_remote()
         if not self._client:
-            rows = self._http_select("submissions_metadata") or []
+            rows = self._http_select(
+                "submissions_metadata",
+                order="updated_at.desc",
+                limit=limit,
+                offset=offset,
+            ) or []
             return [
                 self._claim_submission_if_unowned(meta, user_id)
                 for meta in
@@ -312,21 +322,27 @@ class SupabaseDatabaseService:
                     "workflow_status:metadata->>workflow_status,"
                     "uploaded_at:metadata->>uploaded_at,"
                     "created_at:metadata->>created_at,"
+                    "last_edited_at:metadata->>last_edited_at,"
+                    "filled_at:metadata->>filled_at,"
                     "confidence:metadata->>confidence,"
                     "folder_id:metadata->>folder_id,"
                     "m_client_id:metadata->>client_id,"
                     "client_name:metadata->>client_name,"
                     "owner_user_id:metadata->>owner_user_id,"
                     "file_count:metadata->>file_count,"
+                    "document_type:metadata->>document_type,"
                     "template_type:metadata->>template_type,"
                     "last_input:metadata->inputs->-1"
                 )
                 try:
-                    rows = self._execute(
+                    query = (
                         self._client.table("submissions_metadata")
                         .select(summary_fields)
                         .order("updated_at", desc=True)
                     )
+                    if limit is not None:
+                        query = query.range(offset, offset + limit - 1)
+                    rows = self._execute(query)
                     if not rows:
                         return []
                     result = []
@@ -345,12 +361,16 @@ class SupabaseDatabaseService:
                             "workflow_status": row.get("workflow_status"),
                             "uploaded_at": row.get("uploaded_at") or row.get("updated_at"),
                             "created_at": row.get("created_at"),
+                            "last_edited_at": row.get("last_edited_at"),
+                            "filled_at": row.get("filled_at"),
+                            "updated_at": row.get("updated_at"),
                             "confidence": row.get("confidence"),
                             "folder_id": row.get("folder_id"),
                             "client_id": row.get("m_client_id") or row.get("client_id"),
                             "client_name": row.get("client_name"),
                             "owner_user_id": row.get("owner_user_id"),
                             "file_count": row.get("file_count"),
+                            "document_type": row.get("document_type"),
                             "template_type": row.get("template_type"),
                             "inputs": [last_input] if last_input else [],
                         }
@@ -372,11 +392,14 @@ class SupabaseDatabaseService:
                         "supabase-db projected submission list failed; falling back to metadata: %s",
                         projected_exc,
                     )
-                    rows = self._execute(
+                    query = (
                         self._client.table("submissions_metadata")
                         .select("metadata")
                         .order("updated_at", desc=True)
                     )
+                    if limit is not None:
+                        query = query.range(offset, offset + limit - 1)
+                    rows = self._execute(query)
                     if not rows:
                         return []
                     return [

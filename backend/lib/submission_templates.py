@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Dict, List
 
 from filling.template_loader import TemplateLoader, TemplateConfig
@@ -49,18 +48,16 @@ class SubmissionTemplate:
 
 
 def _discover_template_ids() -> List[str]:
-    local_dir = getattr(TemplateLoader, "local_template_dir", None)
-    if not isinstance(local_dir, Path) or not local_dir.exists():
+    storage = getattr(TemplateLoader, "storage_service", None)
+    if not storage or not getattr(storage, "enabled", False):
         return []
 
     template_ids = set()
-    for candidate in local_dir.iterdir():
-        if candidate.name.startswith("."):
+    for entry in storage.list_objects(TemplateLoader.storage_templates_root):
+        name = entry.get("name")
+        if not name or entry.get("metadata"):
             continue
-        if candidate.is_file() and candidate.suffix.lower() in {".yaml", ".yml", ".json"}:
-            template_ids.add(candidate.stem)
-        elif candidate.is_dir():
-            template_ids.add(candidate.name)
+        template_ids.add(name)
     return sorted(template_ids)
 
 

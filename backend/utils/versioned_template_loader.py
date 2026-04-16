@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Dict, Any, Optional, Iterable
-
-import yaml
 
 
 @dataclass
@@ -22,26 +19,23 @@ class TemplateConfig:
 
 class VersionedTemplateLoader:
     def __init__(self, base_dir: Optional[str] = None):
-        if base_dir:
-            self.base_dir = Path(base_dir)
-        else:
-            self.base_dir = Path(__file__).resolve().parent.parent / "templates"
+        # Kept for compatibility with older extractors that pass this into
+        # TemplateRecognizer. Runtime templates now come from Supabase storage.
+        self.base_dir = base_dir
 
     def load(self, template_id: str) -> Optional[TemplateConfig]:
-        template_path = self.base_dir / f"{template_id}.yaml"
-        if not template_path.exists():
-            print(f"[VersionedTemplateLoader] template not found: {template_path}")
+        from filling.template_loader import TemplateLoader
+
+        config = TemplateLoader.load(template_id)
+        if not config:
             return None
 
-        with open(template_path, "r") as f:
-            data = yaml.safe_load(f) or {}
-
         return TemplateConfig(
-            template_id=data.get("template_id", template_id),
-            version=data.get("version", "latest"),
-            field_map=data.get("field_map", {}),
-            repeaters=data.get("repeaters", {}),
-            raw=data,
+            template_id=config.template_id,
+            version=config.version,
+            field_map=config.field_map,
+            repeaters=config.repeater_mappings,
+            raw=config.raw,
         )
 
 
@@ -52,7 +46,7 @@ class TemplateRecognizer:
     """
 
     def __init__(self, base_dir: Optional[str] = None):
-        self.base_dir = Path(base_dir) if base_dir else VersionedTemplateLoader().base_dir
+        self.base_dir = base_dir
         self.signatures = self._load_signatures()
 
     def detect(self, field_names: Iterable[str]) -> Optional[str]:
@@ -67,17 +61,22 @@ class TemplateRecognizer:
         return None
 
     def _load_signatures(self) -> Dict[str, set]:
+        from filling.template_loader import TemplateLoader
+
         signatures: Dict[str, set] = {}
-        if not self.base_dir.exists():
+        service = getattr(TemplateLoader, "storage_service", None)
+        if not service or not getattr(service, "enabled", False):
             return signatures
 
-        for template_file in self.base_dir.glob("*.yaml"):
+        for entry in service.list_objects(TemplateLoader.storage_templates_root):
+            name = (entry.get("name") or "").strip("/")
+            if not name:
+                continue
             try:
-                with open(template_file, "r") as f:
-                    data = yaml.safe_load(f) or {}
-                fields = data.get("signature_fields", [])
+                config = TemplateLoader.load(name)
+                fields = (config.raw if config else {}).get("signature_fields", [])
                 if fields:
-                    signatures[template_file.stem] = set(fields)
+                    signatures[name] = set(fields)
             except Exception:
                 continue
         return signatures

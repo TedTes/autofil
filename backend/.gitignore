@@ -4,3 +4,4 @@ dev
 filled
 tests/output/**
 .env
+/templates/*.yaml

@@ -67,6 +67,11 @@ const HelpView = dynamic(
   { loading: () => <ViewLoadingFallback /> }
 )
 
+const SettingsView = dynamic(
+  () => import('./views/SettingsView').then((module) => module.SettingsView),
+  { loading: () => <ViewLoadingFallback /> }
+)
+
 const ClientDetailView = dynamic(
   () => import('./views/ClientDetailView').then((module) => module.ClientDetailView),
   { loading: () => <ViewLoadingFallback /> }
@@ -701,10 +706,7 @@ const handleMobileSidebarClose = () => {
             )}
 {/* Settings */}
 {currentView.type === 'settings' && (
-  <div className="p-8">
-    <h2 className="text-2xl font-bold text-gray-900 mb-4">Settings</h2>
-    <p className="text-gray-600">Configuration options coming soon...</p>
-  </div>
+  <SettingsView />
 )}
 {currentView.type === 'clients' && (
   <ClientsView

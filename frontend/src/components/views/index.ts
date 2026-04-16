@@ -5,4 +5,5 @@ export * from "./HelpView";
 export * from "./SubmissionsView";
 export * from "./TemplatesView";
 export * from "./ReportsView";
+export * from "./SettingsView";
 export * from "./ClientDetailView";

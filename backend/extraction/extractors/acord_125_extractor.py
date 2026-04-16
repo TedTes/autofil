@@ -37,7 +37,7 @@ from ..utils.semantic_section_builder import SemanticSectionBuilder
 class ACORD125Extractor(BaseExtractor):
     def __init__(self):
         self.pdf_parser = PdfFieldParser()
-        self.ocr_parser = OcrFallbackParser()
+        self.ocr_parser = OcrFallbackParser() if OcrFallbackParser else None
         self.template_loader = VersionedTemplateLoader()
         self.template_recognizer = TemplateRecognizer(
             base_dir=self.template_loader.base_dir
@@ -149,8 +149,14 @@ class ACORD125Extractor(BaseExtractor):
     #  OCR Fallback Extraction
     # --------------------------------------------------------------------- #
     def _extract_from_ocr(self, doc: Document, entities: Dict, confidence: float):
-        ocr_result = self.ocr_parser.extract_fields(doc.file_path)
-        text = ocr_result.get("text", "")
+        if not self.ocr_parser:
+            if doc.raw_text:
+                text = doc.raw_text
+            else:
+                return
+        else:
+            ocr_result = self.ocr_parser.extract_fields(doc.file_path)
+            text = ocr_result.get("text", "")
         if not text:
             return
 

@@ -35,6 +35,9 @@ class MimeClassifier(IClassifier):
     MIME_TYPE_HINTS = {
         'application/pdf': [
             DocumentType.ACORD_25,
+            DocumentType.ACORD_27,
+            DocumentType.ACORD_28,
+            DocumentType.ACORD_101,
             DocumentType.ACORD_126,
             DocumentType.ACORD_125,
             DocumentType.ACORD_130,
@@ -76,6 +79,12 @@ class MimeClassifier(IClassifier):
     EXTENSION_HINTS = {
         '.pdf': [
             DocumentType.ACORD_25,
+            DocumentType.ACORD_27,
+            DocumentType.ACORD_28,
+            DocumentType.ACORD_101,
+            DocumentType.ACORD_125,
+            DocumentType.ACORD_130,
+            DocumentType.ACORD_140,
             DocumentType.ACORD_126,
             DocumentType.LOSS_RUN,
             DocumentType.FINANCIAL_STATEMENT,

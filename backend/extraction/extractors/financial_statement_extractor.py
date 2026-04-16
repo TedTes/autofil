@@ -127,8 +127,8 @@ class FinancialStatementExtractor(IExtractor):
     
     def __init__(self):
         """Initialize Financial Statement extractor."""
-        self.table_parser = TableParser(flavor='auto', min_confidence=60.0)
-        self.excel_parser = ExcelParser()
+        self.table_parser = TableParser(flavor='auto', min_confidence=60.0) if TableParser else None
+        self.excel_parser = ExcelParser() if ExcelParser else None
     
     def extract(self, document: Document) -> ExtractionResult:
         """
@@ -276,6 +276,13 @@ class FinancialStatementExtractor(IExtractor):
     
     def _extract_from_excel(self, document: Document) -> ExtractionResult:
         """Extract financial data from Excel file."""
+        if not self.excel_parser:
+            return ExtractionResult(
+                success=False,
+                data={},
+                errors=["Excel parser is not available"]
+            )
+
         excel_result = self.excel_parser.extract_fields(document.file_path)
         
         if not excel_result.get('sheets'):

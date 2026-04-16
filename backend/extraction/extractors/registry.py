@@ -33,6 +33,9 @@ class ExtractorRegistry:
             DocumentType.UNKNOWN: GenericExtractor,
         })
         cls._register_if_available(DocumentType.ACORD_25, ".acord_25_extractor", "ACORD25Extractor")
+        cls._register_if_available(DocumentType.ACORD_27, ".acord_template_extractor", "ACORD27Extractor")
+        cls._register_if_available(DocumentType.ACORD_28, ".acord_template_extractor", "ACORD28Extractor")
+        cls._register_if_available(DocumentType.ACORD_101, ".acord_template_extractor", "ACORD101Extractor")
         cls._register_if_available(DocumentType.ACORD_125, ".acord_125_extractor", "ACORD125Extractor")
         cls._register_if_available(DocumentType.ACORD_126, ".acord_126_extractor", "ACORD126Extractor")
         cls._register_if_available(DocumentType.ACORD_130, ".acord_130_extractor", "ACORD130Extractor")
@@ -64,7 +67,20 @@ class ExtractorRegistry:
     def get_extractor(cls, document_type: DocumentType) -> Optional[object]:
         """Get extractor instance."""
         extractor_class = cls.get(document_type)
-        return extractor_class() if extractor_class else None
+        if not extractor_class:
+            return None
+        try:
+            return extractor_class()
+        except Exception as exc:
+            logger.warning(
+                "failed to instantiate extractor %s for %s: %s",
+                extractor_class.__name__,
+                document_type.value,
+                exc,
+            )
+            if document_type not in (DocumentType.GENERIC, DocumentType.UNKNOWN):
+                return GenericExtractor()
+            return None
 
     @classmethod
     def get_extractor_for_document(cls, document: Document) -> object:

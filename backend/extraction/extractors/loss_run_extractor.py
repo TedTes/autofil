@@ -42,8 +42,8 @@ class LossRunExtractor(BaseExtractor):
     
     def __init__(self):
         """Initialize Loss Run extractor."""
-        self.table_parser = TableParser(flavor='auto', min_confidence=60.0)
-        self.ocr_parser = OcrFallbackParser()
+        self.table_parser = TableParser(flavor='auto', min_confidence=60.0) if TableParser else None
+        self.ocr_parser = OcrFallbackParser() if OcrFallbackParser else None
         if not self.COLUMN_PATTERNS:
             self.COLUMN_PATTERNS = self._load_field_patterns()
     def extract(self, document: Document) -> ExtractionResult:

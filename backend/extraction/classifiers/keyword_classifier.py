@@ -41,6 +41,61 @@ class KeywordClassifier(IClassifier):
                 r'workers?\s+compensation',
             ]
         },
+        DocumentType.ACORD_27: {
+            'required': [
+                r'acord\s*27',
+                r'evidence\s+of\s+property\s+insurance',
+            ],
+            'strong': [
+                r'evidence\s+of\s+property',
+                r'additional\s+interest',
+                r'property\s+information',
+                r'coverage\s+information',
+                r'authorized\s+representative',
+            ],
+            'weak': [
+                r'policy\s+number',
+                r'effective\s+date',
+                r'expiration\s+date',
+                r'building',
+            ]
+        },
+        DocumentType.ACORD_28: {
+            'required': [
+                r'acord\s*28',
+                r'evidence\s+of\s+commercial\s+property\s+insurance',
+            ],
+            'strong': [
+                r'commercial\s+property',
+                r'additional\s+interest',
+                r'mortgagee',
+                r'lender',
+                r'building\s+coverage',
+                r'business\s+personal\s+property',
+            ],
+            'weak': [
+                r'policy\s+number',
+                r'effective\s+date',
+                r'expiration\s+date',
+                r'blanket\s+coverage',
+            ]
+        },
+        DocumentType.ACORD_101: {
+            'required': [
+                r'acord\s*101',
+                r'additional\s+remarks\s+schedule',
+            ],
+            'strong': [
+                r'additional\s+remarks',
+                r'applicant',
+                r'agency',
+                r'policy\s+number',
+            ],
+            'weak': [
+                r'effective\s+date',
+                r'page\s+\d+\s+of\s+\d+',
+            ]
+        },
         DocumentType.ACORD_126: {
             'required': [
                 r'acord\s*126',
@@ -165,7 +220,7 @@ class KeywordClassifier(IClassifier):
     
     # Confidence weights
     CONFIDENCE_WEIGHTS = {
-        'required': 0.4,    # Each required keyword
+        'required': 0.35,   # Each required keyword
         'strong': 0.1,      # Each strong keyword
         'weak': 0.03        # Each weak keyword
     }
@@ -286,6 +341,10 @@ class KeywordClassifier(IClassifier):
         is_pdf = ext == '.pdf' or mime == 'application/pdf'
 
         if is_tabular and doc_type in (
+            DocumentType.ACORD_25,
+            DocumentType.ACORD_27,
+            DocumentType.ACORD_28,
+            DocumentType.ACORD_101,
             DocumentType.ACORD_125,
             DocumentType.ACORD_126,
             DocumentType.ACORD_130,

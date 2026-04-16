@@ -26,6 +26,9 @@ def _optional_import(module_name: str, export_name: str) -> None:
 
 _optional_import("acord_126_extractor", "ACORD126Extractor")
 _optional_import("acord_25_extractor", "ACORD25Extractor")
+_optional_import("acord_template_extractor", "ACORD27Extractor")
+_optional_import("acord_template_extractor", "ACORD28Extractor")
+_optional_import("acord_template_extractor", "ACORD101Extractor")
 _optional_import("acord_125_extractor", "ACORD125Extractor")
 _optional_import("acord_130_extractor", "ACORD130Extractor")
 _optional_import("acord_140_extractor", "ACORD140Extractor")

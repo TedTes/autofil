@@ -114,8 +114,8 @@ class SovExtractor(BaseExtractor):
     
     def __init__(self):
         """Initialize SOV extractor."""
-        self.table_parser = TableParser(flavor='auto', min_confidence=60.0)
-        self.excel_parser = ExcelParser()
+        self.table_parser = TableParser(flavor='auto', min_confidence=60.0) if TableParser else None
+        self.excel_parser = ExcelParser() if ExcelParser else None
     
     def extract(self, document: Document) -> ExtractionResult:
         """
@@ -212,6 +212,9 @@ class SovExtractor(BaseExtractor):
     
     def _extract_from_excel(self, document: Document) -> Optional[Tuple[Dict[str, Any], List[str], float]]:
         """Extract properties from Excel file."""
+        if not self.excel_parser:
+            return None
+
         # Parse Excel file
         excel_result = self.excel_parser.extract_fields(document.file_path)
         

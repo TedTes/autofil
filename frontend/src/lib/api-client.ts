@@ -531,10 +531,14 @@ export async function updateSubmissionInputsInclusion(
 }
 
 export interface SubmissionTemplateSummary {
+  id?: string
   template_id: string
   name: string
   description: string
+  formType?: string
+  version?: string
   expected_documents: string[]
+  expectedDocuments?: string[]
   suggested_forms: string[]
   expected_fields: string[]
   templateUrl?: string | null

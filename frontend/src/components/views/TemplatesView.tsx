@@ -45,22 +45,54 @@ const TEMPLATE_OVERRIDES: Record<
   },
 }
 
+function formatTemplateName(tpl: SubmissionTemplateSummary): string {
+  const rawName = tpl.name || tpl.id || tpl.template_id
+  return rawName.replace(/\s+PDF\s+Fields?$/i, '').trim()
+}
+
+function formatVersion(version?: string): string | null {
+  if (!version) return null
+  return version.replace(/_/g, '/')
+}
+
+function formatTemplateDescription(tpl: SubmissionTemplateSummary): string {
+  const raw = (tpl.description || '').trim()
+  const version = formatVersion(tpl.version)
+
+  if (/^generated from fillable/i.test(raw)) {
+    return version ? `${version} fillable PDF template.` : 'Fillable PDF template.'
+  }
+
+  const cleaned = raw
+    .replace(/\s+—\s*fillable PDF template mapping to canonical fields\.?$/i, '')
+    .replace(/\s+—\s*commercial property evidence output generated from merged submission data\.?$/i, '')
+    .replace(/\s+—\s*evidence output for property-focused submissions\.?$/i, '')
+    .trim()
+
+  if (!cleaned) {
+    return version ? `${version} fillable PDF template.` : 'Fillable PDF template.'
+  }
+
+  return cleaned
+}
+
 function normalizeTemplate(tpl: SubmissionTemplateSummary): LibraryItem {
-  const override = TEMPLATE_OVERRIDES[tpl.template_id] || {}
+  const templateId = tpl.template_id || tpl.id || ''
+  const override = TEMPLATE_OVERRIDES[templateId] || {}
   const isExport =
     override.category === 'exports' ||
-    /export|csv|json|worksheet|catalog/i.test(`${tpl.name} ${tpl.description} ${tpl.template_id}`)
+    /export|csv|json|worksheet|catalog/i.test(`${tpl.name} ${tpl.description} ${templateId}`)
 
   return {
-    id: tpl.template_id,
-    name: override.name || tpl.name,
-    description: override.description || tpl.description,
-    expectedDocuments: tpl.expected_documents || [],
+    id: templateId,
+    name: override.name || formatTemplateName(tpl),
+    description: override.description || formatTemplateDescription(tpl),
+    expectedDocuments: tpl.expected_documents || tpl.expectedDocuments || [],
     suggestedForms: tpl.suggested_forms || [],
     url: tpl.templateUrl,
     category: isExport ? 'exports' : 'forms',
-    categoryLabel: override.categoryLabel || (isExport ? 'Exports & Worksheets' : 'ACORD & Carrier Forms'),
-    outputTypeLabel: override.outputTypeLabel || (isExport ? 'Export' : 'Blank form'),
+    categoryLabel: override.categoryLabel || (isExport ? 'Export' : tpl.formType || 'ACORD form'),
+    outputTypeLabel: override.outputTypeLabel || (isExport ? 'Download' : 'PDF template'),
   }
 }
 
@@ -117,8 +149,8 @@ export function TemplatesView({ onTemplateClick, onDownloadTemplate }: Templates
     () => [
       {
         key: 'forms',
-        title: 'Forms',
-        description: 'Blank ACORD and carrier forms users can preview before generating outputs.',
+        title: 'Fillable Forms',
+        description: 'Preview and download supported output templates.',
         items: displayTemplates.filter((item) => item.category === 'forms'),
       },
       {
@@ -130,6 +162,7 @@ export function TemplatesView({ onTemplateClick, onDownloadTemplate }: Templates
     ].filter((section) => section.items.length > 0),
     [displayTemplates]
   )
+  const showSectionHeaders = templateSections.length > 1
 
   const openTemplate = (url?: string|undefined|null) => {
     if (!url) return
@@ -148,7 +181,7 @@ export function TemplatesView({ onTemplateClick, onDownloadTemplate }: Templates
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Form Library</h1>
               <p className="text-sm text-gray-600">
-                Preview supported output forms before generating them
+                Preview and download output templates before generating them.
               </p>
             </div>
           </div>
@@ -192,13 +225,6 @@ export function TemplatesView({ onTemplateClick, onDownloadTemplate }: Templates
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
         <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <div className="mb-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Available Forms</h3>
-            <p className="text-sm text-gray-600">
-              Browse supported forms and exports that can be generated from submissions
-            </p>
-          </div>
-
           {error && (
             <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {error}
@@ -215,10 +241,12 @@ export function TemplatesView({ onTemplateClick, onDownloadTemplate }: Templates
             <div className="space-y-8 mb-8">
               {templateSections.map((section) => (
                 <section key={section.key}>
-                  <div className="mb-4">
-                    <h4 className="text-base font-semibold text-gray-900">{section.title}</h4>
-                    <p className="text-sm text-gray-600">{section.description}</p>
-                  </div>
+                  {showSectionHeaders && (
+                    <div className="mb-4">
+                      <h4 className="text-base font-semibold text-gray-900">{section.title}</h4>
+                      <p className="text-sm text-gray-600">{section.description}</p>
+                    </div>
+                  )}
 
                   <div
                     className={

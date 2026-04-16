@@ -9,7 +9,7 @@ import logging
 import os
 import re
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from enum import Enum
 
@@ -24,7 +24,6 @@ from services.comparison_service import ComparisonService
 from services.export_service import ExportService
 from dataclasses import dataclass, field as dataclass_field
 from typing import Dict, List, Any, Optional, Tuple
-from datetime import datetime
 from services.submission_file_store import SubmissionFileStore
 from services.submission_extraction_coordinator import SubmissionExtractionCoordinator
 from services.submission_fill_coordinator import SubmissionFillCoordinator
@@ -1325,10 +1324,18 @@ class SubmissionService:
         if not s:
             return None
         try:
-            # handle plain ISO and ISO with Z
-            return datetime.fromisoformat(s.replace("Z", "+00:00"))
+            parsed = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            if parsed.tzinfo is not None:
+                parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+            return parsed
         except Exception:
             return None
+
+    def _has_files(self, summary: Dict[str, Any]) -> bool:
+        try:
+            return int(summary.get("file_count") or 0) > 0
+        except (TypeError, ValueError):
+            return False
 
     def get_recent_submissions(
         self,
@@ -1354,7 +1361,7 @@ class SubmissionService:
                 for metadata in metadata_rows
             )
             if summary
-            if (summary.get("file_count") or 0) > 0
+            if self._has_files(summary)
         ]
 
         # optional filters

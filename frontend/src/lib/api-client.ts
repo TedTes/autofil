@@ -1,7 +1,7 @@
 /**
  * API client for backend communication.
  */
-import axios, { AxiosError } from 'axios'
+import axios, { AxiosError, AxiosHeaders } from 'axios'
 import type {
   ApiResponse,
   SubmissionResponse,
@@ -43,17 +43,38 @@ const api = axios.create({
   timeout: 30000, // 30 second timeout
 })
 
-api.interceptors.request.use(async (config) => {
-  if (supabase) {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
+const PUBLIC_API_PATHS = new Set(['/health'])
 
-    if (session?.access_token) {
-      config.headers = config.headers ?? {}
-      config.headers.Authorization = `Bearer ${session.access_token}`
-    }
+function getRequestPath(url?: string): string {
+  if (!url) return ''
+  try {
+    return new URL(url, `${API_BASE_URL}/api`).pathname.replace(/^\/api/, '') || '/'
+  } catch {
+    return url.split('?')[0] || ''
   }
+}
+
+api.interceptors.request.use(async (config) => {
+  const requestPath = getRequestPath(config.url)
+  if (PUBLIC_API_PATHS.has(requestPath)) {
+    return config
+  }
+
+  if (!supabase) {
+    throw new Error('Supabase auth is not configured for API requests')
+  }
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+
+  if (!session?.access_token) {
+    throw new Error('No active session. Please sign in again.')
+  }
+
+  const headers = AxiosHeaders.from(config.headers)
+  headers.set('Authorization', `Bearer ${session.access_token}`)
+  config.headers = headers
 
   return config
 })

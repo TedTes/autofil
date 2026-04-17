@@ -115,21 +115,11 @@ class AcordTemplateExtractor(BaseExtractor):
 
     def _select_template(self, field_names: Iterable[str]) -> Optional[TemplateConfig]:
         names = set(field_names or [])
-        loaded: List[TemplateConfig] = []
-        for template_id in self.candidate_template_ids:
-            config = TemplateLoader.load(template_id)
-            if not config:
-                continue
-            loaded.append(config)
-            signature = set(config.raw.get("signature_fields") or [])
-            if signature and signature.issubset(names):
-                return config
-
-        if names:
-            best = self._best_field_overlap_template(loaded, names)
-            if best:
-                return best
-        return loaded[0] if loaded else None
+        return TemplateLoader.load_matching(
+            form_type=self.form_type,
+            preferred_template_ids=self.candidate_template_ids,
+            field_names=names,
+        )
 
     def _best_field_overlap_template(
         self,
@@ -257,6 +247,8 @@ class AcordTemplateExtractor(BaseExtractor):
 
     def _match_alias_value(self, text: str, field_id: str) -> Optional[tuple[str, int]]:
         aliases = MFC.aliases(field_id)
+        if not aliases:
+            return None
         for alias in aliases:
             pattern = re.compile(rf"{re.escape(alias)}\s*[:\-]?\s*([^\n]+)", re.IGNORECASE)
             match = pattern.search(text)
@@ -304,19 +296,19 @@ class ACORD27Extractor(AcordTemplateExtractor):
     document_type = DocumentType.ACORD_27
     form_type = "ACORD_27"
     line_of_business = "Property"
-    candidate_template_ids = ["acord_27_2016"]
+    candidate_template_ids = ["acord_27"]
 
 
 class ACORD28Extractor(AcordTemplateExtractor):
     document_type = DocumentType.ACORD_28
     form_type = "ACORD_28"
     line_of_business = "Commercial Property"
-    candidate_template_ids = ["acord_28_2016"]
+    candidate_template_ids = ["acord_28"]
 
 
 class ACORD101Extractor(AcordTemplateExtractor):
     document_type = DocumentType.ACORD_101
     form_type = "ACORD_101"
     line_of_business = "Supplemental"
-    candidate_template_ids = ["acord_101_2016"]
+    candidate_template_ids = ["acord_101"]
     fallback_text_field = "AdditionalRemarks"

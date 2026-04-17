@@ -42,7 +42,10 @@ class MFC:
     @classmethod
     def aliases(cls, field_id: str) -> List[str]:
         """All label variations for fuzzy matching."""
-        return cls.field(field_id).get("aliases", [])
+        field = cls.field(field_id)
+        if not field:
+            return []
+        return field.get("aliases", [])
 
     @classmethod
     def semantic_groups(cls) -> Dict[str, Any]:

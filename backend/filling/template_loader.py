@@ -4,7 +4,7 @@ import os
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Iterable
 
 import yaml
 
@@ -122,12 +122,158 @@ class TemplateLoader:
         if config:
             return config
 
+        inferred_form_type = cls._infer_form_type(template_id)
+        if inferred_form_type:
+            config = cls.load_matching(
+                form_type=inferred_form_type,
+                preferred_template_ids=[template_id, cls._base_template_prefix(template_id)],
+                version=version,
+            )
+            if config:
+                return config
+
         logger.warning(
             "template_loader storage template not found for template=%s version=%s",
             template_id,
             version,
         )
         return None
+
+    @classmethod
+    def list_template_ids(cls) -> List[str]:
+        service = getattr(cls, "storage_service", None)
+        if not service or not getattr(service, "enabled", False):
+            return []
+
+        template_ids = set()
+        for entry in service.list_objects(cls.storage_templates_root):
+            name = (entry.get("name") or "").strip("/")
+            if not name or entry.get("metadata"):
+                continue
+            template_ids.add(name)
+        return sorted(template_ids)
+
+    @classmethod
+    def load_matching(
+        cls,
+        *,
+        form_type: str,
+        preferred_template_ids: Optional[Iterable[str]] = None,
+        field_names: Optional[Iterable[str]] = None,
+        version: str = "latest",
+    ) -> Optional[TemplateConfig]:
+        """
+        Resolve a template by form type when the exact versioned folder is not
+        known. This is used during extraction: the uploaded PDF tells us the
+        ACORD form type, and Supabase tells us which concrete versions exist.
+        """
+        normalized_form_type = (form_type or "").strip().upper()
+        names = set(field_names or [])
+
+        candidates: List[str] = []
+        for template_id in preferred_template_ids or []:
+            normalized = Path(str(template_id)).stem
+            if normalized:
+                candidates.append(normalized)
+
+        discovered = cls.list_template_ids()
+        prefixes = tuple(f"{candidate}_" for candidate in candidates)
+        for template_id in discovered:
+            if template_id in candidates or (prefixes and template_id.startswith(prefixes)):
+                candidates.append(template_id)
+
+        form_slug = normalized_form_type.lower()
+        for template_id in discovered:
+            if template_id.startswith(form_slug.lower()):
+                candidates.append(template_id)
+
+        seen = set()
+        loaded: List[TemplateConfig] = []
+        for template_id in candidates:
+            if template_id in seen:
+                continue
+            seen.add(template_id)
+            config = cls._load_from_storage(template_id, version)
+            if not config:
+                continue
+            if normalized_form_type and (config.form_type or "").upper() != normalized_form_type:
+                continue
+            loaded.append(config)
+
+        if not loaded:
+            return None
+
+        signature_match = cls._best_signature_match(loaded, names)
+        if signature_match:
+            return signature_match
+
+        overlap_match = cls._best_field_overlap_match(loaded, names)
+        if overlap_match:
+            return overlap_match
+
+        return sorted(loaded, key=lambda config: (config.version or "", config.template_id))[-1]
+
+    @staticmethod
+    def _best_signature_match(
+        configs: List[TemplateConfig],
+        field_names: set[str],
+    ) -> Optional[TemplateConfig]:
+        if not field_names:
+            return None
+
+        best: Optional[TemplateConfig] = None
+        best_score = 0
+        for config in configs:
+            signature = set(config.raw.get("signature_fields") or [])
+            if not signature:
+                continue
+            score = len(signature & field_names)
+            if score == len(signature):
+                return config
+            if score > best_score:
+                best = config
+                best_score = score
+        return best if best_score > 0 else None
+
+    @classmethod
+    def _best_field_overlap_match(
+        cls,
+        configs: List[TemplateConfig],
+        field_names: set[str],
+    ) -> Optional[TemplateConfig]:
+        if not field_names:
+            return None
+
+        best: Optional[TemplateConfig] = None
+        best_score = 0
+        normalized_names = {cls._normalize_field_name(name) for name in field_names}
+        for config in configs:
+            mapped_fields = set(config.field_map.values())
+            score = len(mapped_fields & field_names)
+            if score == 0:
+                score = len({cls._normalize_field_name(name) for name in mapped_fields} & normalized_names)
+            if score > best_score:
+                best = config
+                best_score = score
+        return best if best_score > 0 else None
+
+    @staticmethod
+    def _normalize_field_name(value: str) -> str:
+        return "".join(ch for ch in str(value or "").lower() if ch.isalnum())
+
+    @staticmethod
+    def _infer_form_type(template_id: str) -> Optional[str]:
+        parts = str(template_id or "").lower().split("_")
+        if len(parts) >= 2 and parts[0] == "acord" and parts[1].isdigit():
+            return f"ACORD_{parts[1]}"
+        return None
+
+    @staticmethod
+    def _base_template_prefix(template_id: str) -> str:
+        parts = str(template_id or "").lower().split("_")
+        if len(parts) >= 2 and parts[0] == "acord" and parts[1].isdigit():
+            return f"acord_{parts[1]}"
+        return str(template_id or "")
 
     @classmethod
     def _build_config(

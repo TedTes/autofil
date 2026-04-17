@@ -64,14 +64,7 @@ class TemplateRecognizer:
         from filling.template_loader import TemplateLoader
 
         signatures: Dict[str, set] = {}
-        service = getattr(TemplateLoader, "storage_service", None)
-        if not service or not getattr(service, "enabled", False):
-            return signatures
-
-        for entry in service.list_objects(TemplateLoader.storage_templates_root):
-            name = (entry.get("name") or "").strip("/")
-            if not name:
-                continue
+        for name in TemplateLoader.list_template_ids():
             try:
                 config = TemplateLoader.load(name)
                 fields = (config.raw if config else {}).get("signature_fields", [])

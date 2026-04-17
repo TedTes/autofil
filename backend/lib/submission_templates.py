@@ -48,17 +48,7 @@ class SubmissionTemplate:
 
 
 def _discover_template_ids() -> List[str]:
-    storage = getattr(TemplateLoader, "storage_service", None)
-    if not storage or not getattr(storage, "enabled", False):
-        return []
-
-    template_ids = set()
-    for entry in storage.list_objects(TemplateLoader.storage_templates_root):
-        name = entry.get("name")
-        if not name or entry.get("metadata"):
-            continue
-        template_ids.add(name)
-    return sorted(template_ids)
+    return TemplateLoader.list_template_ids()
 
 
 def _load_templates() -> Dict[str, SubmissionTemplate]:

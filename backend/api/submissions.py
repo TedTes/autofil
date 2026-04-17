@@ -83,7 +83,7 @@ def upload_pdf():
                 errors.append({
                     "index": idx,
                     "filename": file.filename,
-                    "error": "Upload failed",
+                    "error": str(e) or "Upload failed",
                 })
 
         if success_count > 0:
@@ -123,7 +123,7 @@ def upload_pdf():
             }), 200
 
         first_error = errors[0]["error"] if errors else "Upload failed"
-        return jsonify({"success": False, "error": first_error}), 400
+        return jsonify({"success": False, "error": first_error, "errors": errors}), 400
 
     except Exception as e:
         logger.exception("submission upload failed")

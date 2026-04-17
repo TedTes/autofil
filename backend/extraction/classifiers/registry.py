@@ -32,6 +32,11 @@ class ClassifierRegistry:
         except ImportError as exc:
             logger.warning("failed to register mime classifier: %s", exc)
         try:
+            from .filename_classifier import FilenameClassifier
+            self.register('filename', FilenameClassifier)
+        except ImportError as exc:
+            logger.warning("failed to register filename classifier: %s", exc)
+        try:
             from .keyword_classifier import KeywordClassifier
             self.register('keyword', KeywordClassifier)
         except ImportError as exc:

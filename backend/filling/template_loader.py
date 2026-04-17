@@ -61,6 +61,10 @@ class TemplateConfig:
     def get_pdf_field(self, canonical_field: str) -> Optional[str]:
         return self.field_map.get(canonical_field)
 
+    @property
+    def pdf_to_canonical(self) -> Dict[str, str]:
+        return {pdf_name: canonical for canonical, pdf_name in self.field_map.items()}
+
     def has_pdf_field(self, canonical_field: str) -> bool:
         return canonical_field in self.field_map
 
@@ -170,16 +174,26 @@ class TemplateLoader:
         normalized_form_type = (form_type or "").strip().upper()
         names = set(field_names or [])
 
+        discovered = cls.list_template_ids()
+        discovered_set = set(discovered)
         candidates: List[str] = []
         for template_id in preferred_template_ids or []:
             normalized = Path(str(template_id)).stem
-            if normalized:
+            if normalized and normalized in discovered_set:
                 candidates.append(normalized)
 
-        discovered = cls.list_template_ids()
         prefixes = tuple(f"{candidate}_" for candidate in candidates)
+        preferred_prefixes = tuple(
+            f"{Path(str(template_id)).stem}_"
+            for template_id in preferred_template_ids or []
+            if Path(str(template_id)).stem
+        )
         for template_id in discovered:
-            if template_id in candidates or (prefixes and template_id.startswith(prefixes)):
+            if (
+                template_id in candidates
+                or (prefixes and template_id.startswith(prefixes))
+                or (preferred_prefixes and template_id.startswith(preferred_prefixes))
+            ):
                 candidates.append(template_id)
 
         form_slug = normalized_form_type.lower()

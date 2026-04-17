@@ -10,7 +10,7 @@ Uses:
   - validation.validator.validate()
 """
 
-from typing import Dict, List, Any, Optional
+from typing import Dict, Iterable, List, Any, Optional
 from datetime import datetime
 import re
 
@@ -52,9 +52,10 @@ class ACORD125Extractor(BaseExtractor):
         if self.pdf_parser.is_fillable(doc.file_path):
             raw_fields = self.pdf_parser.extract_fields(doc.file_path)
             if raw_fields:
-                template_id = self.template_recognizer.detect(raw_fields.keys())
-                if template_id:
-                    template_config = self.template_loader.load(template_id)
+                template_config = self._resolve_template_config(
+                    doc,
+                    raw_fields.keys(),
+                )
                 self._extract_from_pdf_fields(
                     raw_fields,
                     entities,
@@ -101,6 +102,25 @@ class ACORD125Extractor(BaseExtractor):
     # --------------------------------------------------------------------- #
     #  Fillable PDF Extraction
     # --------------------------------------------------------------------- #
+    def _resolve_template_config(
+        self,
+        doc: Document,
+        field_names: Iterable[str],
+    ) -> Optional[TemplateConfig]:
+        names = tuple(field_names or [])
+        template_id_hint = (doc.metadata or {}).get("template_id_hint")
+        preferred_ids = [str(template_id_hint)] if template_id_hint else []
+
+        detected = self.template_recognizer.detect(names)
+        if detected:
+            preferred_ids.append(detected)
+
+        return self.template_loader.load_matching(
+            form_type="ACORD_125",
+            preferred_template_ids=preferred_ids,
+            field_names=names,
+        )
+
     def _extract_from_pdf_fields(
         self,
         raw_fields: Dict[str, Any],
@@ -114,22 +134,24 @@ class ACORD125Extractor(BaseExtractor):
 
             # Map to canonical field via MFC aliases
             canonical_id = None
+            mapped_via_template = False
             if template_config:
                 canonical_id = self._map_via_template(field_name, template_config)
+                mapped_via_template = bool(canonical_id)
 
-            if not canonical_id:
+            if not canonical_id and not template_config:
                 canonical_id = self._map_pdf_field_to_canonical(field_name)
             if not canonical_id:
                 continue
 
-            # Assume first page for now (enhance with page info later)
-            source = SourceRef(page=1, extraction_rule="pdf_field", text_block_index=field_name)
-
             ev = EntityValue(
                 value=self._clean_value(canonical_id, value),
                 confidence=confidence,
-                source=source,
-                tags=["fillable_pdf"]
+                source=SourceRef(
+                    page=1,
+                    extraction_rule="pdf_field_template" if mapped_via_template else "pdf_field_alias",
+                ),
+                tags=["fillable_pdf", "template" if mapped_via_template else "alias"]
             )
             entities.setdefault(canonical_id, []).append(ev)
 

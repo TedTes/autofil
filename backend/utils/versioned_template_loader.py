@@ -27,6 +27,26 @@ class VersionedTemplateLoader:
         from filling.template_loader import TemplateLoader
 
         config = TemplateLoader.load(template_id)
+        return self._wrap_config(config)
+
+    def load_matching(
+        self,
+        *,
+        form_type: str,
+        preferred_template_ids: Optional[Iterable[str]] = None,
+        field_names: Optional[Iterable[str]] = None,
+    ) -> Optional[TemplateConfig]:
+        from filling.template_loader import TemplateLoader
+
+        config = TemplateLoader.load_matching(
+            form_type=form_type,
+            preferred_template_ids=preferred_template_ids,
+            field_names=field_names,
+        )
+        return self._wrap_config(config)
+
+    @staticmethod
+    def _wrap_config(config: Any) -> Optional[TemplateConfig]:
         if not config:
             return None
 

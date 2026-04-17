@@ -41,7 +41,8 @@ def build_generic_canonical_output(
     Build a CanonicalOutput for extractors that do not rely on the MFC mapping.
     """
     sections = [
-        _build_section(payload, default_confidence) for payload in section_payloads
+        _build_section(payload, default_confidence, extraction_method)
+        for payload in section_payloads
     ]
     sections = [section for section in sections if section.fields]
 
@@ -67,10 +68,14 @@ def build_generic_canonical_output(
     )
 
 
-def _build_section(payload: SectionPayload, default_confidence: float) -> SemanticSection:
+def _build_section(
+    payload: SectionPayload,
+    default_confidence: float,
+    extraction_method: str,
+) -> SemanticSection:
     fields: List[SemanticField] = []
     for field_id, value in payload.fields.items():
-        entity_values = _ensure_entity_values(value, default_confidence)
+        entity_values = _ensure_entity_values(value, default_confidence, extraction_method)
         if not entity_values:
             continue
         fields.append(SemanticField(id=field_id, values=entity_values))
@@ -86,7 +91,9 @@ def _build_section(payload: SectionPayload, default_confidence: float) -> Semant
 
 
 def _ensure_entity_values(
-    value: Any, default_confidence: float
+    value: Any,
+    default_confidence: float,
+    extraction_method: str,
 ) -> List[EntityValue]:
     """
     Convert arbitrary python data into a list of EntityValue.
@@ -100,16 +107,20 @@ def _ensure_entity_values(
     if isinstance(value, list):
         values: List[EntityValue] = []
         for item in value:
-            ev = _coerce_entity_value(item, default_confidence)
+            ev = _coerce_entity_value(item, default_confidence, extraction_method)
             if ev:
                 values.append(ev)
         return values
 
-    ev = _coerce_entity_value(value, default_confidence)
+    ev = _coerce_entity_value(value, default_confidence, extraction_method)
     return [ev] if ev else []
 
 
-def _coerce_entity_value(value: Any, default_confidence: float) -> Optional[EntityValue]:
+def _coerce_entity_value(
+    value: Any,
+    default_confidence: float,
+    extraction_method: str,
+) -> Optional[EntityValue]:
     if value is None:
         return None
 
@@ -127,10 +138,14 @@ def _coerce_entity_value(value: Any, default_confidence: float) -> Optional[Enti
                 source = SourceRef.model_validate(source_payload)
             except Exception:
                 source = None
+        if source is None or not getattr(source, "extraction_rule", None):
+            source = SourceRef(extraction_rule=extraction_method)
 
         tags = value.get("tags") or []
         if not isinstance(tags, list):
             tags = [tags]
+        if not tags:
+            tags = [extraction_method]
 
         return EntityValue(
             value=value.get("value"),
@@ -140,7 +155,12 @@ def _coerce_entity_value(value: Any, default_confidence: float) -> Optional[Enti
         )
 
     # Any other object/dict is treated as the extracted value itself
-    return EntityValue(value=value, confidence=default_confidence)
+    return EntityValue(
+        value=value,
+        confidence=default_confidence,
+        source=SourceRef(extraction_rule=extraction_method),
+        tags=[extraction_method],
+    )
 
 
 def _infer_file_type(document: Document) -> str:

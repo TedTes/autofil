@@ -47,13 +47,13 @@ class AcordTemplateExtractor(BaseExtractor):
                 for field_name, metadata in field_metadata.items()
             }
 
-        template = self._select_template(raw_fields.keys())
+        template = self._select_template(raw_fields.keys(), doc)
         if raw_fields:
             confidence = 0.98
             extraction_method = "fillable_pdf_alias"
             self._extract_from_pdf_fields(raw_fields, entities, template, field_metadata)
 
-        if doc.raw_text:
+        if doc.raw_text and template:
             missing_field_ids = set(self._template_field_ids(template)) - set(entities.keys())
             if entities:
                 extraction_method = "fillable_pdf_plus_ocr_text"
@@ -75,6 +75,10 @@ class AcordTemplateExtractor(BaseExtractor):
             ]
 
         if not entities:
+            if raw_fields and not template:
+                return self._failure_result(
+                    f"No Supabase template matched filled {self.form_type} PDF fields"
+                )
             return self._failure_result(f"No extractable {self.form_type} data found")
 
         canonical = CanonicalOutput(
@@ -113,11 +117,19 @@ class AcordTemplateExtractor(BaseExtractor):
     def get_supported_types(self) -> List[DocumentType]:
         return [self.document_type]
 
-    def _select_template(self, field_names: Iterable[str]) -> Optional[TemplateConfig]:
+    def _select_template(
+        self,
+        field_names: Iterable[str],
+        doc: Optional[Document] = None,
+    ) -> Optional[TemplateConfig]:
         names = set(field_names or [])
+        preferred_template_ids = list(self.candidate_template_ids)
+        template_id_hint = ((doc.metadata or {}).get("template_id_hint") if doc else None)
+        if template_id_hint:
+            preferred_template_ids.insert(0, str(template_id_hint))
         return TemplateLoader.load_matching(
             form_type=self.form_type,
-            preferred_template_ids=self.candidate_template_ids,
+            preferred_template_ids=preferred_template_ids,
             field_names=names,
         )
 
@@ -154,8 +166,6 @@ class AcordTemplateExtractor(BaseExtractor):
                 continue
 
             canonical_id = self._map_via_template(field_name, template)
-            if not canonical_id:
-                canonical_id = self._map_pdf_field_to_canonical(field_name)
             if not canonical_id:
                 continue
 
@@ -223,27 +233,10 @@ class AcordTemplateExtractor(BaseExtractor):
                 return normalized_lookup[candidate]
         return None
 
-    def _map_pdf_field_to_canonical(self, field_name: str) -> Optional[str]:
-        normalized = self._normalize_pdf_field(re.sub(r"_[A-Z0-9]+$", "", field_name))
-        for field_id, definition in MFC._load().get("fields", {}).items():
-            for alias in definition.get("aliases", []):
-                alias_norm = self._normalize_pdf_field(alias)
-                if alias_norm and alias_norm in normalized:
-                    return field_id
-        return None
-
     def _template_field_ids(self, template: Optional[TemplateConfig]) -> List[str]:
         if template:
             return list(template.field_map.keys())
-        return [
-            "InsuredName",
-            "PolicyNumber",
-            "EffectiveDate",
-            "ExpirationDate",
-            "ProducerName",
-            "Carrier",
-            "AdditionalRemarks",
-        ]
+        return []
 
     def _match_alias_value(self, text: str, field_id: str) -> Optional[tuple[str, int]]:
         aliases = MFC.aliases(field_id)

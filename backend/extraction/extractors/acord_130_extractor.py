@@ -4,7 +4,7 @@ ACORD 130 extractor for Workers Compensation Application forms.
 Extracts workers compensation specific information.
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Iterable, List, Optional
 from datetime import datetime
 from ..interfaces.extractor import IExtractor
 from ..core.document import Document, DocumentType
@@ -57,9 +57,10 @@ class ACORD130Extractor(IExtractor):
             if self.pdf_parser.is_fillable(document.file_path):
                 raw_fields = self.pdf_parser.extract_fields(document.file_path)
                 if raw_fields:
-                    template_id = self.template_recognizer.detect(raw_fields.keys())
-                    if template_id:
-                        template_config = self.template_loader.load(template_id)
+                    template_config = self._resolve_template_config(
+                        document,
+                        raw_fields.keys(),
+                    )
                 result = self._extract_from_fillable(
                     document, raw_fields, template_config
                 )
@@ -91,6 +92,25 @@ class ACORD130Extractor(IExtractor):
     def get_supported_types(self) -> List[DocumentType]:
         """Get supported types."""
         return [DocumentType.ACORD_130]
+
+    def _resolve_template_config(
+        self,
+        document: Document,
+        field_names: Iterable[str],
+    ) -> Optional[TemplateConfig]:
+        names = tuple(field_names or [])
+        template_id_hint = (document.metadata or {}).get("template_id_hint")
+        preferred_ids = [str(template_id_hint)] if template_id_hint else []
+
+        detected = self.template_recognizer.detect(names)
+        if detected:
+            preferred_ids.append(detected)
+
+        return self.template_loader.load_matching(
+            form_type="ACORD_130",
+            preferred_template_ids=preferred_ids,
+            field_names=names,
+        )
     
     def _extract_from_fillable(
         self,

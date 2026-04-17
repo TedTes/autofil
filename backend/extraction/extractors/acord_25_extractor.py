@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from functools import lru_cache
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 import re
 
 from ..core.document import Document, DocumentType
@@ -53,8 +53,11 @@ class ACORD25Extractor(BaseExtractor):
 
         template_config: Optional[TemplateConfig] = None
         if raw_fields:
-            detected = self.template_recognizer.detect(raw_fields.keys()) or "acord_25_2016"
-            template_config = self.template_loader.load(detected)
+            template_config = self._resolve_template_config(
+                doc,
+                raw_fields.keys(),
+                fallback_template_id="acord_25_2016",
+            )
             self._extract_from_pdf_fields(
                 raw_fields,
                 entities,
@@ -110,6 +113,28 @@ class ACORD25Extractor(BaseExtractor):
     def get_supported_types(self) -> List[DocumentType]:
         return [DocumentType.ACORD_25]
 
+    def _resolve_template_config(
+        self,
+        doc: Document,
+        field_names: Iterable[str],
+        fallback_template_id: Optional[str] = None,
+    ) -> Optional[TemplateConfig]:
+        names = tuple(field_names or [])
+        template_id_hint = (doc.metadata or {}).get("template_id_hint")
+        preferred_ids = [str(template_id_hint)] if template_id_hint else []
+
+        detected = self.template_recognizer.detect(names)
+        if detected:
+            preferred_ids.append(detected)
+        if fallback_template_id:
+            preferred_ids.append(fallback_template_id)
+
+        return self.template_loader.load_matching(
+            form_type=self.FORM_TYPE,
+            preferred_template_ids=preferred_ids,
+            field_names=names,
+        )
+
     def _extract_from_pdf_fields(
         self,
         raw_fields: Dict[str, Any],
@@ -123,9 +148,11 @@ class ACORD25Extractor(BaseExtractor):
                 continue
 
             canonical_id = None
+            mapped_via_template = False
             if template_config:
                 canonical_id = self._map_via_template(field_name, template_config)
-            if not canonical_id:
+                mapped_via_template = bool(canonical_id)
+            if not canonical_id and not template_config:
                 canonical_id = self._map_pdf_field_to_canonical(field_name)
             if not canonical_id:
                 continue
@@ -137,9 +164,9 @@ class ACORD25Extractor(BaseExtractor):
                     source=self._source_ref_for_pdf_field(
                         field_name,
                         field_metadata,
-                        extraction_rule="pdf_field_alias",
+                        extraction_rule="pdf_field_template" if mapped_via_template else "pdf_field_alias",
                     ),
-                    tags=["fillable_pdf", "alias"],
+                    tags=["fillable_pdf", "template" if mapped_via_template else "alias"],
                 )
             )
 

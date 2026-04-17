@@ -58,9 +58,7 @@ class ACORD126Extractor(BaseExtractor):
 
         template_config: Optional[TemplateConfig] = None
         if raw_fields:
-            detected = self.template_recognizer.detect(raw_fields.keys())
-            if detected:
-                template_config = self.template_loader.load(detected)
+            template_config = self._resolve_template_config(doc, raw_fields.keys())
 
         # 2) Map fields using template (with alias fallback)
         if raw_fields:
@@ -72,6 +70,8 @@ class ACORD126Extractor(BaseExtractor):
             if entities:
                 missing_field_ids -= set(entities.keys())
                 extraction_method = "fillable_pdf_plus_ocr_text"
+            if raw_fields:
+                missing_field_ids = self._ocr_safe_field_ids(missing_field_ids)
             self._extract_from_text(
                 doc,
                 entities,
@@ -117,6 +117,25 @@ class ACORD126Extractor(BaseExtractor):
     def get_supported_types(self) -> List[DocumentType]:
         return [DocumentType.ACORD_126]
 
+    def _resolve_template_config(
+        self,
+        doc: Document,
+        field_names: Iterable[str],
+    ) -> Optional[TemplateConfig]:
+        names = tuple(field_names or [])
+        template_id_hint = (doc.metadata or {}).get("template_id_hint")
+        preferred_ids = [str(template_id_hint)] if template_id_hint else []
+
+        detected = self.template_recognizer.detect(names)
+        if detected:
+            preferred_ids.append(detected)
+
+        return self.template_loader.load_matching(
+            form_type=self.FORM_TYPE,
+            preferred_template_ids=preferred_ids,
+            field_names=names,
+        )
+
     # ---------------------------------------------------------- #
     # Alias-based mapping
     # ---------------------------------------------------------- #
@@ -159,7 +178,7 @@ class ACORD126Extractor(BaseExtractor):
                     mapped_via_template = True
                     template_hits.add(canonical_id)
 
-            if not canonical_id:
+            if not canonical_id and not template_config:
                 canonical_id = self._map_pdf_field_to_canonical(field_name)
             if not canonical_id:
                 # Unknown / unmapped field, ignore for now
@@ -173,9 +192,9 @@ class ACORD126Extractor(BaseExtractor):
                 source=self._source_ref_for_pdf_field(
                     field_name,
                     field_metadata,
-                    extraction_rule="pdf_field_alias",
+                    extraction_rule="pdf_field_template" if mapped_via_template else "pdf_field_alias",
                 ),
-                tags=["fillable_pdf", "alias"],
+                tags=["fillable_pdf", "template" if mapped_via_template else "alias"],
             )
             entities.setdefault(canonical_id, []).append(ev)
 
@@ -215,6 +234,16 @@ class ACORD126Extractor(BaseExtractor):
                     tags=["ocr_text", "alias"],
                 )
             )
+
+    def _ocr_safe_field_ids(self, field_ids: set[str]) -> set[str]:
+        safe: set[str] = set()
+        for field_id in field_ids:
+            field = MFC.field(field_id) or {}
+            field_type = str(field.get("type") or "").lower()
+            if field_type in {"money", "integer", "boolean"}:
+                continue
+            safe.add(field_id)
+        return safe
 
     # ---------------------------------------------------------- #
     # Classification (optional alias-based).
@@ -410,7 +439,13 @@ class ACORD126Extractor(BaseExtractor):
 
         t = field.get("type")
         if t == "money":
-            return float(re.sub(r"[^\d.]", "", raw)) if re.search(r"\d", raw) else 0.0
+            cleaned = re.sub(r"[^\d.\-]", "", raw)
+            if not cleaned or cleaned.count(".") > 1 or not re.search(r"\d", cleaned):
+                return None
+            try:
+                return float(cleaned)
+            except ValueError:
+                return None
         if t == "integer":
             return int(re.sub(r"\D", "", raw)) if re.search(r"\d", raw) else 0
         if t == "boolean":

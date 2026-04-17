@@ -2,10 +2,14 @@
 API initialization and configuration.
 """
 
+import logging
+
 from flask import Flask
 from flask_cors import CORS
 from dotenv import load_dotenv
 import os
+
+_init_logger = logging.getLogger(__name__)
 
 # Ensure backend/.env is loaded so services see Supabase credentials, etc.
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -44,10 +48,14 @@ def create_app():
     app.register_blueprint(ingest_bp, url_prefix='/api/ingest')
     
     # Enable CORS for frontend
+    cors_origins_env = os.environ.get("CORS_ORIGINS")
+    if not cors_origins_env and os.environ.get("FLASK_ENV") != "development":
+        _init_logger.warning("CORS_ORIGINS is not set — falling back to http://localhost:3000. Set CORS_ORIGINS in production.")
+    cors_origins = (cors_origins_env or "http://localhost:3000").split(",")
     CORS(app, resources={
         r"/api/*": {
-            "origins": os.environ.get("CORS_ORIGINS","http://localhost:3000").split(","), 
-            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS","PATCH"],
+            "origins": cors_origins,
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
             "allow_headers": ["Content-Type", "Authorization", "X-Ingest-Token", "X-Webhook-Token"]
         }
     })

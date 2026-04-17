@@ -65,7 +65,7 @@ class AuthService:
                 "email": email,
             }
         except Exception as exc:
-            logger.warning("auth-service token verification failed: %s", exc)
+            logger.warning("auth-service token verification failed (client): %s: %s", type(exc).__name__, exc)
             return None
 
     def _verify_with_http(self, token: str) -> Optional[Dict[str, Any]]:
@@ -91,8 +91,14 @@ class AuthService:
                 "email": email,
             }
         except HTTPError as exc:
-            logger.warning("auth-service token verification failed with HTTP %s", exc.code)
+            if exc.code in (401, 403):
+                logger.warning("auth-service token rejected: HTTP %s", exc.code)
+            else:
+                logger.warning("auth-service upstream error: HTTP %s", exc.code)
             return None
-        except (URLError, TimeoutError, json.JSONDecodeError) as exc:
-            logger.warning("auth-service http verification failed: %s", exc)
+        except (URLError, TimeoutError) as exc:
+            logger.warning("auth-service network failure (Supabase unreachable): %s: %s", type(exc).__name__, exc)
+            return None
+        except json.JSONDecodeError as exc:
+            logger.warning("auth-service malformed response: %s", exc)
             return None

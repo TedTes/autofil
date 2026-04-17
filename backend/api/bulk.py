@@ -44,9 +44,9 @@ def bulk_fill():
         ids = data.get("submission_ids", [])
         template_id = data.get("template_id") or data.get("templateId")
         if not isinstance(ids, list) or not ids:
-            return jsonify({"error": "submission_ids must be a non-empty array"}), 400
+            return jsonify({"success": False, "error": "submission_ids must be a non-empty array"}), 400
         if not template_id:
-            return jsonify({"error": "template_id is required for bulk fill operations"}), 400
+            return jsonify({"success": False, "error": "template_id is required for bulk fill operations"}), 400
 
         results, errors = [], []
         for sid in ids:
@@ -103,7 +103,7 @@ def bulk_download_zip():
         data = request.get_json() or {}
         ids = data.get("submission_ids", [])
         if not isinstance(ids, list) or not ids:
-            return jsonify({"error": "submission_ids must be a non-empty array"}), 400
+            return jsonify({"success": False, "error": "submission_ids must be a non-empty array"}), 400
 
         import io, zipfile
 
@@ -159,11 +159,11 @@ def bulk_export_zip():
         ids = payload.get("submission_ids")
 
         if not isinstance(ids, list) or not ids:
-            return jsonify({"error": "submission_ids (non-empty array) is required"}), 400
+            return jsonify({"success": False, "error": "submission_ids (non-empty array) is required"}), 400
 
         zip_path, results = bulk_export_service.create_zip_for_submissions(ids)
         if not os.path.exists(zip_path):
-            return jsonify({"error": "Failed to generate ZIP"}), 500
+            return jsonify({"success": False, "error": "Failed to generate ZIP"}), 500
 
         success_count = sum(1 for r in results if r.get("success"))
         failure_count = sum(1 for r in results if not r.get("success"))
@@ -192,7 +192,7 @@ def bulk_export_zip():
         return send_file(zip_path, mimetype="application/zip", as_attachment=True, download_name=filename), status_code
 
     except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"success": False, "error": str(e)}), 400
     except Exception as e:
         return internal_server_error(logger, "Bulk export failed", e)
 
@@ -219,7 +219,7 @@ def bulk_export_csv():
             else submission_service.get_all_submissions()
         )
         if not submissions:
-            return jsonify({"error": "No submissions to export"}), 400
+            return jsonify({"success": False, "error": "No submissions to export"}), 400
 
         fields = data.get("fields")
         csv_path = submission_service.export_service.export_to_csv(submissions=submissions, fields=fields)
@@ -252,7 +252,7 @@ def bulk_export_json():
             else submission_service.get_all_submissions()
         )
         if not submissions:
-            return jsonify({"error": "No submissions to export"}), 400
+            return jsonify({"success": False, "error": "No submissions to export"}), 400
 
         pretty = data.get("pretty", True)
         json_path = submission_service.export_service.export_to_json(submissions=submissions, pretty=pretty)
@@ -287,7 +287,7 @@ def bulk_export_package():
             else submission_service.get_all_submissions()
         )
         if not submissions:
-            return jsonify({"error": "No submissions to export"}), 400
+            return jsonify({"success": False, "error": "No submissions to export"}), 400
 
         zip_path = submission_service.export_service.create_export_package(
             submissions=submissions,
@@ -321,7 +321,7 @@ def bulk_send_webhook():
         data = request.get_json() or {}
         webhook_url = data.get("webhook_url")
         if not webhook_url:
-            return jsonify({"error": "webhook_url is required"}), 400
+            return jsonify({"success": False, "error": "webhook_url is required"}), 400
 
         submissions = (
             submission_service.get_submissions_by_ids(data["submission_ids"])
@@ -329,7 +329,7 @@ def bulk_send_webhook():
             else submission_service.get_all_submissions()
         )
         if not submissions:
-            return jsonify({"error": "No submissions to send"}), 400
+            return jsonify({"success": False, "error": "No submissions to send"}), 400
 
         payload = submission_service.export_service.generate_api_payload(
             submissions=submissions,
@@ -364,7 +364,7 @@ def bulk_delete():
         data = request.get_json() or {}
         ids = data.get("submission_ids", [])
         if not isinstance(ids, list) or not ids:
-            return jsonify({"error": "submission_ids must be a non-empty array"}), 400
+            return jsonify({"success": False, "error": "submission_ids must be a non-empty array"}), 400
 
         results = []
         for sid in ids:

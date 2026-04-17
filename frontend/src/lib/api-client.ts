@@ -83,7 +83,6 @@ api.interceptors.request.use(async (config) => {
  * Centralized error handler
  */
 function handleApiError(error: unknown): never {
-  console.log('handleApiError log', error)
 
   if (axios.isAxiosError(error)) {
     const axiosError = error as AxiosError<ApiResponse>
@@ -308,15 +307,12 @@ export async function fillPdf(
       }
     }
   } catch (error) {
-    // Enhanced error messages
-    if (error instanceof Error) {
-      if (error.message.includes('templateId')) {
-        throw new Error('Template selection is required')
-      }
-      if (error.message.includes('404')) {
-        throw new Error('Template not found')
-      }
-      throw error
+    const message = error instanceof Error ? error.message : String(error)
+    if (message.includes('templateId')) {
+      throw new Error('Template selection is required')
+    }
+    if (message.includes('404')) {
+      throw new Error('Template not found')
     }
     handleApiError(error)
   }
@@ -1417,25 +1413,10 @@ export async function updateSubmissionData(
  */
 export async function bulkExportAsZip(submissionIds: string[]): Promise<Blob> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/bulk/export-zip`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        submission_ids: submissionIds,
-      }),
-    })
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
-    }
-
-    return await response.blob()
+    const response = await api.post('/bulk/export-zip', { submission_ids: submissionIds }, { responseType: 'blob' })
+    return response.data
   } catch (error) {
-    console.error('Bulk export ZIP error:', error)
-    throw error
+    handleApiError(error)
   }
 }
 
@@ -1633,7 +1614,7 @@ export async function getRecentSubmissionById(
       throw new Error(response.data.error || 'Failed to fetch submission')
     }
     
-    const sub: Partial<RecentSubmissionFile & { client_id?: string }> = response.data.submission
+    const sub: Partial<RecentSubmissionFile & { client_id?: string }> = response.data.data
     
     // Use available timestamp fields
     const timestamp = sub.last_activity_at || sub.updated_at || sub.uploaded_at || ''

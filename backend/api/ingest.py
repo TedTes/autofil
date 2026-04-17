@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hmac
 import io
 import logging
 import os
@@ -28,13 +29,11 @@ MAX_ATTACHMENT_BYTES = int(os.getenv("EMAIL_INGEST_MAX_ATTACHMENT_BYTES", str(25
 def _verify_ingest_request() -> bool:
     expected = os.getenv("EMAIL_INGEST_WEBHOOK_TOKEN")
     if not expected:
-        return os.getenv("FLASK_ENV") == "development" or os.getenv("ALLOW_UNAUTHENTICATED_EMAIL_INGEST") == "1"
-    provided = (
-        request.headers.get("X-Ingest-Token")
-        or request.headers.get("X-Webhook-Token")
-        or request.args.get("token")
-    )
-    return bool(provided and provided == expected)
+        return False
+    provided = request.headers.get("X-Ingest-Token") or request.headers.get("X-Webhook-Token")
+    if not provided:
+        return False
+    return hmac.compare_digest(provided, expected)
 
 
 def _first_value(*values: Any) -> Optional[str]:

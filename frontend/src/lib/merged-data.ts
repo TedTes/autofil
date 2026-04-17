@@ -1,11 +1,21 @@
 import type { DataSection, MergedData, SemanticSection } from '@/types'
 
-const SECTION_KEY_ALIASES: Record<DataSection, string[]> = {
-  insured: ['insured'],
-  locations: ['locations'],
-  exposures: ['operations', 'exposures'],
-  lossHistory: ['loss_history', 'lossHistory'],
-  coverage: ['coverage'],
+const SECTION_KEY_ALIASES: Record<string, string[]> = {
+  insured: ['insured', 'insured_information', 'applicant', 'named_insured'],
+  policy: ['policy', 'policy_information'],
+  locations: ['locations', 'location', 'property', 'property_section', 'commercial_property'],
+  property: ['property', 'property_section', 'commercial_property', 'locations', 'location'],
+  workers_compensation: ['workers_compensation', 'workers_comp', 'wc', 'payroll', 'classifications'],
+  classifications: ['classifications', 'classification', 'workers_compensation', 'workers_comp'],
+  exposures: ['operations', 'exposures', 'classifications', 'workers_compensation'],
+  operations: ['operations', 'exposures'],
+  lossHistory: ['loss_history', 'lossHistory', 'losses', 'prior_losses'],
+  loss_history: ['loss_history', 'lossHistory', 'losses', 'prior_losses'],
+  coverage: ['coverage', 'coverages', 'policy', 'property', 'property_section', 'commercial_property'],
+}
+
+function normalizeSectionKey(key: string): string {
+  return key.replace(/[\s-]+/g, '_')
 }
 
 function findSection(
@@ -15,8 +25,13 @@ function findSection(
   if (!mergedData?.semantic_sections?.length) {
     return undefined
   }
-  const aliases = SECTION_KEY_ALIASES[section] || [section]
-  return mergedData.semantic_sections.find((entry) => aliases.includes(entry.key))
+  const normalizedSection = normalizeSectionKey(String(section))
+  const aliases = new Set(
+    (SECTION_KEY_ALIASES[normalizedSection] || [normalizedSection]).map(normalizeSectionKey)
+  )
+  return mergedData.semantic_sections.find((entry) =>
+    aliases.has(normalizeSectionKey(entry.key))
+  )
 }
 
 function sectionHasValues(section?: SemanticSection): boolean {

@@ -238,7 +238,24 @@ const generateOutputsFromTemplates = useCallback(async (packageId: string) => {
  * Load available templates (called when templates are fetched)
  */
 const setTemplates = useCallback((templates: OutputTemplate[]) => {
-  setAvailableTemplates(templates)
+  const mergedJsonTemplate: OutputTemplate = {
+    id: 'generic',
+    name: 'Merged Data JSON',
+    description: 'Download the reviewed merged canonical data as JSON.',
+    formType: 'GENERIC',
+    requiredDataSections: [],
+    optionalDataSections: [],
+    estimatedFields: 0,
+    version: 'canonical',
+    filler: 'generic',
+    icon: 'braces',
+    isPopular: false,
+  }
+
+  const hasJsonExport = templates.some((template) =>
+    ['generic', 'default'].includes(template.id)
+  )
+  setAvailableTemplates(hasJsonExport ? templates : [...templates, mergedJsonTemplate])
 }, [])
 
 // ---- Clear template selection when package changes (ADD TO EXISTING useEffect) ----

@@ -19,10 +19,16 @@ export type FormType =
  */
 export type DataSection = 
   | 'insured'
+  | 'policy'
   | 'locations'
+  | 'property'
+  | 'workers_compensation'
+  | 'classifications'
   | 'exposures'
+  | 'operations'
   | 'lossHistory'
   | 'coverage'
+  | string
 
 /**
  * Template generation status

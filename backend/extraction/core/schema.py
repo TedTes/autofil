@@ -17,6 +17,9 @@ class SourceRef(BaseModel):
     bbox: Optional[list[float]] = None          # [x0, y0, x1, y1]
     table_id: Optional[str] = None
     extraction_rule: Optional[str] = None       # e.g. "label_value", "table_row"
+    source_file: Optional[str] = None
+    input_id: Optional[str] = None
+    document_type: Optional[str] = None
 
 
 class EntityValue(BaseModel):
@@ -56,7 +59,7 @@ class Metadata(BaseModel):
 
 class SourceInfo(BaseModel):
     file_name: str
-    file_type: Literal["pdf", "excel", "csv", "docx", "image", "email"]
+    file_type: Literal["pdf", "excel", "csv", "docx", "image", "email", "package"]
     extraction_method: str
     extracted_at: datetime = Field(default_factory=datetime.utcnow)
 

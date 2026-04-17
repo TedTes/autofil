@@ -44,7 +44,7 @@ class SubmissionExtractionCoordinator:
         self.version_service = version_service
         self.merge_coordinator = merge_coordinator
         self.classifier = classifier_registry.create_composite(
-            classifier_names=["mime", "keyword", "table"],
+            classifier_names=["mime", "filename", "keyword", "table"],
             strategy="highest_confidence",
         )
 
@@ -135,7 +135,12 @@ class SubmissionExtractionCoordinator:
             self._emit_progress(progress_callback, submission_id, 70, "extracting", "Processing fields...")
 
             if hasattr(extraction_result, "is_successful") and not extraction_result.is_successful():
-                err = getattr(extraction_result, "error", "Unknown extraction error")
+                err = getattr(extraction_result, "error", None)
+                if not err:
+                    errors = getattr(extraction_result, "errors", None)
+                    if errors:
+                        err = "; ".join(str(error) for error in errors if error)
+                err = err or "Unknown extraction error"
                 self._emit_progress(progress_callback, submission_id, 100, "error", f"Extraction failed: {err}")
                 raise ValueError(f"Extraction failed: {err}")
 
@@ -206,7 +211,7 @@ class SubmissionExtractionCoordinator:
                 )
                 return {
                     "submission_id": submission_id,
-                    "data": json_data,
+                    "data": merged_data,
                     "duplicate_of": duplicate_entry.get("input_id"),
                 }
 
@@ -251,7 +256,7 @@ class SubmissionExtractionCoordinator:
             self._emit_progress(progress_callback, submission_id, 100, "ready", "Extraction complete")
             return {
                 "submission_id": submission_id,
-                "data": json_data,
+                "data": merged_data,
             }
         except Exception:
             logger.exception("upload and extract failed for submission_id=%s", submission_id)

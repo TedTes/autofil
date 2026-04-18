@@ -1,14 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Bell,
   Building2,
   Check,
-  Copy,
   Database,
   KeyRound,
-  Mail,
   Save,
   ShieldCheck,
   SlidersHorizontal,
@@ -62,18 +60,8 @@ export function SettingsView() {
   const { user } = useAuth()
   const [settings, setSettings] = useState<SettingsState>(DEFAULT_SETTINGS)
   const [saved, setSaved] = useState(false)
-  const [copied, setCopied] = useState<string | null>(null)
 
   const userEmail = user?.email || 'Not signed in'
-  const ingestDomain = process.env.NEXT_PUBLIC_EMAIL_INGEST_DOMAIN || 'ingest.fillform.io'
-  const sampleInbox = useMemo(() => {
-    const prefix = (settings.workspaceName || 'workspace')
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 32) || 'workspace'
-    return `${prefix}@${ingestDomain}`
-  }, [ingestDomain, settings.workspaceName])
 
   useEffect(() => {
     try {
@@ -95,12 +83,6 @@ export function SettingsView() {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
     setSaved(true)
     window.setTimeout(() => setSaved(false), 1800)
-  }
-
-  const copyText = async (label: string, value: string) => {
-    await navigator.clipboard.writeText(value)
-    setCopied(label)
-    window.setTimeout(() => setCopied(null), 1400)
   }
 
   const clearLocalSettings = () => {
@@ -155,32 +137,6 @@ export function SettingsView() {
               <InfoRow icon={User} label="Signed in as" value={userEmail} />
               <InfoRow icon={ShieldCheck} label="Role" value="Workspace admin" />
             </div>
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-gray-200 bg-white shadow-sm">
-          <SectionHeader
-            icon={Mail}
-            title="Email Ingestion"
-            description="Use account-specific inboxes to route attachments into submissions."
-          />
-          <div className="space-y-4 p-6">
-            <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Example inbox</p>
-              <div className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 ring-1 ring-blue-100">
-                <span className="truncate text-sm font-semibold text-gray-900">{sampleInbox}</span>
-                <button
-                  onClick={() => copyText('inbox', sampleInbox)}
-                  className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
-                >
-                  {copied === 'inbox' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                  {copied === 'inbox' ? 'Copied' : 'Copy'}
-                </button>
-              </div>
-            </div>
-            <p className="text-sm leading-6 text-gray-600">
-              Production inboxes are generated per account. This setting shows the configured ingest domain and helps verify the email workflow during demos.
-            </p>
           </div>
         </section>
 
@@ -247,7 +203,6 @@ export function SettingsView() {
             description="Connection points for automation and downstream systems."
           />
           <div className="space-y-3 p-6">
-            <IntegrationRow label="Inbound email" status="Configured" tone="green" />
             <IntegrationRow label="Webhook output" status="Available" tone="blue" />
             <IntegrationRow label="AMS sync" status="Not connected" tone="gray" />
           </div>

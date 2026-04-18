@@ -28,9 +28,7 @@ import {
   Folder,
   Combine,
   Plus,
-  Trash2,
-  Copy,
-  Mail
+  Trash2
 } from 'lucide-react'
 
 const GenerateOutputsModal = dynamic(
@@ -686,11 +684,9 @@ export function ClientDetailView({
   const { files: landingFiles, clearFiles: clearLandingFiles } = useLandingUpload()
   const [isLandingSetupRunning, setIsLandingSetupRunning] = useState(false)
   const [autoOpenUploadAfterCreate, setAutoOpenUploadAfterCreate] = useState(false)
-  const [copiedInbox, setCopiedInbox] = useState(false)
 
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false)
   const {
-    client,
     loading,
     error,
     packages,
@@ -946,16 +942,6 @@ const [isCreating, setIsCreating] = useState(false)
     await generateOutputsFromTemplates(activePackageId)
   }, [activePackageId, generateOutputsFromTemplates])
 
-  const handleCopyInbox = useCallback(async () => {
-    if (!client?.ingestion_email) return
-    try {
-      await navigator.clipboard.writeText(client.ingestion_email)
-      setCopiedInbox(true)
-      window.setTimeout(() => setCopiedInbox(false), 1800)
-    } catch (err) {
-      console.error('Failed to copy ingestion inbox:', err)
-    }
-  }, [client?.ingestion_email])
   const [fillState, setFillState] = useState<{
     loading: boolean
     message: string | null
@@ -1141,34 +1127,6 @@ const [isCreating, setIsCreating] = useState(false)
       {/* Main Content - TWO COLUMN LAYOUT WITH PROPER SCROLLING */}
       <div className="flex-1 min-h-0 overflow-hidden">
         <div className="h-full flex flex-col gap-4 p-4">
-          {client?.ingestion_email && (
-            <div className="bg-white border border-blue-100 rounded-xl shadow-sm px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
-                  <Mail className="w-5 h-5 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">Submission Inbox</p>
-                  <p className="text-xs text-gray-500">
-                    Forward emails with attachments here. Each email creates a submission in this account.
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <code className="px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-sm text-gray-800 break-all">
-                  {client.ingestion_email}
-                </code>
-                <button
-                  type="button"
-                  onClick={handleCopyInbox}
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  <Copy className="w-4 h-4" />
-                  {copiedInbox ? 'Copied' : 'Copy'}
-                </button>
-              </div>
-            </div>
-          )}
         <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* LEFT PANEL: Submissions - SCROLLABLE */}
 <div className="lg:col-span-1 h-full flex flex-col">

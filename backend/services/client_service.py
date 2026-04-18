@@ -7,8 +7,6 @@ A client contains multiple submissions (formerly folders).
 import uuid
 from datetime import datetime
 from typing import List, Dict, Any, Optional
-import os
-import re
 
 from services.supabase_db_service import SupabaseDatabaseService
 
@@ -36,27 +34,8 @@ class ClientService:
             raise ValueError("Client not found")
         return metadata
 
-    def _ingestion_domain(self) -> str:
-        return os.getenv("EMAIL_INGEST_DOMAIN", "ingest.fillform.io").strip().lower()
-
-    def _client_slug(self, name: str) -> str:
-        slug = re.sub(r"[^a-z0-9]+", "-", (name or "account").lower()).strip("-")
-        return slug or "account"
-
-    def _build_ingestion_email(self, name: str, client_id: str) -> str:
-        suffix = (client_id or "").replace("-", "")[:8]
-        return f"{self._client_slug(name)}-{suffix}@{self._ingestion_domain()}"
-
-    def _ensure_ingestion_email(self, metadata: Dict[str, Any], *, persist: bool = True) -> Dict[str, Any]:
-        if metadata.get("ingestion_email"):
-            return metadata
-        client_id = metadata.get("client_id")
-        if not client_id:
-            return metadata
-        metadata["ingestion_email"] = self._build_ingestion_email(metadata.get("name", "account"), client_id)
-        metadata["updated_at"] = datetime.utcnow().isoformat()
-        if persist:
-            self._persist_client_metadata(metadata)
+    def _strip_removed_fields(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        metadata.pop("ingestion_email", None)
         return metadata
     
     def create_client(self, name: str) -> Dict[str, Any]:
@@ -81,7 +60,6 @@ class ClientService:
             'submission_count': 0,
             'submissions': []  # List of submission IDs
         }
-        metadata["ingestion_email"] = self._build_ingestion_email(name, client_id)
         
         self._persist_client_metadata(metadata)
         return metadata
@@ -93,7 +71,7 @@ class ClientService:
         metadata = self.db.get_client_metadata(client_id, user_id=self.current_user_id)
         if metadata is None:
             return None
-        metadata = self._ensure_ingestion_email(metadata)
+        metadata = self._strip_removed_fields(metadata)
         
         metadata.setdefault('submissions', [])
         metadata['submission_count'] = len(metadata['submissions'])
@@ -108,7 +86,7 @@ class ClientService:
         """
         clients = self.db.list_clients_metadata(user_id=self.current_user_id)
         for metadata in clients:
-            self._ensure_ingestion_email(metadata, persist=False)
+            self._strip_removed_fields(metadata)
             metadata.setdefault('submissions', [])
             metadata['submission_count'] = len(metadata['submissions'])
             if include_submissions:
@@ -139,16 +117,6 @@ class ClientService:
         
         return metadata
 
-    def find_by_ingestion_email(self, email: str) -> Optional[Dict[str, Any]]:
-        normalized = (email or "").strip().lower()
-        if not normalized:
-            return None
-        for metadata in self.db.list_clients_metadata(user_id=self.current_user_id):
-            self._ensure_ingestion_email(metadata)
-            if (metadata.get("ingestion_email") or "").strip().lower() == normalized:
-                return metadata
-        return None
-    
     def delete_client(self, client_id: str) -> bool:
         """
         Delete a client and all its submissions.

@@ -201,14 +201,19 @@ class KeywordClassifier(IClassifier):
         },
         DocumentType.FINANCIAL_STATEMENT: {
             'required': [
-                r'(balance\s+sheet|income\s+statement|financial\s+statement)',
+                r'(balance\s+sheet|income\s+statement|financial\s+statement|profit\s+(?:and|&)\s+loss|\bp\s*&\s*l\b|cash\s+flow\s+statement)',
             ],
             'strong': [
                 r'(assets|liabilities|equity)',
-                r'(revenue|expenses|net\s+income)',
+                r'revenue',
+                r'expenses',
+                r'net\s+income',
                 r'total\s+assets',
                 r'total\s+liabilities',
                 r'shareholders\s+equity',
+                r'operating\s+activities',
+                r'investing\s+activities',
+                r'financing\s+activities',
             ],
             'weak': [
                 r'fiscal\s+year',
@@ -353,6 +358,8 @@ class KeywordClassifier(IClassifier):
             score *= 0.4
         if is_tabular and doc_type in (DocumentType.LOSS_RUN, DocumentType.SOV):
             score *= 1.25
+        if is_tabular and doc_type == DocumentType.FINANCIAL_STATEMENT:
+            score *= 1.15
         if is_pdf and doc_type == DocumentType.LOSS_RUN:
             score *= 0.9
 

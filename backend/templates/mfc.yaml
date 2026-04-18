@@ -880,10 +880,58 @@ semantic_groups:
         targets:
           supplemental_pdf: "LossHistoryTable"
 
+  financial_statement:
+    display_name: "Financial Statement"
+    description: "Financial statement summaries, line items, totals, and metadata"
+    priority: 11
+    icon: "calculator"
+    fields:
+      statementType:
+        id: F800
+        label: "Statement Type"
+        type: string
+        aliases: ["Statement Type", "Financial Statement Type"]
+        targets: {}
+      statementMetadata:
+        id: F801
+        label: "Statement Metadata"
+        type: object
+        structure:
+          company_name: string
+          period_ending: date
+          fiscal_year: string
+        aliases: ["Statement Metadata", "Financial Statement Metadata"]
+        targets: {}
+      lineItems:
+        id: F802
+        label: "Line Items"
+        type: object
+        cardinality: one-to-many
+        aliases: ["Line Items", "Financial Line Items", "Accounts"]
+        targets: {}
+      totals:
+        id: F803
+        label: "Totals"
+        type: object
+        aliases: ["Totals", "Financial Totals", "Statement Totals"]
+        targets: {}
+      itemCount:
+        id: F804
+        label: "Item Count"
+        type: integer
+        aliases: ["Item Count", "Line Item Count"]
+        targets: {}
+      extractionDate:
+        id: F805
+        label: "Extraction Date"
+        type: string
+        aliases: ["Extraction Date"]
+        targets: {}
+
   additional_parties:
     display_name: "Additional Parties"
     description: "Additional insureds and producer information"
-    priority: 11
+    priority: 12
     icon: "user-plus"
     fields:
       AdditionalInsured:
@@ -940,7 +988,7 @@ semantic_groups:
   certificate:
     display_name: "Certificate Details"
     description: "Certificate metadata, holder details, and sign-off"
-    priority: 12
+    priority: 13
     icon: "badge-check"
     fields:
       FormEdition:

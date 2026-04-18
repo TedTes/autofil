@@ -9,6 +9,7 @@ Extracts property/location data from Schedule of Values documents:
 - Total insured values
 """
 
+import csv
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 from ..extractors.extractor_base import BaseExtractor
@@ -137,7 +138,10 @@ class SovExtractor(BaseExtractor):
         if document.tables:
             extraction = self._extract_from_tables(document)
 
-        if not extraction and document.file_extension in ['.xlsx', '.xls', '.csv']:
+        if not extraction and document.file_extension == '.csv':
+            extraction = self._extract_from_csv(document)
+
+        if not extraction and document.file_extension in ['.xlsx', '.xls']:
             extraction = self._extract_from_excel(document)
 
         if not extraction:
@@ -266,6 +270,66 @@ class SovExtractor(BaseExtractor):
         }
         
         return data, warnings, self._calculate_confidence(properties, warnings)
+
+    def _extract_from_csv(self, document: Document) -> Optional[Tuple[Dict[str, Any], List[str], float]]:
+        """Extract properties from a CSV file without requiring Excel dependencies."""
+        rows = self._read_csv_rows(document)
+        if len(rows) < 2:
+            return None
+
+        headers = rows[0]
+        column_map = self._map_columns(headers)
+        if not column_map:
+            return None
+
+        properties = []
+        warnings = []
+
+        for row_idx, row in enumerate(rows[1:], start=1):
+            try:
+                property_data = self._extract_property_from_row(row, column_map, headers)
+                if property_data and self._is_valid_property(property_data):
+                    property_data['_source'] = {
+                        'csv_row_index': row_idx
+                    }
+                    properties.append(property_data)
+            except Exception as e:
+                warnings.append(f"CSV row {row_idx}: {str(e)}")
+
+        if not properties:
+            return None
+
+        totals = self._calculate_totals(properties)
+        data = {
+            'document_type': 'sov',
+            'extraction_date': datetime.utcnow().isoformat(),
+            'schedule_information': self._extract_schedule_info(document),
+            'properties': properties,
+            'property_count': len(properties),
+            'totals': totals,
+        }
+
+        return data, warnings, self._calculate_confidence(properties, warnings)
+
+    @staticmethod
+    def _read_csv_rows(document: Document) -> List[List[str]]:
+        text = document.raw_text
+        if not text and document.file_path:
+            try:
+                with open(document.file_path, "r", encoding="utf-8-sig", newline="") as handle:
+                    text = handle.read()
+            except OSError:
+                text = ""
+
+        if not text:
+            return []
+
+        reader = csv.reader(text.splitlines())
+        return [
+            [cell.strip() for cell in row]
+            for row in reader
+            if any(cell.strip() for cell in row)
+        ]
     
     def _map_columns(self, headers: List[str]) -> Dict[str, int]:
         """Map table columns to property fields."""

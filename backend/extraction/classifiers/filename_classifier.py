@@ -26,7 +26,17 @@ class FilenameClassifier(IClassifier):
             [r"\bloss[\s_-]*runs?\b", r"\bclaim[\s_-]*(history|listing|summary)\b"],
         ),
         (DocumentType.SOV, [r"\bsov\b", r"\b(schedule|statement)[\s_-]*of[\s_-]*values\b"]),
-        (DocumentType.FINANCIAL_STATEMENT, [r"\bfinancial[\s_-]*statements?\b", r"\bincome[\s_-]*statements?\b"]),
+        (
+            DocumentType.FINANCIAL_STATEMENT,
+            [
+                r"\bfinancial[\s_-]*statements?\b",
+                r"\bincome[\s_-]*statements?\b",
+                r"(?:^|[^a-z0-9])balance[\s_-]*sheets?(?:[^a-z0-9]|$)",
+                r"(?:^|[^a-z0-9])profit[\s_-]*(?:and|&)?[\s_-]*loss(?:[^a-z0-9]|$)",
+                r"(?:^|[^a-z0-9])p[\s_-]*&[\s_-]*l(?:[^a-z0-9]|$)",
+                r"(?:^|[^a-z0-9])cash[\s_-]*flow[\s_-]*statements?(?:[^a-z0-9]|$)",
+            ],
+        ),
     ]
 
     def classify(self, document: Document) -> Tuple[DocumentType, float]:

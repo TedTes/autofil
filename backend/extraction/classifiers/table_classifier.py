@@ -79,14 +79,16 @@ class TableClassifier(IClassifier):
         },
         DocumentType.FINANCIAL_STATEMENT: {
             'required_columns': [
-                r'(account|category)',
-                r'(amount|balance|value)',
+                r'(account|category|description|item)',
+                r'(amount|balance|value|current.*year|prior.*year|20\d{2})',
             ],
             'strong_columns': [
                 r'(assets|liabilities)',
                 r'(debit|credit)',
                 r'(revenue|expense)',
                 r'total',
+                r'cash\s+flow',
+                r'net\s+(income|loss)',
                 r'(current|prior).*year',
             ],
             'weak_columns': [

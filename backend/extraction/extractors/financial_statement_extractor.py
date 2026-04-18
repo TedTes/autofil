@@ -7,6 +7,7 @@ Extracts financial data from:
 - Cash Flow Statements
 """
 
+import csv
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from ..interfaces.extractor import IExtractor
@@ -74,7 +75,6 @@ class FinancialStatementExtractor(IExtractor):
             'patterns': [
                 r'(?:total\s+)?revenue',
                 r'(?:gross\s+)?sales',
-                r'income',
                 r'earnings',
             ],
             'type': 'revenue'
@@ -107,6 +107,7 @@ class FinancialStatementExtractor(IExtractor):
             r'description',
             r'item',
             r'category',
+            r'line\s*item',
         ],
         'amount': [
             r'amount',
@@ -155,8 +156,14 @@ class FinancialStatementExtractor(IExtractor):
                 if result.success:
                     return result
             
+            # Extract from CSV without requiring Excel parser dependencies.
+            if document.file_extension == '.csv':
+                result = self._extract_from_csv(document)
+                if result.success:
+                    return result
+
             # Extract from Excel
-            if document.file_extension in ['.xlsx', '.xls', '.csv']:
+            if document.file_extension in ['.xlsx', '.xls']:
                 result = self._extract_from_excel(document)
                 if result.success:
                     return result
@@ -386,6 +393,117 @@ class FinancialStatementExtractor(IExtractor):
             warnings=warnings,
             confidence=self._calculate_confidence(line_items, warnings)
         )
+
+    def _extract_from_csv(self, document: Document) -> ExtractionResult:
+        """Extract financial data from a CSV file without requiring Excel dependencies."""
+        rows = self._read_csv_rows(document)
+        if len(rows) < 2:
+            return ExtractionResult(
+                success=False,
+                data={},
+                errors=["No data found in CSV file"]
+            )
+
+        headers = rows[0]
+        data_rows = rows[1:]
+        statement_type = self._detect_statement_type_from_text(
+            ' '.join(headers + [document.file_name or "", document.raw_text or ""])
+        )
+        column_map = self._map_columns(headers)
+
+        if not column_map:
+            return ExtractionResult(
+                success=False,
+                data={},
+                errors=["Could not map CSV columns"]
+            )
+
+        line_items = []
+        warnings = []
+
+        for row_idx, row in enumerate(data_rows, start=1):
+            try:
+                item = self._extract_line_item(row, column_map, statement_type)
+                if item and self._is_valid_line_item(item):
+                    item['_source'] = {
+                        'csv_row_index': row_idx
+                    }
+                    line_items.append(item)
+            except Exception as e:
+                warnings.append(f"CSV row {row_idx}: {str(e)}")
+
+        if not line_items:
+            return ExtractionResult(
+                success=False,
+                data={},
+                errors=["No valid financial line items found in CSV"]
+            )
+
+        categorized = self._categorize_line_items(line_items, statement_type)
+        totals = self._calculate_totals(categorized, statement_type)
+
+        data = {
+            'document_type': 'financial_statement',
+            'extraction_date': datetime.utcnow().isoformat(),
+            'statement_type': statement_type,
+            'statement_metadata': {},
+            'line_items': categorized,
+            'totals': totals,
+            'item_count': len(line_items),
+        }
+
+        canonical = build_generic_canonical_output(
+            document,
+            section_payloads=[
+                SectionPayload(
+                    key="financial_statement",
+                    display_name="Financial Statement",
+                    description=f"{statement_type.replace('_', ' ').title()} summary",
+                    fields={
+                        "statementType": statement_type,
+                        "lineItems": categorized,
+                        "totals": totals,
+                        "itemCount": len(line_items),
+                        "extractionDate": data["extraction_date"],
+                    },
+                )
+            ],
+            extraction_method="csv_parser",
+            metadata=Metadata(
+                form_type_detected="FINANCIAL_STATEMENT",
+                line_of_business=document.metadata.get("line_of_business")
+                if document.metadata
+                else None,
+            ),
+            raw=data,
+        )
+
+        return ExtractionResult(
+            success=True,
+            data=canonical.to_dict(),
+            warnings=warnings,
+            confidence=self._calculate_confidence(line_items, warnings)
+        )
+
+    @staticmethod
+    def _read_csv_rows(document: Document) -> List[List[str]]:
+        text = document.raw_text
+        if not text and document.file_path:
+            try:
+                with open(document.file_path, "r", encoding="utf-8-sig", newline="") as handle:
+                    text = handle.read()
+            except OSError:
+                text = ""
+
+        if not text:
+            return []
+
+        reader = csv.reader(text.splitlines())
+        return [
+            [cell.strip() for cell in row]
+            for row in reader
+            if any(cell.strip() for cell in row)
+        ]
     
     def _detect_statement_type(self, document: Document) -> str:
         """Detect type of financial statement."""
@@ -397,7 +515,7 @@ class FinancialStatementExtractor(IExtractor):
             return 'balance_sheet'
         
         # Check for income statement indicators
-        income_terms = ['income statement', 'profit and loss', 'revenue', 'expenses']
+        income_terms = ['income statement', 'profit and loss', 'p&l', 'revenue', 'expenses']
         if any(term in text for term in income_terms):
             return 'income_statement'
         
@@ -410,11 +528,11 @@ class FinancialStatementExtractor(IExtractor):
     
     def _detect_statement_type_from_text(self, text: str) -> str:
         """Detect statement type from text content."""
-        text_lower = text.lower()
+        text_lower = text.lower().replace("_", " ").replace("-", " ")
         
         if any(term in text_lower for term in ['balance sheet', 'assets', 'liabilities']):
             return 'balance_sheet'
-        elif any(term in text_lower for term in ['income statement', 'revenue', 'expenses']):
+        elif any(term in text_lower for term in ['income statement', 'profit and loss', 'p&l', 'revenue', 'expenses']):
             return 'income_statement'
         elif any(term in text_lower for term in ['cash flow', 'operating activities']):
             return 'cash_flow'

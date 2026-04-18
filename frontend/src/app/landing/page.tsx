@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Upload, Zap, Download, CheckCircle, ArrowRight } from 'lucide-react'
+import { Upload, Zap, Download, CheckCircle, ArrowRight, Loader2 } from 'lucide-react'
 import AnimatedDemo from '@/components/landing/AnimatedDemo'
 import LandingUploadPanel from '@/components/landing/LandingUploadPanel'
 import AuthPromptModal from '@/components/auth/AuthPromptModal'
@@ -14,7 +14,7 @@ const LANDING_DEFAULT_CLIENT_NAME = 'My Workspace'
 
 export default function LandingPage() {
   const router = useRouter()
-  const { user } = useAuth()
+  const { user, isLoading: isAuthLoading } = useAuth()
   const {
     files,
     addFiles,
@@ -31,6 +31,8 @@ export default function LandingPage() {
   } = useLandingUpload()
   const [isAuthPromptOpen, setIsAuthPromptOpen] = useState(false)
   const [pendingActionLabel, setPendingActionLabel] = useState<string | null>(null)
+  const [pendingCtaLabel, setPendingCtaLabel] = useState<string | null>(null)
+  const [queuedAuthCtaLabel, setQueuedAuthCtaLabel] = useState<string | null>(null)
   const [previewProgress, setPreviewProgress] = useState(0)
   const [previewStageLabel, setPreviewStageLabel] = useState<string>('Preparing preview')
   const inFlightPreviewKeyRef = useRef<string | null>(null)
@@ -63,7 +65,7 @@ export default function LandingPage() {
     return `${previewFile.name}:${previewFile.size}:${previewFile.lastModified}`
   }, [previewFile])
 
-  const handleGetStarted = useCallback(async (actionLabel = 'start your workspace') => {
+  const continueGetStarted = useCallback(async (actionLabel = 'start your workspace') => {
     if (user) {
       if (!hasFiles) {
         router.push('/dashboard')
@@ -81,6 +83,72 @@ export default function LandingPage() {
     setPendingActionLabel(actionLabel)
     setIsAuthPromptOpen(true)
   }, [getOrCreateLandingClient, hasFiles, router, user])
+
+  const handleGetStarted = useCallback((actionLabel = 'start your workspace') => {
+    if (pendingCtaLabel) return
+
+    setPendingActionLabel(actionLabel)
+
+    if (isAuthLoading) {
+      setPendingCtaLabel(actionLabel)
+      setQueuedAuthCtaLabel(actionLabel)
+      return
+    }
+
+    setPendingCtaLabel(actionLabel)
+    void continueGetStarted(actionLabel)
+      .then(() => {
+        if (!user) {
+          setPendingCtaLabel(null)
+        }
+      })
+      .catch((error) => {
+        console.error('Unable to continue from landing page', error)
+        setPendingCtaLabel(null)
+      })
+  }, [continueGetStarted, isAuthLoading, pendingCtaLabel, user])
+
+  useEffect(() => {
+    if (!queuedAuthCtaLabel || isAuthLoading) return
+
+    setQueuedAuthCtaLabel(null)
+    void continueGetStarted(queuedAuthCtaLabel)
+      .then(() => {
+        if (!user) {
+          setPendingCtaLabel(null)
+        }
+      })
+      .catch((error) => {
+        console.error('Unable to continue from landing page', error)
+        setPendingCtaLabel(null)
+      })
+  }, [continueGetStarted, isAuthLoading, queuedAuthCtaLabel, user])
+
+  const isCtaPending = useCallback(
+    (actionLabel: string) => pendingCtaLabel === actionLabel,
+    [pendingCtaLabel]
+  )
+
+  const handleAuthPromptClose = useCallback(() => {
+    setPendingActionLabel(null)
+    setPendingCtaLabel(null)
+    setQueuedAuthCtaLabel(null)
+    setIsAuthPromptOpen(false)
+  }, [])
+
+  const handleAuthenticated = useCallback(async () => {
+    setPendingActionLabel(null)
+    if (!hasFiles) {
+      router.push('/dashboard')
+      return
+    }
+
+    const landingClient = await getOrCreateLandingClient()
+    const params = new URLSearchParams()
+    params.set('name', landingClient.name)
+    params.set('landing', '1')
+    router.push(`/dashboard/clients/${landingClient.client_id}?${params.toString()}`)
+  }, [getOrCreateLandingClient, hasFiles, router])
 
   useEffect(() => {
     if (!previewFile || !previewKey || user) {
@@ -193,24 +261,8 @@ export default function LandingPage() {
       <AuthPromptModal
         isOpen={isAuthPromptOpen}
         actionLabel={pendingActionLabel}
-        onClose={() => {
-          setPendingActionLabel(null)
-          setIsAuthPromptOpen(false)
-        }}
-        onAuthenticated={async () => {
-          setPendingActionLabel(null)
-          setIsAuthPromptOpen(false)
-          if (!hasFiles) {
-            router.push('/dashboard')
-            return
-          }
-
-          const landingClient = await getOrCreateLandingClient()
-          const params = new URLSearchParams()
-          params.set('name', landingClient.name)
-          params.set('landing', '1')
-          router.push(`/dashboard/clients/${landingClient.client_id}?${params.toString()}`)
-        }}
+        onClose={handleAuthPromptClose}
+        onAuthenticated={handleAuthenticated}
       />
 
       {/* HEADER */}
@@ -240,8 +292,10 @@ export default function LandingPage() {
 
           <button
             onClick={() => handleGetStarted('start your workspace')}
-            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-all shadow-sm hover:shadow-md"
+            disabled={isCtaPending('start your workspace')}
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-all shadow-sm hover:shadow-md disabled:cursor-wait disabled:bg-blue-500"
           >
+            {isCtaPending('start your workspace') && <Loader2 className="h-4 w-4 animate-spin" />}
             Get Started
           </button>
         </div>
@@ -271,10 +325,12 @@ export default function LandingPage() {
               <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
                 <button
                   onClick={() => handleGetStarted('start using AutoFil')}
-                  className="inline-flex items-center gap-2 px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
+                  disabled={isCtaPending('start using AutoFil')}
+                  className="inline-flex items-center gap-2 px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105 disabled:cursor-wait disabled:bg-blue-500 disabled:transform-none"
                 >
+                  {isCtaPending('start using AutoFil') && <Loader2 className="h-5 w-5 animate-spin" />}
                   Try AutoFil Free
-                  <ArrowRight className="w-5 h-5" />
+                  {!isCtaPending('start using AutoFil') && <ArrowRight className="w-5 h-5" />}
                 </button>
                 <button
                   onClick={() => {
@@ -322,6 +378,7 @@ export default function LandingPage() {
           previewError={previewError}
           previewProgress={previewProgress}
           previewStageLabel={previewStageLabel}
+          isContinuePending={isCtaPending('continue with this extraction preview')}
         />
 
         {/* ANIMATED DEMO SECTION */}
@@ -514,10 +571,12 @@ export default function LandingPage() {
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <button
                 onClick={() => handleGetStarted('start your free trial')}
-                className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white text-blue-700 text-lg font-semibold rounded-xl hover:bg-gray-50 shadow-xl transition-all transform hover:scale-105"
+                disabled={isCtaPending('start your free trial')}
+                className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white text-blue-700 text-lg font-semibold rounded-xl hover:bg-gray-50 shadow-xl transition-all transform hover:scale-105 disabled:cursor-wait disabled:bg-blue-50 disabled:transform-none"
               >
+                {isCtaPending('start your free trial') && <Loader2 className="h-5 w-5 animate-spin" />}
                 Start Free Trial
-                <ArrowRight className="w-5 h-5" />
+                {!isCtaPending('start your free trial') && <ArrowRight className="w-5 h-5" />}
               </button>
               <button
                 onClick={() => {

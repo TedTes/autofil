@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useEffect, useRef, useState } from 'react'
 import { Loader2, LockKeyhole, Mail, X } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -8,7 +8,7 @@ type AuthPromptModalProps = {
   isOpen: boolean
   actionLabel?: string | null
   onClose: () => void
-  onAuthenticated?: () => void
+  onAuthenticated?: () => void | Promise<void>
 }
 
 export default function AuthPromptModal({
@@ -23,14 +23,36 @@ export default function AuthPromptModal({
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [isCompletingAuth, setIsCompletingAuth] = useState(false)
+  const isCompletingAuthRef = useRef(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
 
   useEffect(() => {
     if (!isOpen) return
-    if (user) {
-      onAuthenticated?.()
-      onClose()
+    if (!user || isCompletingAuthRef.current) return
+
+    let isCancelled = false
+    isCompletingAuthRef.current = true
+    setIsCompletingAuth(true)
+
+    void Promise.resolve(onAuthenticated?.())
+      .then(() => {
+        if (isCancelled) return
+        onClose()
+      })
+      .catch((err) => {
+        if (isCancelled) return
+        setError(err instanceof Error ? err.message : 'Unable to open your workspace')
+      })
+      .finally(() => {
+        if (isCancelled) return
+        isCompletingAuthRef.current = false
+        setIsCompletingAuth(false)
+      })
+
+    return () => {
+      isCancelled = true
     }
   }, [isOpen, onAuthenticated, onClose, user])
 
@@ -41,6 +63,8 @@ export default function AuthPromptModal({
       setPassword('')
       setConfirmPassword('')
       setSubmitting(false)
+      setIsCompletingAuth(false)
+      isCompletingAuthRef.current = false
       setError(null)
       setMessage(null)
     }
@@ -51,6 +75,8 @@ export default function AuthPromptModal({
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (submitting) return
+
+    let keepSubmittingUntilAuthSettles = false
 
     try {
       setSubmitting(true)
@@ -70,8 +96,11 @@ export default function AuthPromptModal({
           setMode('login')
           return
         }
+        keepSubmittingUntilAuthSettles = true
       } else {
         await signIn(email.trim(), password)
+        keepSubmittingUntilAuthSettles = true
+        return
       }
     } catch (err) {
       const rawMessage =
@@ -91,7 +120,9 @@ export default function AuthPromptModal({
 
       setError(normalizedMessage)
     } finally {
-      setSubmitting(false)
+      if (!keepSubmittingUntilAuthSettles) {
+        setSubmitting(false)
+      }
     }
   }
 
@@ -194,11 +225,15 @@ export default function AuthPromptModal({
 
               <button
                 type="submit"
-                disabled={submitting || isLoading}
+                disabled={submitting || isLoading || isCompletingAuth}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
               >
-                {(submitting || isLoading) && <Loader2 className="h-4 w-4 animate-spin" />}
-                {mode === 'signup' ? 'Create account' : 'Sign in'}
+                {(submitting || isLoading || isCompletingAuth) && <Loader2 className="h-4 w-4 animate-spin" />}
+                {isCompletingAuth
+                  ? 'Opening workspace...'
+                  : mode === 'signup'
+                    ? 'Create account'
+                    : 'Sign in'}
               </button>
 
               <button

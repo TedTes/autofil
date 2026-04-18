@@ -62,6 +62,7 @@ export default function LandingUploadPanel({
   previewError,
   previewProgress,
   previewStageLabel,
+  isContinuePending = false,
 }: {
   files: File[]
   onAddFiles: (files: File[]) => void
@@ -75,6 +76,7 @@ export default function LandingUploadPanel({
   previewError: string | null
   previewProgress: number
   previewStageLabel: string
+  isContinuePending?: boolean
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const addMoreRef = useRef<HTMLInputElement>(null)
@@ -362,10 +364,12 @@ export default function LandingUploadPanel({
                         <button
                           type="button"
                           onClick={onContinue}
-                          className="mt-4 w-full inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 active:scale-[0.98] transition-all"
+                          disabled={isContinuePending}
+                          className="mt-4 w-full inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 active:scale-[0.98] transition-all disabled:cursor-wait disabled:bg-blue-500"
                         >
+                          {isContinuePending && <Loader2 className="h-4 w-4 animate-spin" />}
                           Sign in to continue
-                          <ArrowRight className="h-4 w-4" />
+                          {!isContinuePending && <ArrowRight className="h-4 w-4" />}
                         </button>
                       </div>
                     ) : previewResult && previewEntries.length > 0 ? (
@@ -418,10 +422,12 @@ export default function LandingUploadPanel({
                         <button
                           type="button"
                           onClick={onContinue}
-                          className="mt-4 w-full inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 active:scale-[0.98] transition-all"
+                          disabled={isContinuePending}
+                          className="mt-4 w-full inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 active:scale-[0.98] transition-all disabled:cursor-wait disabled:bg-blue-500"
                         >
+                          {isContinuePending && <Loader2 className="h-4 w-4 animate-spin" />}
                           Sign in to continue
-                          <ArrowRight className="h-4 w-4" />
+                          {!isContinuePending && <ArrowRight className="h-4 w-4" />}
                         </button>
                       </div>
                     ) : (
@@ -442,10 +448,12 @@ export default function LandingUploadPanel({
                         <button
                           type="button"
                           onClick={onContinue}
-                          className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 active:scale-[0.98] transition-all"
+                          disabled={isContinuePending}
+                          className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 active:scale-[0.98] transition-all disabled:cursor-wait disabled:bg-blue-500"
                         >
+                          {isContinuePending && <Loader2 className="h-4 w-4 animate-spin" />}
                           Sign in to continue
-                          <ArrowRight className="h-4 w-4" />
+                          {!isContinuePending && <ArrowRight className="h-4 w-4" />}
                         </button>
                       </div>
                     )}
@@ -591,10 +599,12 @@ export default function LandingUploadPanel({
                       <button
                         type="button"
                         onClick={onContinue}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 active:scale-[0.98] transition-all"
+                        disabled={isContinuePending}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 active:scale-[0.98] transition-all disabled:cursor-wait disabled:bg-blue-500"
                       >
+                        {isContinuePending && <Loader2 className="h-4 w-4 animate-spin" />}
                         Sign in to continue
-                        <ArrowRight className="h-4 w-4" />
+                        {!isContinuePending && <ArrowRight className="h-4 w-4" />}
                       </button>
                     </div>
                   </>

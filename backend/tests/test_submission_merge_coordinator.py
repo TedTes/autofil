@@ -223,6 +223,81 @@ def test_merge_inputs_adds_package_sources_and_field_source_file_provenance():
     assert merged["metadata"]["included_form_types"] == ["ACORD_140", "ACORD_25"]
 
 
+def test_merge_inputs_keeps_financial_statement_semantic_fields():
+    coordinator = _coordinator()
+    merged = coordinator.merge_inputs(
+        [
+            {
+                "input_id": "financial-input",
+                "filename": "2025_profit_and_loss.xlsx",
+                "document_type": "financial_statement",
+                "confidence": 0.91,
+                "data": {
+                    "source": {
+                        "file_name": "2025_profit_and_loss.xlsx",
+                        "file_type": "xlsx",
+                        "extraction_method": "excel_parser",
+                        "extracted_at": "2026-04-17T00:00:00",
+                    },
+                    "metadata": {"form_type_detected": "FINANCIAL_STATEMENT"},
+                    "semantic_sections": [
+                        {
+                            "key": "financial_statement",
+                            "fields": [
+                                {
+                                    "id": "statementType",
+                                    "values": [{"value": "income_statement", "confidence": 0.91}],
+                                },
+                                {
+                                    "id": "lineItems",
+                                    "values": [
+                                        {
+                                            "value": {
+                                                "revenue": [
+                                                    {"account": "Revenue", "current_year": 1250000.0}
+                                                ],
+                                                "expenses": [
+                                                    {"account": "Operating Expenses", "current_year": 800000.0}
+                                                ],
+                                            },
+                                            "confidence": 0.91,
+                                        }
+                                    ],
+                                },
+                                {
+                                    "id": "totals",
+                                    "values": [
+                                        {
+                                            "value": {
+                                                "revenue_total": 1250000.0,
+                                                "expenses_total": 800000.0,
+                                                "net_income": 450000.0,
+                                            },
+                                            "confidence": 0.91,
+                                        }
+                                    ],
+                                },
+                                {
+                                    "id": "itemCount",
+                                    "values": [{"value": 2, "confidence": 0.91}],
+                                },
+                            ],
+                        }
+                    ],
+                },
+            }
+        ]
+    )
+
+    entity_map = coordinator.semantic_sections_to_entity_map(merged)
+    assert entity_map["statementType"][0]["value"] == "income_statement"
+    assert entity_map["lineItems"][0]["value"]["revenue"][0]["account"] == "Revenue"
+    assert entity_map["totals"][0]["value"]["net_income"] == 450000.0
+    assert entity_map["itemCount"][0]["value"] == 2
+    assert entity_map["totals"][0]["source"]["source_file"] == "2025_profit_and_loss.xlsx"
+    assert merged["metadata"]["included_form_types"] == ["FINANCIAL_STATEMENT"]
+
+
 def test_clean_raw_mapped_fields_filters_obvious_mismatches():
     payload = {
         "raw": {

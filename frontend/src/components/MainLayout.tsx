@@ -133,6 +133,15 @@ function buildPathFromView(type: ViewType, data?: ViewStateData): string {
       if (detail?.inputId) {
         params.set('inputId', detail.inputId)
       }
+      if (detail?.sourcePage) {
+        params.set('page', String(detail.sourcePage))
+      }
+      if (detail?.sourceBbox) {
+        params.set('bbox', detail.sourceBbox.join(','))
+      }
+      if (detail?.sourceFieldLabel) {
+        params.set('field', detail.sourceFieldLabel)
+      }
       const query = params.toString()
       return `/dashboard/documents/file/${submissionId}${query ? `?${query}` : ''}`
     }
@@ -195,9 +204,27 @@ function mapPathToView(pathname: string, searchParams: URLSearchParams | Readonl
       if (rest[0] === 'file' && rest[1]) {
         const filename = searchParams.get('filename') ?? undefined
         const inputId = searchParams.get('inputId') ?? undefined
+        const sourcePageParam = searchParams.get('page')
+        const sourcePage = sourcePageParam ? Number(sourcePageParam) : undefined
+        const sourceBboxParam = searchParams.get('bbox')
+        const sourceBboxParts = sourceBboxParam
+          ?.split(',')
+          .map((part) => Number(part))
+          .filter((value) => Number.isFinite(value))
+        const sourceBbox = sourceBboxParts && sourceBboxParts.length === 4
+          ? (sourceBboxParts as [number, number, number, number])
+          : undefined
+        const sourceFieldLabel = searchParams.get('field') ?? undefined
         return {
           type: 'file-detail',
-          data: { submissionId: rest[1], filename, inputId },
+          data: {
+            submissionId: rest[1],
+            filename,
+            inputId,
+            sourcePage: sourcePage && sourcePage > 0 ? sourcePage : undefined,
+            sourceBbox,
+            sourceFieldLabel,
+          },
           breadcrumbs: ['Dashboard', 'Documents', filename || 'File'],
         }
       }
@@ -368,10 +395,26 @@ const handleMobileSidebarClose = () => {
   }, [router])
 
   // Handle file click - navigate to file detail view
-  const handleFileClick = useCallback((submissionId: string, filename?: string, inputId?: string) => {
+  const handleFileClick = useCallback((
+    submissionId: string,
+    filename?: string,
+    inputId?: string,
+    source?: {
+      page?: number
+      bbox?: [number, number, number, number]
+      fieldLabel?: string
+    }
+  ) => {
     navigateTo(
       'file-detail',
-      { submissionId, filename, inputId },
+      {
+        submissionId,
+        filename,
+        inputId,
+        sourcePage: source?.page,
+        sourceBbox: source?.bbox,
+        sourceFieldLabel: source?.fieldLabel,
+      },
       ['Dashboard', 'Documents', filename || 'File']
     )
   }, [navigateTo])
@@ -700,6 +743,9 @@ const handleMobileSidebarClose = () => {
                 submissionId={currentView.data.submissionId}
                 inputId={'inputId' in currentView.data ? currentView.data.inputId : undefined}
                 filename={currentView.data.filename}
+                sourcePage={'sourcePage' in currentView.data ? currentView.data.sourcePage : undefined}
+                sourceBbox={'sourceBbox' in currentView.data ? currentView.data.sourceBbox : undefined}
+                sourceFieldLabel={'sourceFieldLabel' in currentView.data ? currentView.data.sourceFieldLabel : undefined}
                 onBack={navigateBack}
                 onActionsReady={setFileDetailActions}
               />

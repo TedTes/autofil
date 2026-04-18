@@ -15,12 +15,14 @@ interface MergedDataViewProps {
   mergedData: MergedData | null
   onSaveData?: (data: MergedData) => Promise<void> | void
   isLoading?: boolean
+  onOpenSource?: (target: SourceOpenTarget) => void
 }
 
 export default function MergedDataView({
   mergedData,
   onSaveData,
   isLoading = false,
+  onOpenSource,
 }: MergedDataViewProps) {
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
   const [isEditing, setIsEditing] = useState(false)
@@ -169,6 +171,7 @@ export default function MergedDataView({
               onToggle={() => toggleSection(section.key)}
               isEditing={isEditing}
               onChangeFieldValue={updateFieldValue}
+              onOpenSource={onOpenSource}
             />
           ))}
         </div>
@@ -183,6 +186,7 @@ interface SemanticSectionCardProps {
   onToggle: () => void
   isEditing: boolean
   onChangeFieldValue: (sectionKey: string, fieldId: string, value: unknown) => void
+  onOpenSource?: (target: SourceOpenTarget) => void
 }
 
 function SemanticSectionCard({
@@ -191,6 +195,7 @@ function SemanticSectionCard({
   onToggle,
   isEditing,
   onChangeFieldValue,
+  onOpenSource,
 }: SemanticSectionCardProps) {
   const visibleFields = (section.fields || []).filter(
     (field) => field.values && field.values.length > 0
@@ -239,6 +244,7 @@ function SemanticSectionCard({
               field={field}
               isEditing={isEditing}
               onChangeFieldValue={onChangeFieldValue}
+              onOpenSource={onOpenSource}
             />
           ))}
         </div>
@@ -252,11 +258,13 @@ function SemanticFieldRow({
   field,
   isEditing,
   onChangeFieldValue,
+  onOpenSource,
 }: {
   sectionKey: string
   field: SemanticField
   isEditing: boolean
   onChangeFieldValue: (sectionKey: string, fieldId: string, value: unknown) => void
+  onOpenSource?: (target: SourceOpenTarget) => void
 }) {
   const [showAllValues, setShowAllValues] = useState(false)
   
@@ -290,6 +298,8 @@ function SemanticFieldRow({
         indexLabel="Primary"
         editable={isEditing && isEditablePrimitive(primaryValue.value)}
         onChangeValue={(nextValue) => onChangeFieldValue(sectionKey, field.id, nextValue)}
+        fieldLabel={field.label ?? humanize(field.id)}
+        onOpenSource={onOpenSource}
       />
 
       {showAllValues && hasMultipleValues && (
@@ -300,6 +310,8 @@ function SemanticFieldRow({
               entry={value}
               type={field.type}
               indexLabel={`Value ${idx + 2}`}
+              fieldLabel={field.label ?? humanize(field.id)}
+              onOpenSource={onOpenSource}
             />
           ))}
         </div>
@@ -310,24 +322,59 @@ function SemanticFieldRow({
 
 type SemanticFieldValueEntry = NonNullable<SemanticField['values']>[number]
 
+type SourceOpenTarget = {
+  filename?: string
+  inputId?: string
+  page?: number
+  bbox?: [number, number, number, number]
+  fieldLabel?: string
+}
+
 function ValueCard({
   entry,
   type,
   indexLabel,
   editable = false,
   onChangeValue,
+  fieldLabel,
+  onOpenSource,
 }: {
   entry: SemanticFieldValueEntry
   type?: string
   indexLabel?: string
   editable?: boolean
   onChangeValue?: (value: unknown) => void
+  fieldLabel?: string
+  onOpenSource?: (target: SourceOpenTarget) => void
 }) {
   const confidence = entry.confidence
   const shouldShowConfidence = confidence !== undefined && confidence < 0.8
+  const source = entry.source
+  const sourceFilename = source?.source_file
+  const sourceInputId = source?.input_id
+  const sourcePage = typeof source?.page === 'number' ? source.page : undefined
+  const sourceBbox = source?.bbox
+  const canOpenSource = Boolean(onOpenSource && (sourceInputId || sourceFilename))
+
+  const handleOpenSource = () => {
+    if (!canOpenSource) return
+    onOpenSource?.({
+      filename: sourceFilename,
+      inputId: sourceInputId,
+      page: sourcePage,
+      bbox: sourceBbox,
+      fieldLabel,
+    })
+  }
 
   return (
-    <div className="border border-gray-200 rounded-lg bg-white p-3 space-y-2">
+    <div
+      onClick={!editable && canOpenSource ? handleOpenSource : undefined}
+      className={`border border-gray-200 rounded-lg bg-white p-3 space-y-2 ${
+        !editable && canOpenSource ? 'cursor-pointer transition-colors hover:border-blue-300 hover:bg-blue-50/40' : ''
+      }`}
+      title={!editable && canOpenSource ? 'Open source document' : undefined}
+    >
       {indexLabel && (
         <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
           {indexLabel}
@@ -350,6 +397,18 @@ function ValueCard({
         >
           Confidence {formatConfidenceDisplay(confidence)}
         </span>
+      )}
+      {canOpenSource && (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation()
+            handleOpenSource()
+          }}
+          className="text-[11px] font-medium text-blue-600 hover:text-blue-800"
+        >
+          Open source{sourcePage ? ` page ${sourcePage}` : ''}
+        </button>
       )}
     </div>
   )

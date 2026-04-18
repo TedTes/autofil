@@ -368,7 +368,16 @@ function CompactFolderList({
   activeId?: string | null
   selectedOutputsByPackage: Record<string, string[]>
   onToggle?: (pkg: ClientSubmissionPackage) => void
-  onViewFile?: (submissionId: string, filename?: string, inputId?: string) => void
+  onViewFile?: (
+    submissionId: string,
+    filename?: string,
+    inputId?: string,
+    source?: {
+      page?: number
+      bbox?: [number, number, number, number]
+      fieldLabel?: string
+    }
+  ) => void
   onDownloadFile?: (submissionId: string, filename: string) => void
   onToggleInput?: (submissionId: string, inputId: string) => void
   onSelectAllInputs?: (submissionId: string, inputIds: string[]) => void
@@ -665,7 +674,16 @@ interface ClientDetailViewProps {
   initialSubmissionId?: string
   landingHandoff?: boolean
   intent?: 'create-submission' | 'upload-files'
-  onFileClick?: (submissionId: string, filename?: string, inputId?: string) => void
+  onFileClick?: (
+    submissionId: string,
+    filename?: string,
+    inputId?: string,
+    source?: {
+      page?: number
+      bbox?: [number, number, number, number]
+      fieldLabel?: string
+    }
+  ) => void
   onActionsReady?: (actions: ClientDetailActions | null) => void
 }
 
@@ -1071,9 +1089,18 @@ const [isCreating, setIsCreating] = useState(false)
     }
   }, [activePackageId, intent, landingHandoff, loading, packages, setActivePackageId])
 
-  const handleViewFile = (submissionId: string, filename?: string, inputId?: string) => {
-    if (filename) {
-      onFileClick?.(submissionId, filename, inputId)
+  const handleViewFile = (
+    submissionId: string,
+    filename?: string,
+    inputId?: string,
+    source?: {
+      page?: number
+      bbox?: [number, number, number, number]
+      fieldLabel?: string
+    }
+  ) => {
+    if (filename || inputId) {
+      onFileClick?.(submissionId, filename, inputId, source)
     }
   }
 
@@ -1215,6 +1242,7 @@ const [isCreating, setIsCreating] = useState(false)
       includedInputCount={
         activePackage?.inputs?.filter((input) => input.included_in_merge !== false).length || 0
       }
+      activeSubmissionId={activePackageId || undefined}
       mergedData={mergedData}
       isMergedDataLoading={isMergedDataLoading}
       uploadedRows={uploadedRows}

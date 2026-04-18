@@ -20,6 +20,7 @@ interface UploadOrMergedDataPanelProps {
   includedInputCount?: number
   
   // Merged data (shown when hasExtractedFiles = true)
+  activeSubmissionId?: string
   mergedData: MergedData | null
   isMergedDataLoading?: boolean
   
@@ -34,7 +35,16 @@ interface UploadOrMergedDataPanelProps {
   // Callbacks
   onUploadMore: () => void
   onRemoveRow: (id: string) => void
-  onViewFile: (submissionId: string, filename?: string, inputId?: string) => void
+  onViewFile: (
+    submissionId: string,
+    filename?: string,
+    inputId?: string,
+    source?: {
+      page?: number
+      bbox?: [number, number, number, number]
+      fieldLabel?: string
+    }
+  ) => void
   onSaveMergedData?: (data: MergedData) => Promise<void> | void
 
   // Reference to the FileUploadDropZone component
@@ -61,6 +71,7 @@ interface UploadOrMergedDataPanelProps {
 export default function UploadOrMergedDataPanel({
   hasExtractedFiles,
   includedInputCount = 0,
+  activeSubmissionId,
   mergedData,
   isMergedDataLoading,
   uploadedRows,
@@ -128,6 +139,14 @@ export default function UploadOrMergedDataPanel({
           mergedData={mergedData}
           onSaveData={onSaveMergedData}
           isLoading={isMergedDataLoading}
+          onOpenSource={(target) => {
+            if (!activeSubmissionId) return
+            onViewFile(activeSubmissionId, target.filename, target.inputId, {
+              page: target.page,
+              bbox: target.bbox,
+              fieldLabel: target.fieldLabel,
+            })
+          }}
         />
       </div>
 

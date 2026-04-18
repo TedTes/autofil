@@ -45,6 +45,9 @@ interface FileDetailViewProps {
   submissionId: string
   inputId?: string
   filename?: string
+  sourcePage?: number
+  sourceBbox?: [number, number, number, number]
+  sourceFieldLabel?: string
   onBack?: () => void
   onActionsReady?: (actions: FileDetailActions | null) => void
 }
@@ -54,6 +57,9 @@ export function FileDetailView({
   submissionId,
   inputId,
   filename = 'Document',
+  sourcePage,
+  sourceBbox,
+  sourceFieldLabel,
   onBack,
   onActionsReady
 }: FileDetailViewProps) {
@@ -74,7 +80,20 @@ export function FileDetailView({
   const [isExporting, setIsExporting] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [isLoadingPreview, setIsLoadingPreview] = useState(false)
-  const [selectedFieldSource, setSelectedFieldSource] = useState<FieldSourceSelection | null>(null)
+  const [selectedFieldSource, setSelectedFieldSource] = useState<FieldSourceSelection | null>(
+    sourcePage || sourceBbox || sourceFieldLabel
+      ? {
+          fieldId: sourceFieldLabel || 'source',
+          fieldLabel: sourceFieldLabel || 'Selected source',
+          fieldPath: 'source',
+          value: '',
+          source: {
+            page: sourcePage,
+            bbox: sourceBbox,
+          },
+        }
+      : null
+  )
   const resolvedFilename = extractedData?.filename || filename
   const specializedView = useMemo(
     () => resolveSpecializedView(extractedData?.data),
@@ -86,6 +105,20 @@ export function FileDetailView({
     ? Number(selectedFieldSource.source.page)
     : undefined
   const selectedSourceBbox = selectedFieldSource?.source?.bbox
+
+  useEffect(() => {
+    if (!sourcePage && !sourceBbox && !sourceFieldLabel) return
+    setSelectedFieldSource({
+      fieldId: sourceFieldLabel || 'source',
+      fieldLabel: sourceFieldLabel || 'Selected source',
+      fieldPath: 'source',
+      value: '',
+      source: {
+        page: sourcePage,
+        bbox: sourceBbox,
+      },
+    })
+  }, [sourcePage, sourceBbox, sourceFieldLabel])
 
 
   // Fetch submission data

@@ -24,7 +24,14 @@ export type ViewType =
 export type ViewDataMap = {
   'dashboard': undefined
   'documents': undefined
-  'file-detail': { submissionId: string; filename?: string; inputId?: string }
+  'file-detail': {
+    submissionId: string
+    filename?: string
+    inputId?: string
+    sourcePage?: number
+    sourceBbox?: [number, number, number, number]
+    sourceFieldLabel?: string
+  }
   'clients': { intent?: 'create-account' | 'create-submission' | 'upload-files' } | undefined
   'client-detail': {
     clientId: string

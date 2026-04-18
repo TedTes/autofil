@@ -14,6 +14,9 @@ export interface SourceRef {
     bbox?: [number, number, number, number]  // [x0, y0, x1, y1]
     table_id?: string
     extraction_rule?: string  // e.g. "label_value", "table_row", "pdf_field"
+    source_file?: string
+    input_id?: string
+    document_type?: string
   }
   
   /**

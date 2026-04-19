@@ -334,13 +334,13 @@ export function FileDetailView({
 
       {/* Main Content */}
       <div
-        className={`flex-1 overflow-hidden flex flex-col ${
-          isPdfPreview ? 'lg:grid lg:grid-cols-2 lg:gap-0' : ''
+        className={`flex-1 min-h-0 h-full overflow-hidden flex flex-col ${
+          isPdfPreview ? 'lg:flex-row' : ''
         }`}
       >
         {/* PDF Preview */}
         {isPdfPreview && (
-          <div className="h-full overflow-hidden bg-gray-900 border-r border-gray-700">
+          <div className="h-full min-h-0 lg:w-[42%] lg:shrink-0 overflow-hidden bg-white border-r border-gray-200">
             {isLoadingPreview || previewUrl ? (
               <PdfPreview
                 fileUrl={previewUrl || 'about:blank'}
@@ -350,10 +350,10 @@ export function FileDetailView({
                 onDownload={handleDownloadOriginal}
               />
             ) : (
-              <div className="h-full flex items-center justify-center bg-gray-900">
+              <div className="h-full flex items-center justify-center bg-white">
                 <div className="text-center">
                   <Loader2 className="w-10 h-10 text-blue-500 animate-spin mx-auto mb-3" />
-                  <p className="text-sm text-gray-300">Loading preview...</p>
+                  <p className="text-sm text-gray-600">Loading preview...</p>
                 </div>
               </div>
             )}
@@ -361,10 +361,10 @@ export function FileDetailView({
         )}
 
         {/* Data Panel */}
-        <div className="h-full bg-white overflow-y-auto">
-          <div className="p-4 sm:p-6">
+        <div className="h-full min-h-0 flex-1 bg-white overflow-hidden">
+          <div className="flex h-full min-h-0 flex-col p-4 sm:p-6">
             {/* Header with Edit Toggle */}
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-4 flex flex-shrink-0 items-center justify-between">
               <div className="flex-1">
                 <h3 className="text-base font-semibold text-gray-900 mb-1">
                   Extracted Data
@@ -427,7 +427,7 @@ export function FileDetailView({
             </div>
 
             {/* Extraction Data Form */}
-            <div>
+            <div className="min-h-0 flex-1 overflow-y-auto pr-1">
   {!isPdfPreview && (
     <div className="mb-4 flex flex-wrap items-center gap-3 text-sm text-gray-600">
       <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-700 rounded-full">
@@ -509,6 +509,7 @@ export function FileDetailView({
       data={extractedData.data}
       fieldConfidence={extractedData.field_confidence}
       isEditable={isEditMode}
+      className="space-y-4"
       selectedFieldPath={selectedFieldSource?.fieldPath}
       onFieldSelect={setSelectedFieldSource}
       onFieldChange={(fieldPath, value) => {

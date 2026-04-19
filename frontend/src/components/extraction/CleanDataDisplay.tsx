@@ -13,6 +13,7 @@ interface CleanDataDisplayProps {
   data: Record<string, unknown>
   fieldConfidence?: Record<string, number>
   isEditable?: boolean
+  className?: string
   onFieldChange?: (fieldPath: string, value: unknown) => void
   selectedFieldPath?: string | null
   onFieldSelect?: (source: FieldSourceSelection) => void
@@ -352,6 +353,7 @@ export function CleanDataDisplay({
   data,
   fieldConfidence = {},
   isEditable = false,
+  className,
   onFieldChange,
   selectedFieldPath,
   onFieldSelect,
@@ -453,7 +455,7 @@ export function CleanDataDisplay({
   
   if (semanticSections.length > 0) {
     return (
-      <div className="space-y-4 max-h-[calc(100vh-220px)] overflow-y-auto pr-1">
+      <div className={className || "space-y-4 max-h-[calc(100vh-220px)] overflow-y-auto pr-1"}>
         {semanticSections.map((section) => {
           const sectionKey = section.displayName || section.key || 'section'
           const isExpanded = expandedSemanticSections.has(sectionKey)
@@ -634,7 +636,7 @@ export function CleanDataDisplay({
   }
 
   return (
-    <div className="space-y-3 max-h-[calc(100vh-220px)] overflow-y-auto pr-1">
+    <div className={className || "space-y-3 max-h-[calc(100vh-220px)] overflow-y-auto pr-1"}>
       {sections.map((section) => {
         const sectionData = groupedData[section]
         const isExpanded = expandedSections.has(section)

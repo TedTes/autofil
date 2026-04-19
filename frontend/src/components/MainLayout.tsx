@@ -586,9 +586,9 @@ const handleMobileSidebarClose = () => {
 )}
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-h-screen lg:ml-24">
+      <div className="flex-1 flex h-screen min-h-0 flex-col overflow-hidden lg:ml-24">
         {/* Header */}
-        <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-30">
+        <header className="flex-shrink-0 bg-white border-b border-gray-200 shadow-sm sticky top-0 z-30">
           <div className="px-4 sm:px-6 lg:px-8">
             {currentView.type === 'client-detail' ? (
               <div className="flex h-16 items-center gap-4 min-w-0">
@@ -710,8 +710,8 @@ const handleMobileSidebarClose = () => {
         </header>
 
         {/* Views */}
-        <main className={`flex-1 bg-gray-50 ${currentView.type === 'file-detail' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
-          <div className={currentView.type === 'file-detail' ? 'h-full' : 'px-4 sm:px-6 lg:px-8'}>
+        <main className={`min-h-0 flex-1 bg-gray-50 ${currentView.type === 'file-detail' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+          <div className={currentView.type === 'file-detail' ? 'h-full min-h-0' : 'px-4 sm:px-6 lg:px-8'}>
             
             {/* Home View */}
             {currentView.type === 'dashboard' && (

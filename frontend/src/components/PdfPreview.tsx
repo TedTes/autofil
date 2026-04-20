@@ -54,6 +54,14 @@ function clampPage(page: number, pageCount: number): number {
   return Math.min(Math.max(page, 1), Math.max(pageCount, 1))
 }
 
+function buildNativePdfUrl(fileUrl: string, page?: number): string {
+  const fragment = [`view=FitH`, `toolbar=0`, `navpanes=0`]
+  if (page && page > 0) {
+    fragment.unshift(`page=${page}`)
+  }
+  return `${fileUrl}#${fragment.join('&')}`
+}
+
 export function PdfPreview({
   fileUrl,
   filename,
@@ -63,16 +71,19 @@ export function PdfPreview({
 }: PdfPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
+  const highlightRef = useRef<HTMLDivElement | null>(null)
   const targetPageRef = useRef(targetPage)
   const [isLoading, setIsLoading] = useState(true)
   const [isRendering, setIsRendering] = useState(false)
   const [hasError, setHasError] = useState(false)
+  const [useNativePreview, setUseNativePreview] = useState(false)
   const [zoom, setZoom] = useState(100)
   const [pdfDoc, setPdfDoc] = useState<PdfDocument | null>(null)
   const [pageCount, setPageCount] = useState(0)
   const [currentPage, setCurrentPage] = useState(targetPage && targetPage > 0 ? targetPage : 1)
   const [pageSize, setPageSize] = useState<{ width: number; height: number } | null>(null)
   const [highlightRect, setHighlightRect] = useState<HighlightRect | null>(null)
+  const targetHighlightPage = targetPage && targetPage > 0 ? targetPage : 1
 
   useEffect(() => {
     targetPageRef.current = targetPage
@@ -87,13 +98,14 @@ export function PdfPreview({
 
       setIsLoading(true)
       setHasError(false)
+      setUseNativePreview(false)
       setPdfDoc(null)
       setHighlightRect(null)
 
       try {
-        const pdfjsLib = await import('pdfjs-dist')
+        const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs')
         pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-          'pdfjs-dist/build/pdf.worker.mjs',
+          'pdfjs-dist/legacy/build/pdf.worker.min.mjs',
           import.meta.url
         ).toString()
         const loadingTask = pdfjsLib.getDocument(fileUrl)
@@ -110,9 +122,13 @@ export function PdfPreview({
           )
         )
       } catch (error) {
-        console.error('Failed to load PDF preview:', error)
+        console.warn('PDF.js preview unavailable; falling back to browser PDF viewer:', error)
         if (active) {
-          setHasError(true)
+          setPdfDoc(null)
+          setPageCount(0)
+          setHighlightRect(null)
+          setCurrentPage(targetPageRef.current && targetPageRef.current > 0 ? targetPageRef.current : 1)
+          setUseNativePreview(true)
         }
       } finally {
         if (active) {
@@ -169,7 +185,7 @@ export function PdfPreview({
         if (cancelled) return
         setPageSize({ width: viewport.width, height: viewport.height })
 
-        if (sourceBbox && targetPage === currentPage) {
+        if (sourceBbox && targetHighlightPage === currentPage) {
           const [x0, y0, x1, y1] = viewport.convertToViewportRectangle(sourceBbox)
           const left = Math.min(x0, x1)
           const top = Math.min(y0, y1)
@@ -198,13 +214,18 @@ export function PdfPreview({
     return () => {
       cancelled = true
     }
-  }, [pdfDoc, currentPage, zoom, sourceBbox, targetPage])
+  }, [pdfDoc, currentPage, zoom, sourceBbox, targetHighlightPage])
 
   useEffect(() => {
-    if (!highlightRect || !scrollContainerRef.current) return
-    const container = scrollContainerRef.current
-    const scrollTop = container.scrollTop + highlightRect.top - container.clientHeight / 2 + highlightRect.height / 2
-    container.scrollTo({ top: Math.max(0, scrollTop), behavior: 'smooth' })
+    if (!highlightRect || !highlightRef.current) return
+    const frame = window.requestAnimationFrame(() => {
+      highlightRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+        inline: 'center',
+      })
+    })
+    return () => window.cancelAnimationFrame(frame)
   }, [highlightRect])
 
   const handleZoomIn = () => {
@@ -257,8 +278,76 @@ export function PdfPreview({
     )
   }
 
+  if (useNativePreview) {
+    const nativePage = targetPage && targetPage > 0 ? targetPage : currentPage
+
+    return (
+      <div className="flex h-full flex-col bg-white">
+        <div className="flex items-center justify-between border-b border-gray-700 bg-gray-800 px-4 py-2">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="max-w-xs truncate text-sm text-gray-300" title={filename}>
+              {filename || 'Document'}
+            </span>
+            <span className="whitespace-nowrap text-xs text-amber-300">
+              Browser preview
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handleFullscreen}
+              className="rounded p-2 text-gray-300 transition-colors hover:bg-gray-700 hover:text-white"
+              title="Open in new window"
+            >
+              <Maximize2 className="h-4 w-4" />
+            </button>
+
+            {onDownload && (
+              <button
+                onClick={onDownload}
+                className="rounded p-2 text-gray-300 transition-colors hover:bg-gray-700 hover:text-white"
+                title="Download PDF"
+              >
+                <Download className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">
+          PDF.js could not initialize in this browser session, so the native PDF viewer is being used.
+          Field navigation can open the right page, but exact field highlighting is unavailable here.
+        </div>
+
+        <div className="relative flex-1 bg-white">
+          {isLoading && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-white">
+              <div className="text-center">
+                <Loader2 className="mx-auto mb-3 h-8 w-8 animate-spin text-blue-500" />
+                <p className="text-sm text-gray-600">Loading PDF...</p>
+              </div>
+            </div>
+          )}
+          <iframe
+            src={buildNativePdfUrl(fileUrl, nativePage)}
+            className="h-full w-full border-0"
+            onLoad={() => {
+              setIsLoading(false)
+              setHasError(false)
+            }}
+            onError={() => {
+              setIsLoading(false)
+              setHasError(true)
+            }}
+            title={filename || 'PDF Preview'}
+          />
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="flex h-full flex-col bg-gray-900">
+    <div className="flex h-full flex-col bg-white">
       <div className="flex items-center justify-between border-b border-gray-700 bg-gray-800 px-4 py-2">
         <div className="flex min-w-0 items-center gap-3">
           <span className="max-w-xs truncate text-sm text-gray-300" title={filename}>
@@ -337,7 +426,7 @@ export function PdfPreview({
         </div>
       </div>
 
-      <div ref={scrollContainerRef} className="relative flex-1 overflow-auto bg-gray-950 p-6">
+      <div ref={scrollContainerRef} className="relative flex-1 overflow-auto bg-white p-6">
         {isLoading && (
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/80">
             <div className="text-center">
@@ -362,6 +451,7 @@ export function PdfPreview({
           <canvas ref={canvasRef} className="block" />
           {highlightRect && (
             <div
+              ref={highlightRef}
               className="pointer-events-none absolute rounded-sm border-2 border-blue-500 bg-blue-500/20 shadow-[0_0_0_4px_rgba(37,99,235,0.18)]"
               style={{
                 left: highlightRect.left,

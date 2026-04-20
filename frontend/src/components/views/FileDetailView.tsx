@@ -26,6 +26,44 @@ type SpecializedViewConfig = {
   render: ReactNode
 }
 
+function normalizeSourceBbox(value: unknown): [number, number, number, number] | undefined {
+  if (!Array.isArray(value) || value.length !== 4) return undefined
+  const bbox = value.map((part) => Number(part))
+  return bbox.every((part) => Number.isFinite(part))
+    ? (bbox as [number, number, number, number])
+    : undefined
+}
+
+function normalizeFilename(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim()
+    ? value.trim().toLowerCase()
+    : undefined
+}
+
+function collectInputIdsByFilename(value: unknown, map = new Map<string, string>()): Map<string, string> {
+  if (!value || typeof value !== 'object') return map
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectInputIdsByFilename(item, map))
+    return map
+  }
+
+  const record = value as Record<string, unknown>
+  const filename = normalizeFilename(record.file_name) || normalizeFilename(record.filename) || normalizeFilename(record.source_file)
+  const inputId = typeof record.input_id === 'string' ? record.input_id : undefined
+  if (filename && inputId && !map.has(filename)) {
+    map.set(filename, inputId)
+  }
+
+  Object.values(record).forEach((child) => {
+    if (child && typeof child === 'object') {
+      collectInputIdsByFilename(child, map)
+    }
+  })
+
+  return map
+}
+
 function resolveSpecializedView(data: Record<string, unknown> | null | undefined): SpecializedViewConfig | null {
   if (!data) return null
   const sovSchedule = getSovScheduleData(data)
@@ -100,11 +138,34 @@ export function FileDetailView({
     [extractedData?.data]
   )
   const hasSpecializedView = Boolean(specializedView)
-  const isPdfPreview = !!resolvedFilename && resolvedFilename.toLowerCase().endsWith('.pdf')
-  const selectedSourcePage = selectedFieldSource?.source?.page
-    ? Number(selectedFieldSource.source.page)
-    : undefined
-  const selectedSourceBbox = selectedFieldSource?.source?.bbox
+  const inputIdsByFilename = useMemo(
+    () => collectInputIdsByFilename(extractedData?.data),
+    [extractedData?.data]
+  )
+  const selectedSourceFilename =
+    typeof selectedFieldSource?.source?.source_file === 'string'
+      ? selectedFieldSource.source.source_file
+      : undefined
+  const selectedSourceFilenameKey = normalizeFilename(selectedSourceFilename)
+  const selectedSourceInputId =
+    typeof selectedFieldSource?.source?.input_id === 'string'
+      ? selectedFieldSource.source.input_id
+      : undefined
+  const selectedSourcePageRaw = selectedFieldSource?.source?.page
+  const selectedSourcePage =
+    typeof selectedSourcePageRaw === 'number'
+      ? selectedSourcePageRaw
+      : typeof selectedSourcePageRaw === 'string'
+      ? Number(selectedSourcePageRaw)
+      : undefined
+  const selectedSourceBbox = normalizeSourceBbox(selectedFieldSource?.source?.bbox)
+  const previewFilename = selectedSourceFilename?.toLowerCase().endsWith('.pdf')
+    ? selectedSourceFilename
+    : resolvedFilename
+  const previewInputId = selectedSourceFilename?.toLowerCase().endsWith('.pdf')
+    ? selectedSourceInputId || (selectedSourceFilenameKey ? inputIdsByFilename.get(selectedSourceFilenameKey) : undefined) || inputId
+    : inputId
+  const isPdfPreview = !!previewFilename && previewFilename.toLowerCase().endsWith('.pdf')
 
   useEffect(() => {
     if (!sourcePage && !sourceBbox && !sourceFieldLabel) return
@@ -245,7 +306,7 @@ export function FileDetailView({
 
       try {
         setIsLoadingPreview(true)
-        const blob = await getInputPreviewBlob(submissionId, inputId)
+        const blob = await getInputPreviewBlob(submissionId, previewInputId)
         objectUrl = URL.createObjectURL(blob)
         if (active) {
           setPreviewUrl(objectUrl)
@@ -270,7 +331,7 @@ export function FileDetailView({
         URL.revokeObjectURL(objectUrl)
       }
     }
-  }, [submissionId, inputId, isPdfPreview])
+  }, [submissionId, previewInputId, isPdfPreview])
 
  
 
@@ -344,7 +405,7 @@ export function FileDetailView({
             {isLoadingPreview || previewUrl ? (
               <PdfPreview
                 fileUrl={previewUrl || 'about:blank'}
-                filename={resolvedFilename}
+                filename={previewFilename}
                 targetPage={selectedSourcePage}
                 sourceBbox={selectedSourceBbox}
                 onDownload={handleDownloadOriginal}

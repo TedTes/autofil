@@ -1,58 +1,34 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
-  motion,
-  AnimatePresence,
-  LayoutGroup,
-  useReducedMotion,
-} from 'framer-motion'
-import {
-  Upload,
-  FileText,
-  Edit,
+  BarChart3,
+  Building2,
+  Calendar,
   CheckCircle,
-  Download,
-  RotateCcw,
+  ChevronDown,
+  ChevronRight,
+  FileText,
+  Folder,
+  Layers3,
+  MousePointer2,
+  Plus,
+  RefreshCcw,
+  Search,
+  Trash2,
+  Upload,
+  Users,
+  X,
 } from 'lucide-react'
 import type { ComponentType } from 'react'
 
-// ============================================================================
-// TYPES & INTERFACES
-// ============================================================================
+type DemoScene = 'account' | 'submission'
 
-type AnimationScene = 'upload' | 'extract' | 'review' | 'process' | 'export'
-
-interface MockDocument {
-  id: string
-  filename: string
-  status:
-    | 'uploading'
-    | 'uploaded'
-    | 'extracting'
-    | 'extracted'
-    | 'processing'
-    | 'completed'
-  progress: number
-}
-
-interface MockExtractedData {
-  insuredName: string
-  policyNumber: string
-  effectiveDate: string
-  deductibles: string[]
-  grossSales: string[]
-  lineOfBusiness: string
-  mailingAddress: string
-  producerName: string
-  confidence: number
-}
-
-interface AnimationState {
-  currentScene: AnimationScene
-  sceneProgress: number
-  documents: MockDocument[]
-  extractedData: MockExtractedData | null
+type DemoStep = {
+  id: DemoScene
+  label: string
+  icon: ComponentType<{ className?: string }>
 }
 
 interface AnimatedDemoProps {
@@ -60,1094 +36,773 @@ interface AnimatedDemoProps {
   onSecondaryCta?: () => void
 }
 
-// ============================================================================
-// MOCK DATA
-// ============================================================================
-
-const MOCK_DOCUMENTS: MockDocument[] = [
-  {
-    id: '1',
-    filename: 'ACORD_126_filled_input.pdf',
-    status: 'uploading',
-    progress: 0,
-  },
-  {
-    id: '2',
-    filename: 'ACORD_125_application.pdf',
-    status: 'uploading',
-    progress: 0,
-  },
-  {
-    id: '3',
-    filename: 'ACORD_140_property.pdf',
-    status: 'uploading',
-    progress: 0,
-  },
-  {
-    id: '4',
-    filename: 'ACORD_126_filled_copy.pdf',
-    status: 'uploading',
-    progress: 0,
-  },
-  {
-    id: '5',
-    filename: 'loss_runs_2020_2024.pdf',
-    status: 'uploading',
-    progress: 0,
-  },
-  {
-    id: '6',
-    filename: 'harborview_property_sov.csv',
-    status: 'uploading',
-    progress: 0,
-  },
+const steps: DemoStep[] = [
+  { id: 'account', label: 'Account', icon: Users },
+  { id: 'submission', label: 'Submission', icon: Plus },
 ]
 
-const MOCK_EXTRACTED_DATA: MockExtractedData = {
-  insuredName: 'Harborview Logistics LLC',
-  policyNumber: 'POL-2025-001',
-  effectiveDate: '2025-10-01',
-  deductibles: ['5,000 PD', '5,000 BI', '10,000 Aggregate'],
-  grossSales: ['500,000 Warehousing', '300,000 Distribution'],
-  lineOfBusiness:
-    'Operates a regional goods distribution warehouse with forklift use and overnight storage.',
-  mailingAddress: '123 Main St, Austin, TX 78701',
-  producerName: 'Jane Smith (LOC-001)',
-  confidence: 98,
+const sceneDurations: Record<DemoScene, number> = {
+  account: 4600,
+  submission: 8200,
 }
-
-// ============================================================================
-// ANIMATION TIMELINE CONFIGURATION
-// ============================================================================
-
-const SCENE_DURATIONS: Record<AnimationScene, number> = {
-  upload: 4000,
-  extract: 5000,
-  review: 4000,
-  process: 5000,
-  export: 3000,
-}
-
-// ============================================================================
-// HELPERS – MAP DOC STATUS → PIPELINE STAGE
-// ============================================================================
-
-function getStageForStatus(
-  status: MockDocument['status'],
-  currentScene: AnimationScene
-): AnimationScene {
-  if (status === 'completed') return 'export'
-  if (status === 'processing') return 'process'
-
-  if (status === 'extracted') {
-    // Once extracted, they sit in "Review" while the demo is in or past review
-    if (currentScene === 'review' || currentScene === 'process' || currentScene === 'export') {
-      return 'review'
-    }
-    return 'extract'
-  }
-
-  if (status === 'extracting') return 'extract'
-  // uploading / uploaded
-  return 'upload'
-}
-
-// ============================================================================
-// MAIN COMPONENT
-// ============================================================================
 
 export default function AnimatedDemo({
   onPrimaryCta,
   onSecondaryCta,
 }: AnimatedDemoProps) {
   const prefersReducedMotion = useReducedMotion()
+  const [scene, setScene] = useState<DemoScene>('account')
+  const [progressKey, setProgressKey] = useState(0)
 
-  const [state, setState] = useState<AnimationState>({
-    currentScene: 'upload',
-    sceneProgress: 0,
-    documents: MOCK_DOCUMENTS,
-    extractedData: null,
-  })
-
-  const [animationKey, setAnimationKey] = useState(0)
-
-  const restart = () => {
-    setAnimationKey(prev => prev + 1)
-    setState({
-      currentScene: 'upload',
-      sceneProgress: 0,
-      documents: MOCK_DOCUMENTS.map(doc => ({
-        ...doc,
-        status: 'uploading',
-        progress: 0,
-      })),
-      extractedData: null,
-    })
-  }
-
-  const jumpToScene = (scene: AnimationScene) => {
-    setState(prev => ({
-      ...prev,
-      currentScene: scene,
-      sceneProgress: 0,
-    }))
-  }
-
-  // ============================================================================
-  // AUTO-PLAY ANIMATION LOOP
-  // ============================================================================
+  const sceneIndex = steps.findIndex((step) => step.id === scene)
 
   useEffect(() => {
     if (prefersReducedMotion) return
+    const currentIndex = steps.findIndex((step) => step.id === scene)
 
-    const scenes: AnimationScene[] = [
-      'upload',
-      'extract',
-      'review',
-      'process',
-      'export',
-    ]
-    let currentIndex = scenes.indexOf(state.currentScene)
-    let startTime = Date.now()
-    let animationFrame: number
+    if (currentIndex < 0) {
+      return
+    }
 
-    const animate = () => {
-      const elapsed = Date.now() - startTime
-      const duration = SCENE_DURATIONS[scenes[currentIndex]]
-      const progress = Math.min(elapsed / duration, 1)
-
-      setState(prev => {
-        const newState: AnimationState = {
-          ...prev,
-          sceneProgress: progress,
-          documents: updateDocumentStates(
-            scenes[currentIndex],
-            progress,
-            prev.documents
-          ),
-        }
-
-        if (scenes[currentIndex] === 'extract' && progress > 0.3) {
-          newState.extractedData = MOCK_EXTRACTED_DATA
-        }
-
-        return newState
+    const timer = window.setTimeout(() => {
+      setScene((current) => {
+        const nextIndex = steps.findIndex((step) => step.id === current) + 1
+        return steps[nextIndex % steps.length].id
       })
+      setProgressKey((current) => current + 1)
+    }, sceneDurations[scene])
 
-      if (progress >= 1) {
-        currentIndex = (currentIndex + 1) % scenes.length
+    return () => window.clearTimeout(timer)
+  }, [prefersReducedMotion, scene])
 
-        if (currentIndex === 0) {
-          setState({
-            currentScene: scenes[0],
-            sceneProgress: 0,
-            documents: MOCK_DOCUMENTS.map(doc => ({
-              ...doc,
-              status: 'uploading',
-              progress: 0,
-            })),
-            extractedData: null,
-          })
-        } else {
-          setState(prev => ({
-            ...prev,
-            currentScene: scenes[currentIndex],
-            sceneProgress: 0,
-          }))
-        }
-
-        startTime = Date.now()
-      }
-
-      animationFrame = requestAnimationFrame(animate)
-    }
-
-    animationFrame = requestAnimationFrame(animate)
-
-    return () => cancelAnimationFrame(animationFrame)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [animationKey, prefersReducedMotion])
-
-  // ============================================================================
-  // HELPER – UPDATE DOC STATES PER SCENE
-  // ============================================================================
-
-  const updateDocumentStates = (
-    scene: AnimationScene,
-    progress: number,
-    docs: MockDocument[]
-  ): MockDocument[] => {
-    return docs.map((doc, index) => {
-      const stagger = index * 0.08
-      const effectiveProgress = Math.max(0, progress - stagger)
-      const pct = Math.min(effectiveProgress * 1.4 * 100, 100)
-
-      switch (scene) {
-        case 'upload':
-          return {
-            ...doc,
-            status: pct >= 100 ? 'uploaded' : 'uploading',
-            progress: pct,
-          }
-        case 'extract':
-          return {
-            ...doc,
-            status: pct >= 100 ? 'extracted' : 'extracting',
-            progress: pct,
-          }
-        case 'process':
-          return {
-            ...doc,
-            status: pct >= 100 ? 'completed' : 'processing',
-            progress: pct,
-          }
-        default:
-          return doc
-      }
-    })
+  const restart = () => {
+    setScene('account')
+    setProgressKey((current) => current + 1)
   }
 
-  // ============================================================================
-  // SCENE DEFINITIONS
-  // ============================================================================
-
-  const scenes: Array<{
-    id: AnimationScene
-    label: string
-    icon: ComponentType<{ className?: string }>
-  }> = [
-    { id: 'upload', label: 'Upload', icon: Upload },
-    { id: 'extract', label: 'Extract', icon: FileText },
-    { id: 'review', label: 'Review', icon: Edit },
-    { id: 'process', label: 'Auto-Fill', icon: CheckCircle },
-    { id: 'export', label: 'Export', icon: Download },
-  ]
-
-  const currentSceneIndex = scenes.findIndex(s => s.id === state.currentScene)
-
-  const renderSceneContent = () => {
-    switch (state.currentScene) {
-      case 'upload':
-        return (
-          <UploadScene
-            documents={state.documents}
-            progress={state.sceneProgress}
-          />
-        )
-      case 'extract':
-        return (
-          <ExtractScene
-            documents={state.documents}
-            extractedData={state.extractedData}
-            progress={state.sceneProgress}
-          />
-        )
-      case 'review':
-        return (
-          <ReviewScene
-            extractedData={state.extractedData}
-            progress={state.sceneProgress}
-          />
-        )
-      case 'process':
-        return (
-          <ProcessScene
-            documents={state.documents}
-            progress={state.sceneProgress}
-          />
-        )
-      case 'export':
-        return (
-          <ExportScene
-            documents={state.documents}
-            progress={state.sceneProgress}
-            onPrimaryCta={onPrimaryCta}
-            onSecondaryCta={onSecondaryCta}
-          />
-        )
-      default:
-        return null
-    }
+  const selectScene = (next: DemoScene) => {
+    setScene(next)
+    setProgressKey((current) => current + 1)
   }
 
-  // ============================================================================
-  // RENDER
-  // ============================================================================
+  const activeTitle = useMemo(() => {
+    switch (scene) {
+      case 'account':
+        return 'Create an account workspace'
+      case 'submission':
+        return 'Create the submission and add files'
+    }
+  }, [scene])
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-4 py-12">
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
-        className="text-center mb-12"
-      >
-        <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-4">
+    <div className="mx-auto w-full max-w-6xl px-4 py-12">
+      <div className="mb-10 text-center">
+        <h2 className="text-3xl font-bold text-slate-950 sm:text-4xl">
           See AutoFil in Action
         </h2>
-        <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-          Watch how broker documents flow from upload to clean, carrier-ready
-          submissions.
+        <p className="mx-auto mt-3 max-w-2xl text-lg text-slate-600">
+          A real submission workflow, recreated from the product screens: workspace setup, submission creation, and document intake.
         </p>
-      </motion.div>
+      </div>
 
-      {/* Animation Container */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.6, delay: 0.2 }}
-        className="bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
-      >
-        {/* Progress Steps */}
-        <div className="bg-slate-50 border-b border-slate-200 px-6 py-4">
-          <div className="flex items-center justify-between">
-            {scenes.map((scene, index) => {
-              const Icon = scene.icon
-              const isActive = state.currentScene === scene.id
-              const isCompleted = index < currentSceneIndex
-
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl shadow-slate-200/70">
+        <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
+          <div className="flex flex-wrap items-center gap-3">
+            {steps.map((step, index) => {
+              const Icon = step.icon
+              const isActive = step.id === scene
+              const isComplete = index < sceneIndex
               return (
-                <div key={scene.id} className="flex items-center flex-1">
-                  <button
-                    type="button"
-                    onClick={() => jumpToScene(scene.id)}
-                    className="flex flex-col items-center gap-2"
+                <button
+                  key={step.id}
+                  type="button"
+                  onClick={() => selectScene(step.id)}
+                  className="group flex min-w-[132px] flex-1 items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left transition hover:border-blue-200"
+                >
+                  <span
+                    className={`flex h-8 w-8 items-center justify-center rounded-md ${
+                      isActive
+                        ? 'bg-blue-600 text-white'
+                        : isComplete
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'bg-slate-100 text-slate-500'
+                    }`}
                   >
-                    <motion.div
-                      animate={{
-                        scale: isActive ? 1.1 : 1,
-                        opacity: isActive ? 1 : 0.6,
-                      }}
-                      whileHover={{ scale: 1.15, opacity: 1 }}
-                      transition={{ duration: 0.2 }}
-                      className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
-                        isCompleted
-                          ? 'bg-emerald-500 text-white'
-                          : isActive
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-slate-300 text-slate-700'
-                      }`}
-                    >
-                      <Icon className="w-5 h-5" />
-                    </motion.div>
-                    <span
-                      className={`text-xs font-medium ${
-                        isActive ? 'text-slate-900' : 'text-slate-500'
-                      }`}
-                    >
-                      {scene.label}
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className={`block text-sm font-semibold ${isActive ? 'text-slate-950' : 'text-slate-600'}`}>
+                      {step.label}
                     </span>
-                  </button>
-                  {index < scenes.length - 1 && (
-                    <div className="flex-1 h-1 mx-2 bg-slate-200 rounded-full overflow-hidden">
-                      <motion.div
-                        className={`h-full ${
-                          isCompleted
-                            ? 'bg-emerald-500'
-                            : isActive
-                            ? 'bg-blue-600'
-                            : 'bg-slate-200'
-                        }`}
-                        initial={{ width: '0%' }}
-                        animate={{
-                          width: isCompleted
-                            ? '100%'
-                            : isActive
-                            ? `${state.sceneProgress * 100}%`
-                            : '0%',
-                        }}
-                        transition={{ duration: 0.3 }}
-                      />
-                    </div>
-                  )}
-                </div>
+                    {isActive && (
+                      <span className="mt-1 block h-1 overflow-hidden rounded-full bg-blue-100">
+                        <motion.span
+                          key={progressKey}
+                          className="block h-full rounded-full bg-blue-600"
+                          initial={{ width: '0%' }}
+                          animate={{ width: '100%' }}
+                          transition={{ duration: sceneDurations[scene] / 1000, ease: 'linear' }}
+                        />
+                      </span>
+                    )}
+                  </span>
+                </button>
               )
             })}
           </div>
         </div>
 
-        {/* Document Pipeline Rail – shows where each doc is in the flow */}
-        <DocumentPipelineRail
-          documents={state.documents}
-          currentScene={state.currentScene}
-        />
-
-        {/* Scene content */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={state.currentScene}
-            initial={{ opacity: 0, x: 50 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -50 }}
-            transition={{ duration: 0.4 }}
-            className="p-8 min-h-[460px] bg-slate-50"
-          >
-            {renderSceneContent()}
-          </motion.div>
-        </AnimatePresence>
-
-        {/* Controls */}
-        <div className="bg-slate-50 border-t border-slate-200 px-6 py-4 flex items-center justify-between gap-4">
-          <p className="text-xs text-slate-500">
-            Demo only — real app integrates with your AMS, carrier portals, and
-            email workflows.
-          </p>
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+              Current step
+            </p>
+            <h3 className="text-lg font-semibold text-slate-950">{activeTitle}</h3>
+          </div>
           <button
             type="button"
             onClick={restart}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
           >
-            <RotateCcw className="w-4 h-4" />
-            Replay demo
+            <RefreshCcw className="h-4 w-4" />
+            Replay
           </button>
         </div>
-      </motion.div>
-    </div>
-  )
-}
 
-// ============================================================================
-// DOCUMENT PIPELINE RAIL
-// ============================================================================
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={scene}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.25 }}
+            className="bg-slate-100 p-4 sm:p-6"
+          >
+            <AppFrame>
+              {scene === 'account' && <AccountScene />}
+              {scene === 'submission' && <SubmissionScene />}
+            </AppFrame>
+          </motion.div>
+        </AnimatePresence>
 
-function DocumentPipelineRail({
-  documents,
-  currentScene,
-}: {
-  documents: MockDocument[]
-  currentScene: AnimationScene
-}) {
-  const stages: { id: AnimationScene; label: string; accent: string }[] = [
-    { id: 'upload', label: 'Client Docs In', accent: 'border-blue-500' },
-    { id: 'extract', label: 'Smart Extract', accent: 'border-indigo-500' },
-    { id: 'review', label: 'Broker Review', accent: 'border-amber-500' },
-    { id: 'process', label: 'Auto-Fill Forms', accent: 'border-emerald-500' },
-    { id: 'export', label: 'Export Package', accent: 'border-slate-500' },
-  ]
-
-  return (
-    <div className="bg-slate-900/3 border-b border-slate-200 px-6 py-4">
-      <LayoutGroup id="doc-pipeline">
-        <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
-          {stages.map(stage => {
-            const docsInStage = documents.filter(
-              d => getStageForStatus(d.status, currentScene) === stage.id
-            )
-            const isActive = stage.id === currentScene
-
-            return (
-              <div
-                key={stage.id}
-                className={`rounded-xl bg-white/80 backdrop-blur-sm border px-3 py-3 min-h-[72px] flex flex-col ${
-                  isActive
-                    ? `${stage.accent} shadow-sm`
-                    : 'border-slate-200 shadow-xs'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <span className="text-xs font-semibold text-slate-800">
-                    {stage.label}
-                  </span>
-                  <span className="text-[10px] text-slate-500">
-                    {docsInStage.length} doc
-                    {docsInStage.length === 1 ? '' : 's'}
-                  </span>
-                </div>
-                <div className="space-y-1 overflow-hidden">
-                  <AnimatePresence initial={false}>
-                    {docsInStage.slice(0, 3).map(doc => (
-                      <motion.div
-                        key={doc.id}
-                        layout
-                        layoutId={doc.id}
-                        initial={{ opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -6 }}
-                        transition={{ duration: 0.18 }}
-                        className="flex items-center gap-2 rounded-lg bg-slate-50 px-2 py-1"
-                      >
-                        <FileText className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
-                        <p className="truncate text-[11px] text-slate-700">
-                          {doc.filename}
-                        </p>
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
-                  {docsInStage.length > 3 && (
-                    <p className="text-[10px] text-slate-400">
-                      +{docsInStage.length - 3} more…
-                    </p>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </LayoutGroup>
-    </div>
-  )
-}
-
-// ============================================================================
-// SCENE COMPONENTS
-// ============================================================================
-
-function UploadScene({
-  documents,
-  progress,
-}: {
-  documents: MockDocument[]
-  progress: number
-}) {
-  return (
-    <div className="max-w-4xl mx-auto">
-      {/* Upload Header */}
-      <div className="text-center mb-8">
-        <motion.div
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ duration: 0.5, type: 'spring' }}
-          className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4"
-        >
-          <Upload className="w-10 h-10 text-blue-600" />
-        </motion.div>
-        <h3 className="text-2xl font-bold text-slate-900 mb-2">
-          Upload broker files
-        </h3>
-        <p className="text-slate-600">
-          Drop ACORDs, loss runs, SOVs, and spreadsheets — AutoFil handles them
-          all.
-        </p>
-      </div>
-
-      {/* Document List */}
-      <div className="space-y-3">
-        {documents
-          .slice(0, Math.max(1, Math.ceil(progress * documents.length)))
-          .map((doc, index) => (
-            <motion.div
-              key={doc.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.08 }}
-              className="bg-white rounded-lg border border-slate-200 p-4 flex items-center gap-4"
+        <div className="flex flex-col gap-3 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-slate-500">
+            The animation loops through account setup, submission creation, and document intake.
+          </p>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={onSecondaryCta}
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             >
-              <div className="w-10 h-10 bg-red-100 rounded flex items-center justify-center flex-shrink-0">
-                <FileText className="w-6 h-6 text-red-600" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-slate-900 truncate">
-                  {doc.filename}
-                </p>
-                <div className="flex items-center gap-2 mt-1">
-                  <div className="flex-1 bg-slate-200 rounded-full h-2 overflow-hidden">
-                    <motion.div
-                      className="bg-blue-600 h-full"
-                      initial={{ width: '0%' }}
-                      animate={{ width: `${doc.progress}%` }}
-                      transition={{ duration: 0.3 }}
-                    />
-                  </div>
-                  <span className="text-xs text-slate-500">
-                    {Math.round(doc.progress)}%
-                  </span>
-                </div>
-              </div>
-              {doc.status === 'uploaded' && (
-                <CheckCircle className="w-5 h-5 text-emerald-500 flex-shrink-0" />
-              )}
-            </motion.div>
-          ))}
+              Open workspace
+            </button>
+            <button
+              type="button"
+              onClick={onPrimaryCta}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+            >
+              Generate package
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )
 }
 
-function ExtractScene({
-  documents,
-  extractedData,
-  progress,
-}: {
-  documents: MockDocument[]
-  extractedData: MockExtractedData | null
-  progress: number
-}) {
-  const activeDoc =
-    documents.find(d => d.status === 'extracting') ||
-    documents.find(d => d.status === 'extracted') ||
-    documents[0]
-
+function AppFrame({ children }: { children: React.ReactNode }) {
   return (
-    <div className="max-w-5xl mx-auto">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Left: Document Preview */}
-        <div>
-          <h3 className="text-lg font-bold text-slate-900 mb-3">
-            Reading your ACORD
-          </h3>
-          <div className="bg-white rounded-lg border-2 border-dashed border-slate-300 p-4 aspect-[8.5/11] flex flex-col">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-red-100 rounded flex items-center justify-center">
-                  <FileText className="w-4 h-4 text-red-600" />
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-slate-800 truncate max-w-[180px]">
-                    {activeDoc?.filename}
-                  </p>
-                  <p className="text-[11px] text-slate-500">
-                    ACORD 126 • Commercial GL
-                  </p>
-                </div>
-              </div>
-              <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700">
-                OCR + NLP
-              </span>
-            </div>
-
-            <div className="flex-1 bg-slate-50 rounded-lg relative overflow-hidden">
-              {/* Fake field highlights */}
-              <motion.div
-                className="absolute inset-0"
-                animate={{ opacity: [0.3, 0.7, 0.3] }}
-                transition={{ duration: 2.4, repeat: Infinity }}
-              >
-                <div className="absolute top-6 left-6 h-4 w-32 bg-blue-200/60 rounded-sm" />
-                <div className="absolute top-12 left-6 h-4 w-40 bg-blue-200/60 rounded-sm" />
-                <div className="absolute top-24 left-6 h-4 w-48 bg-emerald-200/70 rounded-sm" />
-                <div className="absolute top-40 left-6 h-4 w-28 bg-amber-200/70 rounded-sm" />
-                <div className="absolute bottom-10 right-10 h-4 w-40 bg-blue-200/60 rounded-sm" />
-              </motion.div>
-
-              {/* Spinner */}
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{
-                    duration: 2,
-                    repeat: Infinity,
-                    ease: 'linear',
-                  }}
-                  className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full mb-2"
-                />
-                <p className="text-xs text-slate-600">
-                  Detecting fields, tables, and checkboxes…
-                </p>
-              </div>
-            </div>
-
-            <p className="mt-3 text-[11px] text-slate-500">
-              Layout-aware engine maps each field to your submission template
-              (limits, deductibles, exposures, mailing address, and more).
-            </p>
+    <div className="relative mx-auto aspect-[16/9] min-h-[520px] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <aside className="absolute inset-y-0 left-0 w-[72px] border-r border-slate-200 bg-white">
+        <div className="flex h-full flex-col items-center gap-4 py-4">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white">
+            <BarChart3 className="h-4 w-4" />
           </div>
+          <span className="text-[10px] font-semibold tracking-wide text-slate-500">AUTOFIL</span>
+          <NavIcon icon={BarChart3} label="Dashboard" />
+          <NavIcon icon={Layers3} label="Submissions" />
+          <NavIcon icon={Users} label="Accounts" />
+          <NavIcon icon={Folder} label="Documents" active />
+          <NavIcon icon={FileText} label="Library" />
+          <NavIcon icon={BarChart3} label="Reports" />
         </div>
+      </aside>
+      <main className="absolute inset-y-0 left-[72px] right-0 overflow-hidden bg-white">
+        {children}
+      </main>
+    </div>
+  )
+}
 
-        {/* Right: Extracted Data */}
-        <div>
-          <h3 className="text-lg font-bold text-slate-900 mb-3">
-            Structured submission data
-          </h3>
-          <div className="space-y-3">
-            {extractedData && progress > 0.3 ? (
-              <>
-                <FieldCard
-                  label="Insured name"
-                  value={extractedData.insuredName}
-                />
-                <FieldCard
-                  label="Policy number"
-                  value={extractedData.policyNumber}
-                  delay={0.05}
-                />
-                <FieldCard
-                  label="Effective date"
-                  value={extractedData.effectiveDate}
-                  delay={0.1}
-                />
-                <FieldCard
-                  label="Deductibles"
-                  value={extractedData.deductibles.join(' • ')}
-                  delay={0.15}
-                />
-                <FieldCard
-                  label="Gross sales"
-                  value={`$${extractedData.grossSales.join(' • $')}`}
-                  delay={0.2}
-                />
-                <FieldCard
-                  label="Line of business"
-                  value={extractedData.lineOfBusiness}
-                  multiline
-                  delay={0.25}
-                />
+function NavIcon({
+  icon: Icon,
+  label,
+  active,
+}: {
+  icon: ComponentType<{ className?: string }>
+  label: string
+  active?: boolean
+}) {
+  return (
+    <div className={`flex w-full flex-col items-center gap-1 py-1 text-[10px] ${active ? 'text-blue-700' : 'text-slate-500'}`}>
+      <span className={`rounded-lg p-2 ${active ? 'bg-blue-50 ring-1 ring-blue-100' : ''}`}>
+        <Icon className="h-4 w-4" />
+      </span>
+      <span>{label}</span>
+    </div>
+  )
+}
 
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.3 }}
-                  className="bg-emerald-50 rounded-lg border border-emerald-200 p-3 flex items-center gap-2 mt-2"
-                >
-                  <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0" />
-                  <div className="flex-1">
-                    <p className="text-xs font-medium text-emerald-800">
-                      Extraction complete
-                    </p>
-                    <p className="text-[11px] text-emerald-700 mt-0.5">
-                      Average field confidence:{' '}
-                      <span className="font-semibold">
-                        {extractedData.confidence}%
-                      </span>
-                    </p>
-                  </div>
-                </motion.div>
-              </>
-            ) : (
-              <div className="text-center py-12">
-                <p className="text-sm text-slate-500 mb-1">
-                  Extracting key fields…
-                </p>
-                <p className="text-xs text-slate-400">
-                  Limits, deductibles, locations, gross sales, operations
-                  description and more.
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
+function TopBar({
+  crumb,
+  parentCrumb,
+  actions,
+}: {
+  crumb: string
+  parentCrumb?: string
+  actions?: React.ReactNode
+}) {
+  return (
+    <div className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-8">
+      <div className="flex items-center gap-3 text-sm">
+        <span className="text-slate-400">Dashboard</span>
+        <span className="text-slate-300">›</span>
+        {parentCrumb ? (
+          <>
+            <span className="text-slate-400">{parentCrumb}</span>
+            <span className="text-slate-300">›</span>
+          </>
+        ) : null}
+        <span className="font-semibold text-slate-950">{crumb}</span>
+      </div>
+      <div className="flex items-center gap-3">
+        {actions}
+        <span className="text-sm text-slate-500">tedtfugg@gmail.com</span>
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-950 text-sm font-semibold text-white">
+          T
+        </span>
       </div>
     </div>
   )
 }
 
-function FieldCard({
-  label,
-  value,
-  multiline,
+function TypewriterText({ text, delay = 0 }: { text: string; delay?: number }) {
+  return (
+    <span className="inline-flex min-h-6 items-center">
+      {text.split('').map((char, index) => (
+        <motion.span
+          key={`${char}-${index}`}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: delay + index * 0.055, duration: 0.01 }}
+        >
+          {char === ' ' ? '\u00a0' : char}
+        </motion.span>
+      ))}
+      <motion.span
+        className="ml-0.5 h-5 w-px bg-blue-600"
+        animate={{ opacity: [0, 1, 0] }}
+        transition={{ duration: 0.7, repeat: Infinity }}
+      />
+    </span>
+  )
+}
+
+function DemoCursor({
+  path,
   delay = 0,
+  duration = 2.55,
 }: {
-  label: string
-  value: string
-  multiline?: boolean
+  path: Array<{ left: string; top: string }>
   delay?: number
+  duration?: number
 }) {
+  const lastPoint = path[path.length - 1]
+  const cursorPath = [...path, lastPoint]
+  const keyframeTimes = cursorPath.map((_, index) =>
+    cursorPath.length === 1 ? 0 : index / (cursorPath.length - 1)
+  )
+  const opacityKeyframes = cursorPath.map((_, index) => (index === 0 ? 0 : 1))
+  const scaleKeyframes = cursorPath.map((_, index) =>
+    index === cursorPath.length - 1 ? 0.92 : 1
+  )
+
   return (
     <motion.div
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ delay }}
-      className="bg-white rounded-lg border border-slate-200 p-3"
+      className="pointer-events-none absolute z-50 text-blue-700 drop-shadow-lg"
+      initial={{ ...path[0], opacity: 0, scale: 0.92 }}
+      animate={{
+        left: cursorPath.map((point) => point.left),
+        top: cursorPath.map((point) => point.top),
+        opacity: opacityKeyframes,
+        scale: scaleKeyframes,
+      }}
+      transition={{
+        delay,
+        duration,
+        ease: 'easeInOut',
+        times: keyframeTimes,
+      }}
     >
-      <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">
-        {label}
-      </p>
-      {multiline ? (
-        <p className="text-sm font-semibold text-slate-900 mt-1 leading-snug">
-          {value}
-        </p>
-      ) : (
-        <p className="text-sm font-semibold text-slate-900 mt-1 truncate">
-          {value}
-        </p>
-      )}
+      <MousePointer2 className="h-6 w-6 fill-white stroke-blue-700 stroke-[2.4]" />
     </motion.div>
   )
 }
 
-// Review Scene
-function ReviewScene({
-  extractedData,
-  progress,
-}: {
-  extractedData: MockExtractedData | null
-  progress: number
-}) {
-  if (!extractedData) return null
-
+function AccountScene() {
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <div>
-          <h3 className="text-2xl font-bold text-slate-900 mb-1">
-            Quick broker review
-          </h3>
-          <p className="text-slate-600 text-sm">
-            Spot-check critical fields before AutoFil pushes data into carrier
-            forms.
-          </p>
-        </div>
-        <div className="hidden md:flex items-center gap-2 text-xs text-slate-500">
-          <span className="h-2 w-2 rounded-full bg-emerald-500" />
-          Autosave on edit
-        </div>
-      </div>
-
-      <div className="bg-white rounded-lg border border-slate-200 p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Left: key fields */}
-          <div className="space-y-4">
-            <LabeledReadOnlyInput
-              label="Insured name"
-              value={extractedData.insuredName}
-            />
-            <LabeledReadOnlyInput
-              label="Policy number"
-              value={extractedData.policyNumber}
-            />
-            <LabeledReadOnlyInput
-              label="Effective date"
-              value={extractedData.effectiveDate}
-              type="date"
-            />
-            <LabeledReadOnlyInput
-              label="Producer"
-              value={extractedData.producerName}
-            />
-          </div>
-
-          {/* Right: ops + notes */}
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Operations description
-              </label>
-              <textarea
-                value={extractedData.lineOfBusiness}
-                readOnly
-                rows={4}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-slate-50 text-sm"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Underwriter notes (example)
-              </label>
-              <textarea
-                readOnly
-                rows={3}
-                value="Forklift use inside warehouse only. No public access. Sprinklered. No hazardous storage."
-                className="w-full px-4 py-2 border border-dashed border-amber-300 rounded-lg bg-amber-50/60 text-xs text-slate-800"
-              />
-            </div>
-          </div>
-        </div>
-
-        {progress > 0.7 && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mt-6 flex justify-end"
-          >
-            <button
-              type="button"
-              className="px-6 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg shadow-sm hover:bg-blue-700"
-            >
-              Confirm & Auto-Fill forms
-            </button>
-          </motion.div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function LabeledReadOnlyInput({
-  label,
-  value,
-  type = 'text',
-}: {
-  label: string
-  value: string
-  type?: string
-}) {
-  return (
-    <div>
-      <label className="block text-sm font-medium text-slate-700 mb-2">
-        {label}
-      </label>
-      <input
-        type={type}
-        value={value}
-        readOnly
-        className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-slate-50 text-sm"
-      />
-    </div>
-  )
-}
-
-// Process Scene
-function ProcessScene({
-  documents,
-}: {
-  documents: MockDocument[]
-  progress: number
-}) {
-  const processedCount = documents.filter(d => d.status === 'completed').length
-
-  return (
-    <div className="max-w-4xl mx-auto">
-      <div className="text-center mb-8">
-        <motion.div
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ duration: 0.5, type: 'spring' }}
-          className="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4"
-        >
-          <CheckCircle className="w-10 h-10 text-purple-600" />
-        </motion.div>
-        <h3 className="text-2xl font-bold text-slate-900 mb-2">
-          Auto-filling carrier forms
-        </h3>
-        <p className="text-slate-600">
-          Mapping your normalized data into ACORD 125/126/140 and carrier
-          supplements.
-        </p>
-      </div>
-
-      {/* Progress Overview */}
-      <div className="bg-white rounded-lg border border-slate-200 p-6 mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <span className="text-sm font-medium text-slate-700">
-            Overall batch progress
-          </span>
-          <span className="text-sm font-semibold text-slate-900">
-            {processedCount} / {documents.length} documents
-          </span>
-        </div>
-        <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
-          <motion.div
-            className="bg-gradient-to-r from-blue-500 to-purple-600 h-full"
-            initial={{ width: '0%' }}
-            animate={{
-              width: `${(processedCount / documents.length) * 100}%`,
-            }}
-            transition={{ duration: 0.5 }}
-          />
-        </div>
-      </div>
-
-      {/* Document Processing List */}
-      <div className="space-y-2">
-        {documents.map((doc, index) => (
-          <motion.div
-            key={doc.id}
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: index * 0.05 }}
-            className="bg-white rounded-lg border border-slate-200 p-3 flex items-center gap-3"
-          >
-            <div
-              className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                doc.status === 'completed' ? 'bg-emerald-100' : 'bg-blue-100'
-              }`}
-            >
-              {doc.status === 'completed' ? (
-                <CheckCircle className="w-5 h-5 text-emerald-600" />
-              ) : (
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{
-                    duration: 1,
-                    repeat: Infinity,
-                    ease: 'linear',
-                  }}
-                  className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"
-                />
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-900 truncate">
-                {doc.filename}
-              </p>
-              <p className="text-xs text-slate-500">
-                {doc.status === 'completed'
-                  ? 'Filled and ready to send'
-                  : 'Applying data to carrier forms…'}
-              </p>
-            </div>
-          </motion.div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// Export Scene
-function ExportScene({
-  documents,
-  progress,
-  onPrimaryCta,
-  onSecondaryCta,
-}: {
-  documents: MockDocument[]
-  progress: number
-  onPrimaryCta?: () => void
-  onSecondaryCta?: () => void
-}) {
-  return (
-    <div className="max-w-4xl mx-auto text-center">
+    <>
+      <TopBar crumb="Accounts" />
+      <AccountsWorkspace />
       <motion.div
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        transition={{ duration: 0.5, type: 'spring' }}
-        className="w-24 h-24 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: [0, 0, 1, 1, 0] }}
+        transition={{ times: [0, 0.12, 0.18, 0.82, 1], duration: 3.45 }}
+        className="absolute inset-0"
       >
-        <Download className="w-12 h-12 text-emerald-600" />
+        <Modal title="New Account" icon={Users}>
+          <label className="text-sm font-semibold text-slate-700">Account Name</label>
+          <div className="mt-2 rounded-lg border-2 border-blue-500 px-3 py-2 text-slate-950">
+            <TypewriterText text="ABC agency" delay={0.75} />
+          </div>
+          <p className="mt-2 text-xs text-slate-500">
+            Choose a descriptive name to help organize your submissions
+          </p>
+          <div className="mt-6 flex justify-end gap-3 border-t border-slate-100 pt-4">
+            <button className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600">Cancel</button>
+            <motion.button
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
+              initial={{ scale: 1 }}
+              animate={{ scale: [1, 0.97, 1] }}
+              transition={{ delay: 2.35, duration: 0.24 }}
+            >
+              Create Account
+            </motion.button>
+          </div>
+        </Modal>
       </motion.div>
-
-      <h3 className="text-3xl font-bold text-slate-900 mb-3">
-        Ready for underwriters
-      </h3>
-      <p className="text-lg text-slate-600 mb-8">
-        Auto-generated packet: filled ACORDs, JSON/CSV data, and a clean manifest
-        for your AMS.
-      </p>
-
-      <div className="bg-white rounded-lg border border-slate-200 p-6 max-w-md mx-auto mb-6 text-left">
-        <div className="space-y-3 text-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-slate-600">Forms filled</span>
-            <span className="font-semibold text-slate-900">
-              {documents.length}
-            </span>
+      <motion.div
+        className="absolute left-12 right-12 top-[154px] rounded-lg border border-slate-200 bg-white px-6 py-6 shadow-sm"
+        initial={{ opacity: 0, x: 36, y: 4, scale: 0.985 }}
+        animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+        transition={{ delay: 3.55, duration: 0.45, ease: 'easeOut' }}
+      >
+        <div className="flex items-center gap-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
+            <Building2 className="h-6 w-6" />
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-slate-600">Estimated fields filled</span>
-            <span className="font-semibold text-slate-900">
-              {documents.length * 45}+
-            </span>
+          <div className="min-w-0 flex-1">
+            <h4 className="text-lg font-bold text-slate-950">ABC agency</h4>
+            <div className="mt-2 flex items-center gap-4 text-sm text-slate-500">
+              <span className="inline-flex items-center gap-1">
+                <Layers3 className="h-4 w-4" />
+                2 submissions
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Calendar className="h-4 w-4" />
+                Updated 4/20/2026
+              </span>
+            </div>
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-slate-600">Estimated time saved</span>
-            <span className="font-semibold text-emerald-600">2–3 hrs</span>
+          <Trash2 className="h-4 w-4 text-slate-400" />
+          <ChevronRight className="h-5 w-5 text-slate-400" />
+        </div>
+      </motion.div>
+      <DemoCursor
+        path={[
+          { left: '86%', top: '18%' },
+          { left: '86%', top: '18%' },
+          { left: '57%', top: '48%' },
+          { left: '64%', top: '63%' },
+          { left: '64%', top: '63%' },
+          { left: '27%', top: '35%' },
+        ]}
+        delay={0.05}
+        duration={3.65}
+      />
+    </>
+  )
+}
+
+function SubmissionScene() {
+  const selectedUploadFiles = [
+    ['25 Certificat...surance.pdf', '98%', 'pdf'],
+    ['27 Evidence...surance.pdf', '98%', 'pdf'],
+    ['28 Evidence...surance.pdf', '98%', 'pdf'],
+    ['125 Applicati...Section.pdf', '98%', 'pdf'],
+    ['126 Commer...2016-09.pdf', '98%', 'pdf'],
+    ['130 Workers...2017-05.pdf', '80%', 'pdf'],
+    ['2025_profit_and_loss.csv', '90%', 'csv'],
+    ['loss_run.csv', '90%', 'csv'],
+    ['statement_of_values.csv', '95%', 'csv'],
+    ['140 Property Section.pdf', '80%', 'pdf'],
+  ]
+
+  return (
+    <>
+      <TopBar
+        crumb="ABC agency"
+        parentCrumb="Accounts"
+        actions={
+          <div className="flex gap-2">
+            <button className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">New Submission</button>
+            <button className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">Add Files</button>
+            <button className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-400">Generate</button>
+          </div>
+        }
+      />
+      <AccountDetailWorkspace />
+      <motion.div
+        className="absolute inset-0"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: [0, 0, 1, 1, 0] }}
+        transition={{ times: [0, 0.26, 0.32, 0.86, 1], duration: 4.1 }}
+      >
+        <Modal title="New Submission" icon={Plus}>
+          <label className="text-sm font-semibold text-slate-700">Submission Name</label>
+          <div className="mt-2 rounded-lg border-2 border-blue-500 px-3 py-2 text-slate-950">
+            <TypewriterText text="Redwood renewal" delay={1.45} />
+          </div>
+          <p className="mt-2 text-xs text-slate-500">
+            Choose a descriptive name to help organize your submissions
+          </p>
+          <div className="mt-6 flex justify-end gap-3 border-t border-slate-100 pt-4">
+            <button className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600">Cancel</button>
+            <motion.button
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
+              initial={{ scale: 1 }}
+              animate={{ scale: [1, 0.98, 1] }}
+              transition={{ delay: 2.9, duration: 0.28 }}
+            >
+              Create Submission
+            </motion.button>
+          </div>
+        </Modal>
+      </motion.div>
+      <motion.div
+        className="absolute inset-x-0 top-16 bottom-0 bg-slate-50 px-12 py-4"
+        initial={{ opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 3.5, duration: 0.38 }}
+      >
+        <div className="grid h-full grid-cols-[352px_1fr] gap-4">
+          <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+            <div className="mb-2 flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3">
+              <span className="text-slate-400">›</span>
+              <Folder className="h-4 w-4 text-slate-400" />
+              <span className="min-w-0 flex-1 truncate font-semibold text-slate-800">Redwood Custo...</span>
+              <span className="text-sm text-slate-400">10 files</span>
+            </div>
+            <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-4 shadow-sm">
+              <div className="flex items-center gap-3">
+                <ChevronDown className="h-4 w-4 text-slate-500" />
+                <Folder className="h-4 w-4 text-blue-600" />
+                <span className="font-semibold text-blue-800">Submission 2</span>
+                <motion.span
+                  className="text-sm text-slate-400"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 6.15 }}
+                >
+                  10 files
+                </motion.span>
+              </div>
+              <motion.div
+                className="flex overflow-hidden flex-col items-center justify-center text-center text-slate-500"
+                initial={{ opacity: 1, height: 120 }}
+                animate={{ opacity: [1, 0, 0], height: [120, 0, 0] }}
+                transition={{ times: [0, 0.72, 1], delay: 3.65, duration: 2.15 }}
+              >
+                <FileText className="mb-2 h-8 w-8 text-slate-300" />
+                <p className="text-sm">No files in this submission yet</p>
+              </motion.div>
+              <motion.div
+                className="mt-3 space-y-2"
+                initial={{ marginTop: 12 }}
+                animate={{ marginTop: [12, 0, 0] }}
+                transition={{ times: [0, 0.72, 1], delay: 3.65, duration: 2.15 }}
+              >
+                {selectedUploadFiles.map(([name, confidence, type], index) => (
+                  <motion.div
+                    key={name}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 6.05 + index * 0.06 }}
+                    className="rounded-lg border border-blue-100 bg-white/70 px-2 py-2"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-4 w-4 items-center justify-center rounded border border-blue-500 bg-blue-600">
+                        <CheckCircle className="h-3 w-3 text-white" />
+                      </span>
+                      {type === 'csv' ? (
+                        <span className="text-blue-600">▦</span>
+                      ) : (
+                        <FileText className="h-4 w-4 text-red-500" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-slate-950">{name}</p>
+                        <p className="text-xs text-slate-500">Confidence: {confidence}</p>
+                      </div>
+                      <X className="h-3.5 w-3.5 text-slate-400" />
+                    </div>
+                  </motion.div>
+                ))}
+              </motion.div>
+            </div>
+          </section>
+
+          <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+              <div className="flex items-center gap-2">
+                <Upload className="h-4 w-4 text-slate-500" />
+                <h4 className="font-semibold text-slate-800">Upload to Submission 2</h4>
+              </div>
+              <button className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white">
+                <Plus className="h-4 w-4" />
+                Add Files
+              </button>
+            </div>
+            <motion.div
+              className="m-4 flex h-[calc(100%-76px)] min-h-[365px] flex-col rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 p-6"
+              animate={{ borderColor: ['rgb(203,213,225)', 'rgb(203,213,225)', 'rgb(37,99,235)', 'rgb(203,213,225)'] }}
+              transition={{ delay: 4.15, duration: 1.7 }}
+            >
+              <motion.div
+                className="flex overflow-hidden flex-col items-center justify-center text-center"
+                initial={{ opacity: 1, height: 300 }}
+                animate={{ opacity: [1, 0, 0], height: [300, 0, 0] }}
+                transition={{ times: [0, 0.72, 1], delay: 3.65, duration: 2.15 }}
+              >
+                <Upload className="mb-4 h-12 w-12 text-slate-300" />
+                <p className="font-semibold text-slate-950">Drop files here or click to browse</p>
+                <p className="mt-1 text-sm text-slate-500">PDF, Excel, and CSV files are supported</p>
+              </motion.div>
+              <motion.div
+                className="min-h-0 overflow-hidden"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 6.05, duration: 0.25 }}
+              >
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-sm font-semibold text-slate-800">Uploading selected files</p>
+                  <span className="text-xs font-semibold text-blue-700">10 files</span>
+                </div>
+                <div className="space-y-2">
+                  {selectedUploadFiles.slice(0, 7).map(([name, , type], index) => (
+                    <motion.div
+                      key={name}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-2"
+                      initial={{ opacity: 0, x: 12 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 6.12 + index * 0.05 }}
+                    >
+                      <div className="flex items-center gap-2">
+                        {type === 'csv' ? (
+                          <span className="text-blue-600">▦</span>
+                        ) : (
+                          <FileText className="h-4 w-4 text-red-500" />
+                        )}
+                        <p className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">{name}</p>
+                        <motion.span
+                          className="text-xs font-semibold text-emerald-700"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ delay: 6.65 + index * 0.05 }}
+                        >
+                          Done
+                        </motion.span>
+                      </div>
+                      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-blue-100">
+                        <motion.div
+                          className="h-full rounded-full bg-blue-600"
+                          initial={{ width: '0%' }}
+                          animate={{ width: '100%' }}
+                          transition={{ delay: 6.18 + index * 0.05, duration: 0.48 }}
+                        />
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </motion.div>
+              <motion.div
+                className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-800"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 7.08 }}
+              >
+                10 files added to Submission 2
+              </motion.div>
+            </motion.div>
+          </section>
+        </div>
+      </motion.div>
+      <motion.div
+        className="absolute inset-0 z-40 bg-slate-950/35"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: [0, 1, 1, 0] }}
+        transition={{ delay: 4.08, times: [0, 0.12, 0.78, 1], duration: 2.25 }}
+      >
+        <div className="absolute inset-x-[8%] top-[7%] h-[82%] overflow-hidden rounded-md bg-[#1f1f1f] shadow-2xl ring-1 ring-black/40">
+          <div className="grid h-[calc(100%-48px)] grid-cols-[230px_240px_240px_240px_1fr] border-b border-[#343434] text-sm text-slate-100">
+            <div className="border-r border-[#343434] p-4">
+              {[
+                '25 Certificat...surance.pdf',
+                '27 Evidence...surance.pdf',
+                '28 Evidence...surance.pdf',
+                '125 Applicati...Section.pdf',
+                '126 Commer...2016-09.pdf',
+                '130 Workers...2017-05.pdf',
+                '140 Property Section.pdf',
+              ].map((name, index) => (
+                <motion.div
+                  key={name}
+                  className="mb-2 flex items-center gap-2"
+                  initial={{ backgroundColor: 'rgba(37,99,235,0)' }}
+                  animate={{ backgroundColor: index < 7 ? 'rgba(37,99,235,0.22)' : 'rgba(37,99,235,0)' }}
+                  transition={{ delay: 4.55 + index * 0.04 }}
+                >
+                  <FileText className="h-3.5 w-3.5 text-red-400" />
+                  <span className="truncate">{name}</span>
+                </motion.div>
+              ))}
+              <div className="mt-3 flex items-center gap-2 text-sky-400">
+                <Folder className="h-4 w-4" />
+                csv
+              </div>
+              <div className="mt-3 flex items-center gap-2 text-sky-400">
+                <Folder className="h-4 w-4" />
+                filled
+              </div>
+            </div>
+            <div className="border-r border-[#343434]" />
+            <div className="border-r border-[#343434]" />
+            <div className="border-r border-[#343434]" />
+            <div />
+          </div>
+          <div className="flex h-12 items-center justify-end gap-2 bg-[#202020] px-4">
+            <button className="rounded-md bg-[#575757] px-5 py-1.5 text-sm font-semibold text-white">cancel</button>
+            <motion.button
+              className="rounded-md bg-[#575757] px-6 py-1.5 text-sm font-semibold text-slate-300"
+              animate={{ backgroundColor: ['#575757', '#2563eb', '#2563eb'] }}
+              transition={{ delay: 5.4, duration: 0.5 }}
+            >
+              Open
+            </motion.button>
           </div>
         </div>
-      </div>
+      </motion.div>
+      <DemoCursor
+        path={[
+          { left: '34%', top: '35%' },
+          { left: '57%', top: '5.5%' },
+          { left: '57%', top: '5.5%' },
+          { left: '64%', top: '63%' },
+          { left: '64%', top: '63%' },
+          { left: '87%', top: '17%' },
+          { left: '87%', top: '17%' },
+          { left: '23%', top: '27%' },
+          { left: '33%', top: '62%' },
+          { left: '93%', top: '90%' },
+        ]}
+        delay={0.05}
+        duration={7.3}
+      />
+    </>
+  )
+}
 
-      {progress > 0.5 && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex gap-4 justify-center"
-        >
-          <button
-            type="button"
-            onClick={onPrimaryCta}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg shadow-sm"
-          >
-            Download carrier package
-          </button>
-          <button
-            type="button"
-            onClick={onSecondaryCta}
-            className="px-6 py-3 bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium rounded-lg"
-          >
-            View in submission workspace
-          </button>
-        </motion.div>
-      )}
+function Modal({
+  title,
+  icon: Icon,
+  children,
+}: {
+  title: string
+  icon: ComponentType<{ className?: string }>
+  children: React.ReactNode
+}) {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center bg-slate-950/45">
+      <motion.div
+        className="w-[450px] rounded-lg bg-white shadow-2xl"
+        initial={{ opacity: 0, scale: 0.96, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ duration: 0.25 }}
+      >
+        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+          <div className="flex items-center gap-3">
+            <span className="rounded-lg bg-blue-50 p-2 text-blue-700">
+              <Icon className="h-4 w-4" />
+            </span>
+            <h4 className="text-lg font-semibold text-slate-950">{title}</h4>
+          </div>
+          <X className="h-5 w-5 text-slate-400" />
+        </div>
+        <div className="p-6">{children}</div>
+      </motion.div>
+    </div>
+  )
+}
+
+function AccountsWorkspace() {
+  return (
+    <div className="absolute inset-x-0 top-16 bottom-0 bg-slate-50 px-12 py-4">
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 flex-1 items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 text-slate-400">
+          <Search className="h-4 w-4" />
+          <span className="text-sm text-slate-950">Search accounts by name or ID...</span>
+        </div>
+        <button className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white">
+          <Plus className="h-4 w-4" />
+          New Account
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function AccountDetailWorkspace() {
+  return (
+    <div className="absolute inset-x-0 top-16 bottom-0 bg-slate-50 px-12 py-4">
+      <div className="grid h-full grid-cols-[352px_1fr] gap-4">
+        <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="mb-2 flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3">
+            <span className="text-slate-400">›</span>
+            <Folder className="h-4 w-4 text-slate-400" />
+            <span className="min-w-0 flex-1 truncate font-semibold text-slate-800">Redwood Custo...</span>
+            <span className="text-sm text-slate-400">10 files</span>
+          </div>
+          <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-4 shadow-sm">
+            <div className="flex items-center gap-3">
+              <ChevronDown className="h-4 w-4 text-slate-500" />
+              <Folder className="h-4 w-4 text-blue-600" />
+              <span className="font-semibold text-blue-800">Submission 2</span>
+            </div>
+            <div className="flex min-h-[132px] flex-col items-center justify-center text-center text-slate-500">
+              <FileText className="mb-2 h-8 w-8 text-slate-300" />
+              <p className="text-sm">No files in this submission yet</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+            <div className="flex items-center gap-2">
+              <Upload className="h-4 w-4 text-slate-500" />
+              <h4 className="font-semibold text-slate-800">Upload to Submission 2</h4>
+            </div>
+            <button className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white">
+              <Plus className="h-4 w-4" />
+              Add Files
+            </button>
+          </div>
+          <div className="m-4 flex h-[calc(100%-76px)] min-h-[365px] flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+            <Upload className="mb-4 h-12 w-12 text-slate-300" />
+            <p className="font-semibold text-slate-950">Drop files here or click to browse</p>
+            <p className="mt-1 text-sm text-slate-500">PDF, Excel, and CSV files are supported</p>
+          </div>
+        </section>
+      </div>
     </div>
   )
 }

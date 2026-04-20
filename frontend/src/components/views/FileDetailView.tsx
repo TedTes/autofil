@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react'
-import { Download, Save, Loader2, Edit, FileSpreadsheet, MapPin } from 'lucide-react'
+import { Download, Save, Loader2, Edit, FileSpreadsheet } from 'lucide-react'
 import { PdfPreview } from '@/components/PdfPreview'
 import {
   type ExtractionData,
@@ -533,30 +533,6 @@ export function FileDetailView({
           }`}>
             {Math.round(extractedData.confidence * 100)}%
           </span>
-        </div>
-      </div>
-    </div>
-  )}
-
-  {selectedFieldSource && (
-    <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
-      <div className="flex items-start gap-3">
-        <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-600" />
-        <div className="min-w-0">
-          <div className="text-sm font-semibold text-blue-950">
-            Source selected: {selectedFieldSource.fieldLabel}
-          </div>
-          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-blue-800">
-            {selectedSourcePage && <span>Page {selectedSourcePage}</span>}
-            {selectedSourceBbox && <span>Exact source location available</span>}
-            {selectedFieldSource.confidence !== undefined && (
-              <span>{Math.round(selectedFieldSource.confidence * 100)}% confidence</span>
-            )}
-            {selectedFieldSource.source?.extraction_rule && (
-              <span>{String(selectedFieldSource.source.extraction_rule).replace(/_/g, ' ')}</span>
-            )}
-            {!selectedSourcePage && <span>Source page unavailable for this field</span>}
-          </div>
         </div>
       </div>
     </div>

@@ -8,7 +8,7 @@ from typing import Dict, Any, Iterable, List, Optional
 from datetime import datetime
 from ..interfaces.extractor import IExtractor
 from ..core.document import Document, DocumentType
-from ..core.schema import Metadata
+from ..core.schema import EntityValue, Metadata, SourceRef
 from ..models.extraction_result import ExtractionResult
 from ..parsers import PdfFieldParser
 from ..utils.canonical_output_builder import (
@@ -69,17 +69,22 @@ class ACORD140Extractor(IExtractor):
             
             template_config: Optional[TemplateConfig] = None
             raw_fields = {}
+            field_metadata: Dict[str, Dict[str, Any]] = {}
             # Extract from fillable fields
             locations = self._extract_locations_from_tables(document)
             if self.pdf_parser.is_fillable(document.file_path):
-                raw_fields = self.pdf_parser.extract_fields(document.file_path)
+                field_metadata = self.pdf_parser.extract_field_metadata(document.file_path)
+                raw_fields = {
+                    field_name: metadata.get("value")
+                    for field_name, metadata in field_metadata.items()
+                }
                 if raw_fields:
                     template_config = self._resolve_template_config(
                         document,
                         raw_fields.keys(),
                     )
                 result = self._extract_from_fillable(
-                    document, raw_fields, template_config, locations
+                    document, raw_fields, field_metadata, template_config, locations
                 )
                 if result.success:
                     return result
@@ -155,13 +160,18 @@ class ACORD140Extractor(IExtractor):
         self,
         document: Document,
         raw_fields: Dict[str, Any],
+        field_metadata: Dict[str, Dict[str, Any]],
         template_config: Optional[TemplateConfig],
         locations: List[Dict[str, Any]],
     ) -> ExtractionResult:
         """Extract from fillable fields."""
-        mapped = self._map_fields(raw_fields, template_config)
-        shared_fields = self._build_shared_fields(mapped, locations)
-        fields = {**mapped, **shared_fields}
+        mapped = self._map_fields(raw_fields, field_metadata, template_config)
+        mapped_values = {
+            field_id: entity_value.value
+            for field_id, entity_value in mapped.items()
+        }
+        shared_fields = self._build_shared_fields(mapped_values, locations)
+        fields = {**shared_fields, **mapped}
         canonical = build_generic_canonical_output(
             document,
             section_payloads=[
@@ -177,7 +187,7 @@ class ACORD140Extractor(IExtractor):
                 form_type_detected="ACORD_140", line_of_business="Property"
             ),
             raw={
-                "mapped_fields": mapped,
+                "mapped_fields": mapped_values,
                 "shared_fields": shared_fields,
                 "raw_fields": raw_fields,
                 "locations": locations,
@@ -210,22 +220,55 @@ class ACORD140Extractor(IExtractor):
         return locations
     
     def _map_fields(
-        self, raw_fields: Dict[str, Any], template_config: Optional[TemplateConfig]
-    ) -> Dict[str, Any]:
+        self,
+        raw_fields: Dict[str, Any],
+        field_metadata: Dict[str, Dict[str, Any]],
+        template_config: Optional[TemplateConfig],
+    ) -> Dict[str, EntityValue]:
         """Map raw fields."""
-        mapped: Dict[str, Any] = {}
+        mapped: Dict[str, EntityValue] = {}
         if template_config:
             for canonical, pdf_name in template_config.field_map.items():
                 if pdf_name in raw_fields:
-                    mapped[canonical] = raw_fields[pdf_name]
+                    mapped[canonical] = self._entity_value_for_pdf_field(
+                        raw_fields[pdf_name],
+                        field_metadata.get(pdf_name),
+                        extraction_rule="pdf_field_template",
+                    )
             return mapped
 
         for standard_field, possible_names in self.FIELD_MAPPINGS.items():
             for possible_name in possible_names:
                 if possible_name in raw_fields:
-                    mapped[standard_field] = raw_fields[possible_name]
+                    mapped[standard_field] = self._entity_value_for_pdf_field(
+                        raw_fields[possible_name],
+                        field_metadata.get(possible_name),
+                        extraction_rule="pdf_field_alias",
+                    )
                     break
         return mapped
+
+    def _entity_value_for_pdf_field(
+        self,
+        value: Any,
+        metadata: Optional[Dict[str, Any]],
+        *,
+        extraction_rule: str,
+    ) -> EntityValue:
+        source = SourceRef(extraction_rule=extraction_rule)
+        if metadata:
+            source = SourceRef(
+                page=metadata.get("page"),
+                bbox=metadata.get("bbox"),
+                extraction_rule=extraction_rule,
+            )
+
+        return EntityValue(
+            value=value,
+            confidence=0.95,
+            source=source,
+            tags=["fillable_pdf", "template" if extraction_rule == "pdf_field_template" else "alias"],
+        )
 
     def _build_shared_fields(
         self,

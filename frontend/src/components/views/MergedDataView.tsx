@@ -8,6 +8,7 @@ import {
   Check,
   X,
   Info,
+  Send,
 } from 'lucide-react'
 import type { MergedData, SemanticField, SemanticSection } from '@/types'
 
@@ -16,6 +17,8 @@ interface MergedDataViewProps {
   onSaveData?: (data: MergedData) => Promise<void> | void
   isLoading?: boolean
   onOpenSource?: (target: SourceOpenTarget) => void
+  onOpenIntegrations?: () => void
+  canSendToIntegration?: boolean
 }
 
 export default function MergedDataView({
@@ -23,6 +26,8 @@ export default function MergedDataView({
   onSaveData,
   isLoading = false,
   onOpenSource,
+  onOpenIntegrations,
+  canSendToIntegration = false,
 }: MergedDataViewProps) {
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
   const [isEditing, setIsEditing] = useState(false)
@@ -127,6 +132,17 @@ export default function MergedDataView({
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {!isEditing && onOpenIntegrations && (
+              <button
+                type="button"
+                onClick={onOpenIntegrations}
+                disabled={!canSendToIntegration}
+                className="inline-flex items-center rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Send className="w-4 h-4 mr-1.5" />
+                Send
+              </button>
+            )}
             {isEditing ? (
               <>
                 <button

@@ -16,6 +16,7 @@ import {
   FolderOpen,
   BarChart3,
   ChevronRight,
+  Send,
 } from 'lucide-react'
 import { DashboardStartActions } from './DashboardStartActions'
 
@@ -942,6 +943,16 @@ function ClientDetailHeaderActions({ actions }: { actions: ClientDetailActions }
       >
         <FolderOpen className="w-4 h-4 flex-shrink-0 text-gray-500" />
         <span className="hidden sm:inline text-xs font-medium">Add Files</span>
+      </button>
+
+      <button
+        onClick={actions.openIntegrations}
+        disabled={!actions.canSendIntegration}
+        title={!actions.canSendIntegration ? 'Review merged data before sending' : 'Send to integration'}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all duration-100 active:scale-95 disabled:cursor-not-allowed border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400 disabled:active:scale-100"
+      >
+        <Send className="w-4 h-4 flex-shrink-0" />
+        <span className="hidden sm:inline text-xs">Send</span>
       </button>
 
       {/* Primary: Generate — filled, weighted */}

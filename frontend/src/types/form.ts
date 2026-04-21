@@ -73,9 +73,11 @@ export interface FormField {
 
   export interface ClientDetailActions {
     canGenerate: boolean
+    canSendIntegration: boolean
     selectedTemplateCount: number
     isUploading: boolean
     openNewSubmission: () => void
     openGenerate: () => void
     openAddFiles: () => void
+    openIntegrations: () => void
   }

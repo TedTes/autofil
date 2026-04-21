@@ -46,6 +46,8 @@ interface UploadOrMergedDataPanelProps {
     }
   ) => void
   onSaveMergedData?: (data: MergedData) => Promise<void> | void
+  onOpenIntegrations?: () => void
+  canSendToIntegration?: boolean
 
   // Reference to the FileUploadDropZone component
   FileUploadDropZoneComponent: React.ComponentType<{
@@ -84,6 +86,8 @@ export default function UploadOrMergedDataPanel({
   onRemoveRow,
   onViewFile,
   onSaveMergedData,
+  onOpenIntegrations,
+  canSendToIntegration = false,
   FileUploadDropZoneComponent,
 
 }: UploadOrMergedDataPanelProps) {
@@ -139,6 +143,8 @@ export default function UploadOrMergedDataPanel({
           mergedData={mergedData}
           onSaveData={onSaveMergedData}
           isLoading={isMergedDataLoading}
+          onOpenIntegrations={onOpenIntegrations}
+          canSendToIntegration={canSendToIntegration}
           onOpenSource={(target) => {
             if (!activeSubmissionId) return
             onViewFile(activeSubmissionId, target.filename, target.inputId, {

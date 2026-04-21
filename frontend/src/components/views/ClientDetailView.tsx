@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import { useClientSubmissions,useTemplateLibrary } from '@/hooks'
 import { fillPdf, downloadPDF, updateSubmissionData} from '@/lib/api-client'
 import UploadOrMergedDataPanel from "@/components/client/UploadOrMergedDataPanel"
+import IntegrationDestinationsModal from '@/components/client/IntegrationDestinationsModal'
 import type { ClientSubmissionPackage,UploadedRow, MergedData, ClientDetailActions  } from '@/types'
 import { CreateSubmissionModal,DeleteConfirmationModal } from '@/components'
 import { useLandingUpload } from '@/contexts/LandingUploadContext'
@@ -704,6 +705,7 @@ export function ClientDetailView({
   const [autoOpenUploadAfterCreate, setAutoOpenUploadAfterCreate] = useState(false)
 
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false)
+  const [isIntegrationModalOpen, setIsIntegrationModalOpen] = useState(false)
   const {
     loading,
     error,
@@ -1039,16 +1041,19 @@ const [isCreating, setIsCreating] = useState(false)
     if (!onActionsReady) return
     onActionsReady({
       canGenerate: Boolean(availableTemplates.length > 0 && !isMergedDataLoading && reviewDataReady),
+      canSendIntegration: Boolean(activePackageId && !isMergedDataLoading && reviewDataReady),
       selectedTemplateCount: selectedTemplateIds.length,
       isUploading,
       openNewSubmission: handleCreateSubmissionClick,
       openGenerate: () => setIsGenerateModalOpen(true),
       openAddFiles: triggerFileUpload,
+      openIntegrations: () => setIsIntegrationModalOpen(true),
     })
     return () => onActionsReady(null)
   }, [
     onActionsReady,
     availableTemplates.length,
+    activePackageId,
     isMergedDataLoading,
     reviewDataReady,
     selectedTemplateIds.length,
@@ -1255,6 +1260,8 @@ const [isCreating, setIsCreating] = useState(false)
       onRemoveRow={removeRow}
       onViewFile={handleViewFile}
       onSaveMergedData={handleSaveMergedData}
+      onOpenIntegrations={() => setIsIntegrationModalOpen(true)}
+      canSendToIntegration={Boolean(activePackageId && reviewDataReady && !isMergedDataLoading)}
       FileUploadDropZoneComponent={FileUploadDropZone}
     />
     {outputState.packageId === activePackageId && (outputState.message || outputState.error) && (
@@ -1283,6 +1290,14 @@ const [isCreating, setIsCreating] = useState(false)
   mergedData={mergedData}
   submissionId={activePackageId || ''}
   inputIds={selectedInputsByPackage[activePackageId || ''] || []}
+/>
+
+<IntegrationDestinationsModal
+  isOpen={isIntegrationModalOpen}
+  onClose={() => setIsIntegrationModalOpen(false)}
+  clientId={clientId}
+  submissionId={activePackageId || ''}
+  submissionName={activePackage?.name}
 />
 
 <DeleteConfirmationModal

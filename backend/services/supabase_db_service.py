@@ -165,6 +165,78 @@ class SupabaseDatabaseService:
             logger.warning("supabase-db http delete failed for %s: %s", table, exc)
             return False
 
+    def _http_insert_row(self, table: str, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        try:
+            response = requests.post(
+                self._rest_url(table),
+                headers=self._rest_headers(prefer="return=representation"),
+                json=payload,
+                timeout=20,
+            )
+            if response.status_code not in {200, 201}:
+                raise RuntimeError(f"HTTP {response.status_code}: {response.text[:300]}")
+            rows = response.json() or []
+            return rows[0] if rows else None
+        except Exception as exc:
+            logger.warning("supabase-db http insert failed for %s: %s", table, exc)
+            return None
+
+    def _http_select_rows(
+        self,
+        table: str,
+        *,
+        select: str = "*",
+        filters: Optional[Dict[str, str]] = None,
+        order: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> Optional[List[Dict[str, Any]]]:
+        try:
+            params: Dict[str, str] = {"select": select}
+            if filters:
+                for key, value in filters.items():
+                    params[key] = f"eq.{value}"
+            if order:
+                params["order"] = order
+            if limit is not None:
+                params["limit"] = str(max(limit, 0))
+            response = requests.get(
+                self._rest_url(table),
+                headers=self._rest_headers(prefer="return=representation"),
+                params=params,
+                timeout=20,
+            )
+            if response.status_code != 200:
+                raise RuntimeError(f"HTTP {response.status_code}: {response.text[:300]}")
+            return response.json() or []
+        except Exception as exc:
+            logger.warning("supabase-db http row select failed for %s: %s", table, exc)
+            return None
+
+    def _http_update_rows(
+        self,
+        table: str,
+        payload: Dict[str, Any],
+        *,
+        filters: Dict[str, str],
+    ) -> Optional[List[Dict[str, Any]]]:
+        try:
+            params: Dict[str, str] = {}
+            for key, value in filters.items():
+                params[key] = f"eq.{value}"
+            response = requests.patch(
+                self._rest_url(table),
+                headers=self._rest_headers(prefer="return=representation"),
+                params=params,
+                json=payload,
+                timeout=20,
+            )
+            if response.status_code not in {200, 204}:
+                raise RuntimeError(f"HTTP {response.status_code}: {response.text[:300]}")
+            return response.json() or []
+        except Exception as exc:
+            logger.warning("supabase-db http row update failed for %s: %s", table, exc)
+            return None
+
     def _require_remote(self) -> None:
         if not self.remote_enabled:
             raise RuntimeError("Supabase metadata storage must be configured.")
@@ -211,6 +283,69 @@ class SupabaseDatabaseService:
             self.save_folder_metadata(metadata, user_id=user_id)
             metadata["owner_user_id"] = user_id
         return metadata
+
+    # ------------------------------------------------------------- generic rows
+    def insert_row(self, table: str, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        self._require_remote()
+        if not self._client:
+            return self._http_insert_row(table, payload)
+        try:
+            rows = self._execute(self._client.table(table).insert(payload).execute())
+            return rows[0] if rows else None
+        except Exception as exc:
+            logger.warning("supabase-db failed to insert row into %s: %s", table, exc)
+            return None
+
+    def select_rows(
+        self,
+        table: str,
+        *,
+        select: str = "*",
+        filters: Optional[Dict[str, str]] = None,
+        order: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        self._require_remote()
+        if not self._client:
+            return self._http_select_rows(
+                table,
+                select=select,
+                filters=filters,
+                order=order,
+                limit=limit,
+            ) or []
+        try:
+            query = self._client.table(table).select(select)
+            for key, value in (filters or {}).items():
+                query = query.eq(key, value)
+            if order:
+                column, _, direction = order.partition(".")
+                query = query.order(column, desc=direction.lower() == "desc")
+            if limit is not None:
+                query = query.limit(limit)
+            return self._execute(query.execute()) or []
+        except Exception as exc:
+            logger.warning("supabase-db failed to select rows from %s: %s", table, exc)
+            return []
+
+    def update_rows(
+        self,
+        table: str,
+        payload: Dict[str, Any],
+        *,
+        filters: Dict[str, str],
+    ) -> List[Dict[str, Any]]:
+        self._require_remote()
+        if not self._client:
+            return self._http_update_rows(table, payload, filters=filters) or []
+        try:
+            query = self._client.table(table).update(payload)
+            for key, value in filters.items():
+                query = query.eq(key, value)
+            return self._execute(query.execute()) or []
+        except Exception as exc:
+            logger.warning("supabase-db failed to update rows in %s: %s", table, exc)
+            return []
 
     # ---------------------------------------------------------------- submissions
     def save_submission_metadata(self, metadata: Dict[str, Any], user_id: Optional[str] = None) -> None:

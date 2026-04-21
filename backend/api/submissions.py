@@ -15,6 +15,7 @@ from api.auth import require_auth, get_current_user_id
 from api.error_handlers import internal_server_error
 from services.submission_service import SubmissionService
 from services.merged_data_service import MergedDataService
+from services.integration_payload_service import IntegrationPayloadService
 # Blueprint for submission-specific routes
 submission_bp = Blueprint("submissions", __name__)
 logger = logging.getLogger(__name__)
@@ -26,6 +27,10 @@ def _submission_service() -> SubmissionService:
 
 def _merged_data_service(submission_service: SubmissionService) -> MergedDataService:
     return MergedDataService(submission_service)
+
+
+def _integration_payload_service(submission_service: SubmissionService) -> IntegrationPayloadService:
+    return IntegrationPayloadService(submission_service)
 
 @submission_bp.route("/upload", methods=["POST"])
 @require_auth
@@ -178,6 +183,24 @@ def get_submission_merged_data(submission_id: str):
         return jsonify({"error": str(exc)}), 404
     except Exception as exc:
         return internal_server_error(logger, "Failed to build merged data", exc)
+
+
+@submission_bp.route("/<submission_id>/integration-payload", methods=["GET"])
+@require_auth
+def get_submission_integration_payload(submission_id: str):
+    """Return the canonical third-party integration payload for a submission."""
+    try:
+        submission_service = _submission_service()
+        payload_service = _integration_payload_service(submission_service)
+        payload = payload_service.build_payload(submission_id)
+        return jsonify({
+            "success": True,
+            "data": payload,
+        }), 200
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 404
+    except Exception as exc:
+        return internal_server_error(logger, "Failed to build integration payload", exc)
 
 
 @submission_bp.route("/<submission_id>/package", methods=["GET"])

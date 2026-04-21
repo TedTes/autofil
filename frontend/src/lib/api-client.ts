@@ -21,7 +21,12 @@ import type {
   TemplateLibraryResponse,
   TemplateFillResult, 
   MultipleFillResults,
-  FieldCatalog
+  FieldCatalog,
+  IntegrationPayload,
+  IntegrationDestination,
+  CreateIntegrationDestinationRequest,
+  UpdateIntegrationDestinationRequest,
+  IntegrationJob
 } from '@/types'
 
 import type { MergedData } from '@/types/merged-data'
@@ -712,6 +717,106 @@ export async function getMergedData(submissionId: string): Promise<MergedData> {
       throw new Error(response.data.error || 'Failed to load merged data')
     }
     return response.data.data as MergedData
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
+/**
+ * Fetch the canonical payload that integration adapters will send downstream.
+ */
+export async function getIntegrationPayload(submissionId: string): Promise<IntegrationPayload> {
+  try {
+    const response = await api.get(`/submissions/${submissionId}/integration-payload`)
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to load integration payload')
+    }
+    return response.data.data as IntegrationPayload
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
+export async function getIntegrationDestinations(options?: {
+  clientId?: string
+}): Promise<IntegrationDestination[]> {
+  try {
+    const response = await api.get('/integrations/destinations', {
+      params: options?.clientId ? { client_id: options.clientId } : undefined,
+    })
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to load integration destinations')
+    }
+    return response.data.data as IntegrationDestination[]
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
+export async function createIntegrationDestination(
+  payload: CreateIntegrationDestinationRequest
+): Promise<IntegrationDestination> {
+  try {
+    const response = await api.post('/integrations/destinations', payload)
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to create integration destination')
+    }
+    return response.data.data as IntegrationDestination
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
+export async function updateIntegrationDestination(
+  destinationId: string,
+  payload: UpdateIntegrationDestinationRequest
+): Promise<IntegrationDestination> {
+  try {
+    const response = await api.patch(`/integrations/destinations/${destinationId}`, payload)
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to update integration destination')
+    }
+    return response.data.data as IntegrationDestination
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
+export async function deleteIntegrationDestination(destinationId: string): Promise<void> {
+  try {
+    const response = await api.delete(`/integrations/destinations/${destinationId}`)
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to delete integration destination')
+    }
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
+export async function getIntegrationJobs(submissionId: string): Promise<IntegrationJob[]> {
+  try {
+    const response = await api.get(`/integrations/submissions/${submissionId}/jobs`)
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to load integration jobs')
+    }
+    return response.data.data as IntegrationJob[]
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
+export async function sendSubmissionToIntegration(
+  submissionId: string,
+  destinationId: string
+): Promise<IntegrationJob> {
+  try {
+    const response = await api.post(`/integrations/submissions/${submissionId}/send`, {
+      destination_id: destinationId,
+    })
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to send integration payload')
+    }
+    return response.data.data as IntegrationJob
   } catch (error) {
     handleApiError(error)
   }

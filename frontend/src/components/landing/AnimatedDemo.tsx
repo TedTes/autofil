@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   AnimatePresence,
   LayoutGroup,
@@ -23,7 +23,6 @@ import {
   Pencil,
   Download,
   Plus,
-  RefreshCcw,
   Search,
   Send,
   Trash2,
@@ -292,11 +291,11 @@ export default function AnimatedDemo({
   onPrimaryCta,
   onSecondaryCta,
 }: AnimatedDemoProps) {
+  void onPrimaryCta
+  void onSecondaryCta
+
   const prefersReducedMotion = useReducedMotion()
   const [scene, setScene] = useState<DemoScene>('account')
-  const [progressKey, setProgressKey] = useState(0)
-
-  const sceneIndex = steps.findIndex((step) => step.id === scene)
 
   useEffect(() => {
     if (prefersReducedMotion) return
@@ -311,30 +310,10 @@ export default function AnimatedDemo({
         const nextIndex = steps.findIndex((step) => step.id === current) + 1
         return steps[nextIndex % steps.length].id
       })
-      setProgressKey((current) => current + 1)
     }, sceneDurations[scene])
 
     return () => window.clearTimeout(timer)
   }, [prefersReducedMotion, scene])
-
-  const restart = () => {
-    setScene('account')
-    setProgressKey((current) => current + 1)
-  }
-
-  const selectScene = (next: DemoScene) => {
-    setScene(next)
-    setProgressKey((current) => current + 1)
-  }
-
-  const activeTitle = useMemo(() => {
-    switch (scene) {
-      case 'account':
-        return 'Create an account workspace'
-      case 'submission':
-        return 'Create the submission and add files'
-    }
-  }, [scene])
 
   return (
     <div className="mx-auto w-full max-w-6xl px-0 py-10 sm:px-4 sm:py-12">
@@ -348,69 +327,6 @@ export default function AnimatedDemo({
       </div>
 
       <div className="overflow-hidden rounded-none border-y border-slate-200 bg-white shadow-2xl shadow-slate-200/70 sm:rounded-lg sm:border">
-        <div className="border-b border-slate-200 bg-slate-50 px-4 py-4 sm:px-5">
-          <div className="flex flex-wrap items-center gap-3">
-            {steps.map((step, index) => {
-              const Icon = step.icon
-              const isActive = step.id === scene
-              const isComplete = index < sceneIndex
-              return (
-                <button
-                  key={step.id}
-                  type="button"
-                  onClick={() => selectScene(step.id)}
-                  className="group flex min-w-[132px] flex-1 items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left transition hover:border-blue-200"
-                >
-                  <span
-                    className={`flex h-8 w-8 items-center justify-center rounded-md ${
-                      isActive
-                        ? 'bg-blue-600 text-white'
-                        : isComplete
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : 'bg-slate-100 text-slate-500'
-                    }`}
-                  >
-                    <Icon className="h-4 w-4" />
-                  </span>
-                  <span className="min-w-0">
-                    <span className={`block text-sm font-semibold ${isActive ? 'text-slate-950' : 'text-slate-600'}`}>
-                      {step.label}
-                    </span>
-                    {isActive && (
-                      <span className="mt-1 block h-1 overflow-hidden rounded-full bg-blue-100">
-                        <motion.span
-                          key={progressKey}
-                          className="block h-full rounded-full bg-blue-600"
-                          initial={{ width: '0%' }}
-                          animate={{ width: '100%' }}
-                          transition={{ duration: sceneDurations[scene] / 1000, ease: 'linear' }}
-                        />
-                      </span>
-                    )}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 sm:px-5">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-              Current step
-            </p>
-            <h3 className="text-base font-semibold text-slate-950 sm:text-lg">{activeTitle}</h3>
-          </div>
-          <button
-            type="button"
-            onClick={restart}
-            className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
-          >
-            <RefreshCcw className="h-4 w-4" />
-            Replay
-          </button>
-        </div>
-
         <AnimatePresence mode="wait">
           <motion.div
             key={scene}
@@ -426,28 +342,6 @@ export default function AnimatedDemo({
             </AppFrame>
           </motion.div>
         </AnimatePresence>
-
-        <div className="flex flex-col gap-3 border-t border-slate-200 bg-white px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-          <p className="text-sm text-slate-500">
-            The animation loops through account setup, submission creation, and document intake.
-          </p>
-          <div className="flex flex-col gap-3 min-[420px]:flex-row">
-            <button
-              type="button"
-              onClick={onSecondaryCta}
-              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              Open workspace
-            </button>
-            <button
-              type="button"
-              onClick={onPrimaryCta}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
-            >
-              Generate package
-            </button>
-          </div>
-        </div>
       </div>
 
       <LegacyProcessingDemo />
@@ -624,22 +518,27 @@ function LegacyProcessingDemo() {
               <FlowNode className="left-[900px] top-[324px] bg-emerald-100 text-emerald-950" label="Audit Trail" sublabel="sources" compact />
 
               {[
-                { x: ['10%', '24%', '43%'], y: ['51%', '29%', '39%'], delay: 0 },
-                { x: ['10%', '24%', '43%'], y: ['51%', '71%', '61%'], delay: 1.25 },
-                { x: ['58%', '70%', '93%'], y: ['43%', '29%', '19%'], delay: 0.9 },
-                { x: ['58%', '70%', '93%'], y: ['50%', '50%', '50%'], delay: 2.15 },
-                { x: ['58%', '70%', '93%'], y: ['57%', '72%', '78%'], delay: 3.4 },
+                { x: ['128px', '190px', '245px'], y: ['210px', '150px', '120px'], delay: 0 },
+                { x: ['128px', '190px', '245px'], y: ['210px', '270px', '300px'], delay: 1.15 },
+                { x: ['355px', '415px', '455px'], y: ['120px', '150px', '160px'], delay: 2.3 },
+                { x: ['355px', '415px', '455px'], y: ['300px', '270px', '260px'], delay: 3.45 },
+                { x: ['575px', '625px', '690px'], y: ['210px', '150px', '120px'], delay: 0.65 },
+                { x: ['575px', '625px', '690px'], y: ['210px', '210px', '210px'], delay: 1.8 },
+                { x: ['575px', '625px', '690px'], y: ['210px', '270px', '300px'], delay: 2.95 },
+                { x: ['800px', '850px', '900px'], y: ['120px', '80px', '80px'], delay: 1.1 },
+                { x: ['800px', '850px', '900px'], y: ['210px', '210px', '210px'], delay: 2.25 },
+                { x: ['800px', '850px', '900px'], y: ['300px', '320px', '340px'], delay: 3.4 },
               ].map((packet) => (
                 <motion.div
                   key={`${packet.delay}`}
                   className="absolute z-20 h-3 w-3 rounded-full bg-blue-600 shadow-lg shadow-blue-600/30"
-                  animate={{ left: packet.x, top: packet.y, opacity: [0, 1, 1, 0] }}
+                  animate={{ left: packet.x, top: packet.y, opacity: [0, 1, 1, 1, 0] }}
                   transition={{
                     delay: packet.delay,
-                    duration: 2.4,
+                    duration: 2.2,
                     repeat: Infinity,
                     ease: 'easeInOut',
-                    times: [0, 0.12, 0.88, 1],
+                    times: [0, 0.04, 0.92, 0.985, 1],
                   }}
                 />
               ))}

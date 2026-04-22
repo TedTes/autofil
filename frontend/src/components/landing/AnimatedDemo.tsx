@@ -149,8 +149,8 @@ const DEMO_TIMELINE: {
   },
   submission: {
     durationMs: 26000,
-    modalDurationMs: 6200,
-    modalTimes: [0, 0.22, 0.28, 0.92, 1],
+    modalDurationMs: 6600,
+    modalTimes: [0, 0.2, 0.26, 0.96, 1],
     typeSubmissionNameMs: 1850,
     clickCreateSubmissionMs: 5350,
     showUploadWorkspaceMs: 6350,
@@ -190,8 +190,8 @@ const DEMO_TIMELINE: {
       { left: '76%', top: '5.5%' },
       { left: '30%', top: '39%' },
       { left: '30%', top: '39%' },
-      { left: '61.5%', top: '75.5%' },
-      { left: '61.5%', top: '75.5%' },
+      { left: '73.5%', top: '84%' },
+      { left: '73.5%', top: '84%' },
       { left: '11%', top: '22%' },
     ],
     cursorTimesMs: [

@@ -25,6 +25,7 @@ import {
   RefreshCcw,
   RotateCcw,
   Search,
+  Send,
   Trash2,
   Upload,
   Users,
@@ -86,6 +87,12 @@ type SubmissionTimeline = TimelineScene & {
   processingTimes: number[]
   mergedReviewStartMs: number
   generateModalAfterReviewMs: number
+  outputPreviewCloseMs: number
+  sendActionStartMs: number
+  integrationsStartMs: number
+  integrationSelectMs: number
+  integrationSubmitMs: number
+  completionStartMs: number
   cursorPath: Array<{ left: string; top: string }>
   cursorTimesMs: number[]
 }
@@ -145,10 +152,10 @@ const DEMO_TIMELINE: {
       { left: '65%', top: '66%' },
       { left: '27%', top: '35%' },
     ],
-    cursorTimesMs: [0, 400, 1200, 2400, 3536, 5200],
+    cursorTimesMs: [0, 250, 900, 2100, 3200, 5000],
   },
   submission: {
-    durationMs: 26000,
+    durationMs: 39000,
     modalDurationMs: 6600,
     modalTimes: [0, 0.2, 0.26, 0.96, 1],
     typeSubmissionNameMs: 1850,
@@ -171,6 +178,12 @@ const DEMO_TIMELINE: {
     processingTimes: [0, 0.16, 0.82, 1],
     mergedReviewStartMs: 17750,
     generateModalAfterReviewMs: 4300,
+    outputPreviewCloseMs: 26850,
+    sendActionStartMs: 27650,
+    integrationsStartMs: 28850,
+    integrationSelectMs: 30450,
+    integrationSubmitMs: 32250,
+    completionStartMs: 33450,
     cursorPath: [
       { left: '34%', top: '35%' },
       { left: '53%', top: '7.5%' },
@@ -190,32 +203,48 @@ const DEMO_TIMELINE: {
       { left: '76%', top: '5.5%' },
       { left: '30%', top: '39%' },
       { left: '30%', top: '39%' },
-      { left: '73.5%', top: '84%' },
-      { left: '73.5%', top: '84%' },
-      { left: '11%', top: '22%' },
+      { left: '69.5%', top: '84%' },
+      { left: '69.5%', top: '84%' },
+      { left: '74%', top: '12%' },
+      { left: '74%', top: '12%' },
+      { left: '86%', top: '16.5%' },
+      { left: '86%', top: '16.5%' },
+      { left: '29%', top: '36%' },
+      { left: '29%', top: '36%' },
+      { left: '78%', top: '93%' },
+      { left: '78%', top: '93%' },
+      { left: '50%', top: '48%' },
     ],
     cursorTimesMs: [
       0,
-      450,
+      280,
       1450,
-      2850,
-      4700,
+      2400,
+      4450,
       5850,
-      6700,
+      6350,
       7469,
-      8245,
-      10050,
+      7900,
+      9700,
       11250,
       13192,
-      14400,
-      15850,
-      19700,
+      14100,
+      15250,
+      18900,
       21300,
-      22250,
+      21800,
       22800,
-      23750,
+      23250,
       24750,
-      25200,
+      25550,
+      26650,
+      28050,
+      28800,
+      30100,
+      31300,
+      31900,
+      32800,
+      34050,
     ],
   },
 }
@@ -938,6 +967,7 @@ function SubmissionScene() {
   const generateModalDelaySeconds = sec(
     timeline.mergedReviewStartMs + timeline.generateModalAfterReviewMs
   )
+  const outputPreviewCloseSeconds = sec(timeline.outputPreviewCloseMs)
 
   return (
     <>
@@ -1280,9 +1310,22 @@ function SubmissionScene() {
         animate={{ opacity: 1 }}
         transition={{ delay: sec(timeline.mergedReviewStartMs), duration: 0.6 }}
       >
-        <MergedReviewScene />
+        <MergedReviewScene
+          sendVisibleDelaySeconds={sec(timeline.sendActionStartMs)}
+          sendClickDelaySeconds={sec(timeline.integrationsStartMs - 350)}
+        />
       </motion.div>
-      <GenerateDocumentsOverlay generateModalDelaySeconds={generateModalDelaySeconds} />
+      <GenerateDocumentsOverlay
+        generateModalDelaySeconds={generateModalDelaySeconds}
+        outputPreviewCloseSeconds={outputPreviewCloseSeconds}
+      />
+      <IntegrationsOverlay
+        startDelaySeconds={sec(timeline.integrationsStartMs)}
+        selectDelaySeconds={sec(timeline.integrationSelectMs)}
+        submitDelaySeconds={sec(timeline.integrationSubmitMs)}
+        completionDelaySeconds={sec(timeline.completionStartMs)}
+      />
+      <CompletionOverlay startDelaySeconds={sec(timeline.completionStartMs)} />
       <DemoCursor
         path={timeline.cursorPath}
         times={normalizedTimes(
@@ -1296,7 +1339,13 @@ function SubmissionScene() {
   )
 }
 
-function MergedReviewScene() {
+function MergedReviewScene({
+  sendVisibleDelaySeconds = 0,
+  sendClickDelaySeconds = 0,
+}: {
+  sendVisibleDelaySeconds?: number
+  sendClickDelaySeconds?: number
+}) {
   return (
     <section className="h-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
@@ -1304,10 +1353,31 @@ function MergedReviewScene() {
           <h4 className="font-semibold text-slate-950">Merged Review Data</h4>
           <p className="mt-1 text-xs text-slate-500">Review and refine the submission data used for generation.</p>
         </div>
-        <button className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
-          <Pencil className="h-4 w-4" />
-          Edit
-        </button>
+        <div className="flex items-center gap-2">
+          <button className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
+            <Pencil className="h-4 w-4" />
+            Edit
+          </button>
+          <motion.button
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white"
+            initial={{ opacity: 0, y: -4, scale: 1 }}
+            animate={{
+              opacity: 1,
+              y: 0,
+              scale: [1, 1, 0.95, 1],
+              backgroundColor: ['#2563eb', '#2563eb', '#1d4ed8', '#2563eb'],
+            }}
+            transition={{
+              opacity: { delay: sendVisibleDelaySeconds, duration: 0.25 },
+              y: { delay: sendVisibleDelaySeconds, duration: 0.25 },
+              scale: { delay: sendClickDelaySeconds, duration: 0.3, times: [0, 0.2, 0.55, 1] },
+              backgroundColor: { delay: sendClickDelaySeconds, duration: 0.3, times: [0, 0.2, 0.55, 1] },
+            }}
+          >
+            <Send className="h-4 w-4" />
+            Send
+          </motion.button>
+        </div>
       </div>
       <div className="h-[calc(100%-64px)] overflow-y-auto px-5 py-4 pr-4">
         <MergedSection
@@ -1342,8 +1412,10 @@ function MergedReviewScene() {
 
 function GenerateDocumentsOverlay({
   generateModalDelaySeconds,
+  outputPreviewCloseSeconds,
 }: {
   generateModalDelaySeconds: number
+  outputPreviewCloseSeconds: number
 }) {
   const templates = [
     ['ACORD 125 Commercial Insurance Application', 'ACORD 125 Commercial Insurance Application (2016/09) — fillable PDF template mapped to merged review data.', '18/18'],
@@ -1357,13 +1429,21 @@ function GenerateDocumentsOverlay({
   ]
   const selectionStartSeconds = generateModalDelaySeconds + 0.55
   const outputStartSeconds = selectionStartSeconds + 2.45
+  const overlayDurationSeconds = Math.max(
+    1,
+    outputPreviewCloseSeconds - generateModalDelaySeconds + 0.35
+  )
 
   return (
     <motion.div
       className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/30"
-      initial={{ opacity: 0, pointerEvents: 'none' }}
-      animate={{ opacity: 1, pointerEvents: 'auto' }}
-      transition={{ delay: generateModalDelaySeconds, duration: 0.35 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: [0, 1, 1, 0] }}
+      transition={{
+        delay: generateModalDelaySeconds,
+        duration: overlayDurationSeconds,
+        times: [0, 0.05, 0.98, 1],
+      }}
     >
       <motion.div
         className="relative w-[560px] overflow-hidden rounded-lg bg-white shadow-2xl"
@@ -1472,7 +1552,7 @@ function GenerateDocumentsOverlay({
         <div className="flex items-center justify-between border-t border-slate-200 px-5 py-3">
           <button className="text-xs font-medium text-slate-700">Close</button>
           <motion.button
-            className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white"
+            className="mr-5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white"
             animate={{ scale: [1, 1, 0.94, 1], backgroundColor: ['#2563eb', '#2563eb', '#1d4ed8', '#2563eb'] }}
             transition={{
               delay: outputStartSeconds - 0.52,
@@ -1492,89 +1572,171 @@ function GenerateDocumentsOverlay({
         >
           <div className="flex items-start justify-between border-b border-slate-200 px-5 py-3">
             <div>
-              <h4 className="text-lg font-semibold text-slate-950">Generated Output</h4>
+              <h4 className="text-lg font-semibold text-slate-950">acord_126_test_filled.pdf</h4>
               <p className="mt-1 text-sm text-slate-500">Filled PDF created from the selected template.</p>
             </div>
-            <X className="h-5 w-5 text-slate-400" />
+            <motion.span
+              className="flex h-7 w-7 items-center justify-center rounded-full text-slate-400"
+              initial={{
+                scale: 1,
+                backgroundColor: 'rgba(248,250,252,0)',
+                boxShadow: '0 0 0 0 rgba(37,99,235,0)',
+              }}
+              animate={{
+                scale: [1, 1, 0.82, 1.08, 1],
+                backgroundColor: [
+                  'rgba(248,250,252,0)',
+                  'rgba(248,250,252,0)',
+                  'rgba(37,99,235,0.16)',
+                  'rgba(37,99,235,0.12)',
+                  'rgba(248,250,252,0)',
+                ],
+                boxShadow: [
+                  '0 0 0 0 rgba(37,99,235,0)',
+                  '0 0 0 0 rgba(37,99,235,0)',
+                  '0 0 0 5px rgba(37,99,235,0.22)',
+                  '0 0 0 8px rgba(37,99,235,0)',
+                  '0 0 0 0 rgba(37,99,235,0)',
+                ],
+              }}
+              transition={{
+                delay: outputPreviewCloseSeconds - 1.05,
+                duration: 0.6,
+                times: [0, 0.22, 0.5, 0.78, 1],
+              }}
+            >
+              <X className="h-5 w-5" />
+            </motion.span>
           </div>
-          <div className="px-5 py-4">
-            <div className="mb-3 flex items-center justify-between rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-slate-950">
-                  ACORD_125_Commercial_Insurance_Application_filled.pdf
-                </p>
-                <p className="mt-0.5 text-xs text-emerald-700">Ready to download</p>
-              </div>
-              <button className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white">
-                Download
-              </button>
-            </div>
+          <div className="px-5 py-3">
             <motion.div
-              className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50 p-3"
+              className="overflow-hidden rounded-lg border border-slate-200 bg-slate-100"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: outputStartSeconds + 0.45, duration: 0.3 }}
             >
-              <div className="mb-2 flex items-center justify-between">
-                <p className="text-xs font-semibold text-slate-700">Filled PDF preview</p>
-                <span className="rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-100">
-                  Ready
-                </span>
+              <div className="flex h-10 items-center justify-between bg-slate-900 px-4 text-slate-100">
+                <div className="flex min-w-0 items-center gap-3">
+                  <p className="truncate text-xs font-semibold">acord_126_test_filled.pdf</p>
+                  <span className="text-[11px] text-slate-300">Page 1 of 4</span>
+                </div>
+                <div className="flex items-center gap-4 text-[11px] text-slate-200">
+                  <span>‹</span>
+                  <span>›</span>
+                  <span>100%</span>
+                  <Download className="h-4 w-4" />
+                </div>
               </div>
-              <div className="mx-auto h-[300px] w-[420px] max-w-full rounded-sm border border-slate-300 bg-white p-4 shadow-sm">
-                <div className="border-b border-slate-900 pb-2 text-center">
-                  <p className="text-[10px] font-bold text-slate-950">ACORD 125</p>
-                  <p className="text-[9px] font-semibold text-slate-700">
-                    COMMERCIAL INSURANCE APPLICATION
-                  </p>
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  {[
-                    ['Applicant', 'Redwood Custom Builders LLC'],
-                    ['Policy', 'PKG-TEST-2026-001'],
-                    ['Effective', '05/01/2026'],
-                    ['Producer', 'Northstar Risk Partners'],
-                  ].map(([label, value]) => (
-                    <div key={label} className="rounded-sm border border-slate-300 p-1.5">
-                      <p className="text-[7px] font-bold uppercase text-slate-500">{label}</p>
-                      <p className="mt-1 truncate text-[8px] font-semibold text-blue-700">
-                        {value}
-                      </p>
+              <div className="relative h-[360px] overflow-hidden bg-slate-100 p-3">
+                <div className="mx-auto w-[470px] bg-white p-5 text-black shadow-sm">
+                  <div className="mb-2 flex items-end justify-between">
+                    <div className="text-[13px] font-black italic">ACORD</div>
+                    <div className="text-center">
+                      <p className="text-[10px] font-black tracking-wide">COMMERCIAL GENERAL LIABILITY SECTION</p>
                     </div>
-                  ))}
-                </div>
-                <div className="mt-3 grid grid-cols-[1.2fr_0.8fr] gap-2">
-                  {[
-                    ['Business description', 'Residential remodeling and finish carpentry'],
-                    ['Operations', 'Light commercial tenant improvements'],
-                    ['Locations', '3 scheduled properties'],
-                    ['Total insured value', '$8,950,000'],
-                  ].map(([label, value]) => (
-                    <div key={label} className="rounded-sm border border-slate-300 p-1.5">
-                      <p className="text-[7px] font-bold uppercase text-slate-500">{label}</p>
-                      <p className="mt-1 truncate text-[8px] font-semibold text-blue-700">{value}</p>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-3 space-y-1.5 rounded-sm border border-slate-300 p-2">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-sm border border-blue-600 bg-blue-600" />
-                    <span className="text-[8px] font-semibold text-slate-700">Selected coverage sections filled</span>
+                    <div className="border border-black px-4 py-1 text-[5px] font-bold">DATE (MM/DD/YYYY)</div>
                   </div>
-                  <div className="h-1.5 rounded-full bg-blue-100" />
-                  <div className="h-1.5 w-5/6 rounded-full bg-blue-100" />
-                  <div className="h-1.5 w-2/3 rounded-full bg-blue-100" />
+
+                  <div className="grid grid-cols-[1fr_0.8fr_1fr_0.75fr] border border-black text-[5px] leading-tight">
+                    <div className="border-r border-black p-1">
+                      <p className="font-black">AGENCY</p>
+                      <p>Northstar Risk Partners</p>
+                    </div>
+                    <div className="border-r border-black p-1">
+                      <p className="font-black">POLICY NUMBER</p>
+                      <p>GL-TEST-2026-001</p>
+                    </div>
+                    <div className="border-r border-black p-1">
+                      <p className="font-black">CARRIER</p>
+                      <p>Test Mutual Insurance Co.</p>
+                    </div>
+                    <div className="p-1">
+                      <p className="font-black">NAIC CODE</p>
+                    </div>
+                    <div className="border-r border-t border-black p-1">
+                      <p className="font-black">EFFECTIVE DATE</p>
+                      <p>05/01/2026</p>
+                    </div>
+                    <div className="col-span-3 border-t border-black p-1">
+                      <p className="font-black">APPLICANT / FIRST NAMED INSURED</p>
+                      <p>Redwood Custom Builders LLC</p>
+                    </div>
+                    <div className="col-span-4 border-t border-black p-1 font-black">
+                      IMPORTANT - IF CLAIMS MADE is checked in the COVERAGE / LIMITS section below, this is an application for a claims-made policy.
+                    </div>
+                  </div>
+
+                  <div className="mt-1 border border-black">
+                    <div className="grid grid-cols-[1fr_1fr_0.48fr] border-b border-black bg-slate-100 text-center text-[5px] font-black">
+                      <span className="border-r border-black py-0.5">COVERAGES</span>
+                      <span className="border-r border-black py-0.5">LIMITS</span>
+                      <span className="py-0.5">PREMIUMS</span>
+                    </div>
+                    {[
+                      ['Commercial General Liability', 'General Aggregate     $2,000,000', 'Premises/Ops  $14,250'],
+                      ['Claims Made       Occur', 'Products & Completed Operations Aggregate     $2,000,000', 'Products  $6,900'],
+                      ['Deductibles: Property Damage $1,000', 'Personal & Advertising Injury     $1,000,000', 'Other  $750'],
+                      ['Bodily Injury', 'Each Occurrence     $1,000,000', 'Total  $21,900'],
+                    ].map(([coverage, limit, premium]) => (
+                      <div key={coverage} className="grid grid-cols-[1fr_1fr_0.48fr] border-b border-black text-[5px] last:border-b-0">
+                        <div className="border-r border-black p-1">{coverage}</div>
+                        <div className="border-r border-black p-1 font-semibold">{limit}</div>
+                        <div className="p-1">{premium}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-1 border border-black">
+                    <div className="bg-slate-100 px-1 py-0.5 text-[5px] font-black">
+                      SCHEDULE OF HAZARDS
+                    </div>
+                    <div className="grid grid-cols-[0.3fr_0.4fr_0.6fr_0.8fr_0.4fr_0.45fr_0.45fr_0.45fr_0.45fr] border-t border-black text-center text-[4.3px] font-black">
+                      {['LOC #', 'HAZ #', 'CLASS CODE', 'EXPOSURE', 'TERR', 'PREM / OPS', 'PRODUCTS', 'PREM / OPS', 'PRODUCTS'].map((head, index) => (
+                        <span key={`${head}-${index}`} className="border-r border-black px-0.5 py-0.5 last:border-r-0">{head}</span>
+                      ))}
+                    </div>
+                    {[
+                      ['1', '12345', '91583', '$1,400,000', '007', '4.35', '1.25', '$6,090', '$1,750'],
+                      ['1', '', '91341', '$850,000', '007', '8.20', '2.10', '$6,970', '$1,785'],
+                      ['1', '', '97047', '12,000', '007', '0.10', '0.00', '$1,200', '$0'],
+                    ].map((row) => (
+                      <div key={row.join('-')} className="grid grid-cols-[0.3fr_0.4fr_0.6fr_0.8fr_0.4fr_0.45fr_0.45fr_0.45fr_0.45fr] border-t border-black text-center text-[4.3px]">
+                        {row.map((cell, index) => (
+                          <span key={`${cell}-${index}`} className="border-r border-black px-0.5 py-1 last:border-r-0">{cell}</span>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-1 border border-black text-[5px]">
+                    <div className="border-b border-black bg-slate-100 px-1 py-0.5 font-black">
+                      CLASSIFICATION DESCRIPTION
+                    </div>
+                    <p className="border-b border-black px-1 py-1">Residential remodeling, finish carpentry, and light commercial tenant improvements.</p>
+                    <p className="border-b border-black px-1 py-1">Warehouse operations</p>
+                    <p className="px-1 py-1">Additional Storage</p>
+                  </div>
+
+                  <div className="mt-1 border border-black text-[5px]">
+                    <div className="border-b border-black bg-slate-100 px-1 py-0.5 font-black">
+                      CLAIMS MADE
+                    </div>
+                    <p className="border-b border-black px-1 py-1">1. PROPOSED RETROACTIVE DATE:</p>
+                    <p className="border-b border-black px-1 py-1">2. ENTRY DATE INTO UNINTERRUPTED CLAIMS MADE COVERAGE: 2021-01-01</p>
+                    <p className="border-b border-black px-1 py-1">3. HAS ANY PRODUCT, WORK, ACCIDENT, OR LOCATION BEEN EXCLUDED, UNINSURED OR SELF-INSURED FROM ANY PREVIOUS COVERAGE?</p>
+                    <p className="px-1 py-1">4. WAS TAIL COVERAGE PURCHASED UNDER ANY PREVIOUS POLICY?</p>
+                  </div>
                 </div>
-                <div className="mt-3 flex items-center justify-between border-t border-slate-300 pt-2">
-                  <span className="text-[7px] text-slate-500">Generated from merged data</span>
-                  <span className="rounded-sm bg-emerald-100 px-1.5 py-0.5 text-[7px] font-bold text-emerald-700">
-                    Filled
-                  </span>
+                <div className="absolute bottom-1 left-1 right-6 h-1.5 rounded-full bg-slate-300">
+                  <div className="h-full w-[94%] rounded-full bg-slate-400" />
+                </div>
+                <div className="absolute right-1 top-3 bottom-7 w-1.5 rounded-full bg-slate-300">
+                  <div className="mt-0 h-[82%] rounded-full bg-slate-400" />
                 </div>
               </div>
               <div className="mt-3 flex items-center justify-center gap-2 text-xs font-semibold text-emerald-700">
                 <CheckCircle className="h-4 w-4" />
-                Filled PDF preview generated
+                Filled ACORD 126 preview generated
               </div>
             </motion.div>
           </div>
@@ -1585,6 +1747,164 @@ function GenerateDocumentsOverlay({
             </button>
           </div>
         </motion.div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+function IntegrationsOverlay({
+  startDelaySeconds,
+  selectDelaySeconds,
+  submitDelaySeconds,
+  completionDelaySeconds,
+}: {
+  startDelaySeconds: number
+  selectDelaySeconds: number
+  submitDelaySeconds: number
+  completionDelaySeconds: number
+}) {
+  const connections = [
+    ['Applied Epic', 'OAuth connection planned for agency account and policy workflows.'],
+    ['Vertafore AMS360', 'OAuth/API connection planned for AMS360 agency records.'],
+    ['HawkSoft', 'Connection placeholder for HawkSoft agencies.'],
+    ['EZLynx', 'Connection placeholder for EZLynx workflows.'],
+    ['Applied TAM', 'Legacy Applied TAM support placeholder.'],
+    ['QQCatalyst', 'Vertafore QQCatalyst support placeholder.'],
+  ]
+  const overlayDurationSeconds = Math.max(
+    1,
+    completionDelaySeconds - startDelaySeconds + 0.25
+  )
+
+  return (
+    <motion.div
+      className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/35"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: [0, 1, 1, 0] }}
+      transition={{
+        delay: startDelaySeconds,
+        duration: overlayDurationSeconds,
+        times: [0, 0.08, 0.88, 1],
+      }}
+    >
+      <motion.div
+        className="w-[760px] overflow-hidden rounded-lg bg-white shadow-2xl"
+        initial={{ opacity: 0, scale: 0.98, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ delay: startDelaySeconds + 0.05, duration: 0.3 }}
+      >
+        <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4">
+          <div>
+            <h4 className="text-lg font-semibold text-slate-950">Integrations</h4>
+            <p className="mt-1 max-w-[660px] text-sm text-slate-500">
+              Connect an AMS later, or send reviewed data from Redwood Custom Builders LLC to a custom webhook now.
+            </p>
+          </div>
+          <X className="h-5 w-5 text-slate-400" />
+        </div>
+        <div className="max-h-[470px] overflow-y-auto px-5 py-4">
+          <h5 className="text-sm font-semibold text-slate-950">AMS Connections</h5>
+          <p className="mt-0.5 text-xs text-slate-500">
+            OAuth-based AMS connections are planned. These tiles reserve the product flow.
+          </p>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            {connections.map(([name, description], index) => (
+              <motion.div
+                key={name}
+                className="rounded-lg border p-4"
+                initial={{
+                  borderColor: 'rgb(226,232,240)',
+                  backgroundColor: 'rgb(255,255,255)',
+                }}
+                animate={{
+                  borderColor: index === 0 ? 'rgb(37,99,235)' : 'rgb(226,232,240)',
+                  backgroundColor: index === 0 ? 'rgb(239,246,255)' : 'rgb(255,255,255)',
+                }}
+                transition={{ delay: index === 0 ? selectDelaySeconds : 0, duration: 0.24 }}
+              >
+                <div className="flex items-start gap-3">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
+                    <Building2 className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <h6 className="font-semibold text-slate-950">{name}</h6>
+                    <p className="mt-2 text-xs leading-5 text-slate-500">{description}</p>
+                    <motion.button
+                      className="mt-3 rounded-md border px-3 py-1.5 text-xs font-semibold"
+                      initial={{
+                        borderColor: 'rgb(226,232,240)',
+                        backgroundColor: 'rgb(255,255,255)',
+                        color: 'rgb(100,116,139)',
+                        scale: 1,
+                      }}
+                      animate={{
+                        borderColor: index === 0 ? 'rgb(37,99,235)' : 'rgb(226,232,240)',
+                        backgroundColor: index === 0 ? 'rgb(37,99,235)' : 'rgb(255,255,255)',
+                        color: index === 0 ? 'rgb(255,255,255)' : 'rgb(100,116,139)',
+                        scale: index === 0 ? [1, 1, 0.96, 1] : 1,
+                      }}
+                      transition={{
+                        delay: index === 0 ? selectDelaySeconds : 0,
+                        duration: index === 0 ? 0.32 : 0.18,
+                        times: index === 0 ? [0, 0.2, 0.55, 1] : undefined,
+                      }}
+                    >
+                      {index === 0 ? 'Selected' : 'Connect'}
+                    </motion.button>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center justify-between border-t border-slate-200 px-5 py-4">
+          <button className="text-sm font-medium text-slate-700">Close</button>
+          <motion.button
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white"
+            initial={{ opacity: 0.45, scale: 1 }}
+            animate={{
+              opacity: [0.45, 0.45, 1, 1],
+              scale: [1, 1, 0.95, 1],
+              backgroundColor: ['#94a3b8', '#94a3b8', '#2563eb', '#1d4ed8', '#2563eb'],
+            }}
+            transition={{
+              opacity: { delay: selectDelaySeconds, duration: 0.25 },
+              scale: { delay: submitDelaySeconds, duration: 0.32, times: [0, 0.2, 0.55, 1] },
+              backgroundColor: {
+                delay: selectDelaySeconds,
+                duration: submitDelaySeconds - selectDelaySeconds + 0.32,
+                times: [0, 0.2, 0.84, 0.92, 1],
+              },
+            }}
+          >
+            <Send className="h-4 w-4" />
+            Send Merged Data
+          </motion.button>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+function CompletionOverlay({ startDelaySeconds }: { startDelaySeconds: number }) {
+  return (
+    <motion.div
+      className="absolute inset-0 z-[60] flex items-center justify-center bg-white/90"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ delay: startDelaySeconds, duration: 0.45 }}
+    >
+      <motion.div
+        className="text-center"
+        initial={{ opacity: 0, scale: 0.88, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ delay: startDelaySeconds + 0.15, duration: 0.42, ease: 'easeOut' }}
+      >
+        <CheckCircle className="mx-auto h-28 w-28 text-emerald-500" />
+        <h4 className="mt-5 text-2xl font-bold text-slate-950">Submission sent</h4>
+        <p className="mt-2 text-sm text-slate-500">
+          Redwood renewal data was sent to Applied Epic.
+        </p>
       </motion.div>
     </motion.div>
   )

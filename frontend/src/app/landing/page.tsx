@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Upload, Zap, Download, CheckCircle, ArrowRight, Loader2 } from 'lucide-react'
 import AnimatedDemo from '@/components/landing/AnimatedDemo'
+import FieldLocatorDemo from '@/components/landing/FieldLocatorDemo'
 import LandingUploadPanel from '@/components/landing/LandingUploadPanel'
 import AuthPromptModal from '@/components/auth/AuthPromptModal'
 import { useAuth } from '@/contexts/AuthContext'
@@ -390,6 +391,8 @@ export default function LandingPage() {
             />
           </div>
         </section>
+
+        <FieldLocatorDemo />
 
         {/* HOW IT WORKS */}
         <section id="how-it-works" className="bg-white py-14 sm:py-20">

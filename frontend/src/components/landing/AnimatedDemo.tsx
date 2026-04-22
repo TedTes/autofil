@@ -14,6 +14,7 @@ import {
   CheckCircle,
   ChevronDown,
   ChevronRight,
+  Cog,
   FileText,
   Folder,
   Layers3,
@@ -23,7 +24,6 @@ import {
   Download,
   Plus,
   RefreshCcw,
-  RotateCcw,
   Search,
   Send,
   Trash2,
@@ -288,19 +288,6 @@ const MOCK_DOCUMENTS: MockDocument[] = [
   })),
 ]
 
-const MOCK_EXTRACTED_DATA: MockExtractedData = {
-  insuredName: 'Redwood Custom Builders LLC',
-  policyNumber: 'PKG-TEST-2026-001',
-  effectiveDate: '2026-05-01',
-  deductibles: ['5,000 PD', '5,000 BI', '10,000 Aggregate'],
-  grossSales: ['1,250,000 Revenue', '850,000 Payroll'],
-  lineOfBusiness:
-    'Residential remodeling, finish carpentry, and light commercial tenant improvements.',
-  mailingAddress: '425 Market Street, San Francisco, CA 94105',
-  producerName: 'Northstar Risk Partners',
-  confidence: 98,
-}
-
 export default function AnimatedDemo({
   onPrimaryCta,
   onSecondaryCta,
@@ -468,26 +455,6 @@ export default function AnimatedDemo({
   )
 }
 
-function getStageForStatus(
-  status: MockDocument['status'],
-  currentScene: ProcessingScene
-): ProcessingScene {
-  if (status === 'completed') return 'export'
-  if (status === 'processing') return 'process'
-  if (status === 'extracted') {
-    if (
-      currentScene === 'review' ||
-      currentScene === 'process' ||
-      currentScene === 'export'
-    ) {
-      return 'review'
-    }
-    return 'extract'
-  }
-  if (status === 'extracting') return 'extract'
-  return 'upload'
-}
-
 function updateProcessingDocuments(
   scene: ProcessingScene,
   progress: number,
@@ -511,13 +478,31 @@ function updateProcessingDocuments(
   })
 }
 
+function getStageForStatus(
+  status: MockDocument['status'],
+  currentScene: ProcessingScene
+): ProcessingScene {
+  if (status === 'completed') return 'export'
+  if (status === 'processing') return 'process'
+  if (status === 'extracted') {
+    if (
+      currentScene === 'review' ||
+      currentScene === 'process' ||
+      currentScene === 'export'
+    ) {
+      return 'review'
+    }
+    return 'extract'
+  }
+  if (status === 'extracting') return 'extract'
+  return 'upload'
+}
+
 function LegacyProcessingDemo() {
   const prefersReducedMotion = useReducedMotion()
   const [currentScene, setCurrentScene] = useState<ProcessingScene>('upload')
   const [sceneProgress, setSceneProgress] = useState(0)
   const [documents, setDocuments] = useState<MockDocument[]>(MOCK_DOCUMENTS)
-  const [extractedData, setExtractedData] = useState<MockExtractedData | null>(null)
-  const [animationKey, setAnimationKey] = useState(0)
 
   useEffect(() => {
     if (prefersReducedMotion) return
@@ -537,10 +522,6 @@ function LegacyProcessingDemo() {
         updateProcessingDocuments(scenes[currentIndex], progress, prev)
       )
 
-      if (scenes[currentIndex] === 'extract' && progress > 0.3) {
-        setExtractedData(MOCK_EXTRACTED_DATA)
-      }
-
       if (progress >= 1) {
         currentIndex = (currentIndex + 1) % scenes.length
 
@@ -550,7 +531,6 @@ function LegacyProcessingDemo() {
           setDocuments(
             MOCK_DOCUMENTS.map((doc) => ({ ...doc, status: 'uploading', progress: 0 }))
           )
-          setExtractedData(null)
         } else {
           setCurrentScene(scenes[currentIndex])
           setSceneProgress(0)
@@ -564,146 +544,135 @@ function LegacyProcessingDemo() {
 
     animationFrame = window.requestAnimationFrame(animate)
     return () => window.cancelAnimationFrame(animationFrame)
-  }, [animationKey, currentScene, prefersReducedMotion])
-
-  const scenes: Array<{
-    id: ProcessingScene
-    label: string
-    icon: ComponentType<{ className?: string }>
-  }> = [
-    { id: 'upload', label: 'Upload', icon: Upload },
-    { id: 'extract', label: 'Extract', icon: FileText },
-    { id: 'review', label: 'Review', icon: Pencil },
-    { id: 'process', label: 'Auto-Fill', icon: CheckCircle },
-    { id: 'export', label: 'Export', icon: Download },
-  ]
-
-  const currentSceneIndex = scenes.findIndex((scene) => scene.id === currentScene)
-
-  const restart = () => {
-    setAnimationKey((prev) => prev + 1)
-    setCurrentScene('upload')
-    setSceneProgress(0)
-    setDocuments(MOCK_DOCUMENTS.map((doc) => ({ ...doc, status: 'uploading', progress: 0 })))
-    setExtractedData(null)
-  }
-
-  const jumpToScene = (scene: ProcessingScene) => {
-    setAnimationKey((prev) => prev + 1)
-    setCurrentScene(scene)
-    setSceneProgress(0)
-  }
+  }, [currentScene, prefersReducedMotion])
 
   return (
-    <div className="mt-10 overflow-hidden rounded-none border-y border-slate-200 bg-white shadow-2xl shadow-slate-200/60 sm:mt-12 sm:rounded-lg sm:border">
-      <div className="border-b border-slate-200 bg-slate-50 px-4 py-5 sm:px-6">
-        <h3 className="text-xl font-bold text-slate-950 sm:text-2xl">Document Processing Flow</h3>
-        <p className="mt-2 max-w-2xl text-sm text-slate-600">
-          The original pipeline demo: upload, extract, review, auto-fill, and export.
-        </p>
-      </div>
+    <div className="mt-10 sm:mt-12">
+      <div className="px-2 py-4 sm:px-4 sm:py-6">
+        <div className="flex justify-center overflow-visible pb-2">
+          <div className="relative h-[140px] w-full max-w-[1040px] min-[420px]:h-[170px] sm:h-[255px] md:h-[315px] lg:h-[410px] xl:h-[468px]">
+          <div className="absolute left-1/2 top-0 w-[1040px] origin-top -translate-x-1/2 scale-[0.29] p-6 min-[420px]:scale-[0.36] sm:scale-[0.54] md:scale-[0.66] lg:scale-[0.88] xl:scale-100">
+            <div className="relative h-[420px]">
+              <svg className="absolute inset-0 h-full w-full" viewBox="0 0 1040 420" aria-hidden="true">
+                {[
+                  'M118 210 C180 210 180 120 245 120',
+                  'M118 210 C180 210 180 300 245 300',
+                  'M355 120 C415 120 415 160 475 160',
+                  'M355 300 C415 300 415 260 475 260',
+                  'M555 210 C615 210 615 120 690 120',
+                  'M555 210 C615 210 615 210 690 210',
+                  'M555 210 C615 210 615 300 690 300',
+                  'M800 120 C850 120 850 80 900 80',
+                  'M800 120 C850 120 850 120 900 120',
+                  'M800 210 C850 210 850 210 900 210',
+                  'M800 300 C850 300 850 300 900 300',
+                  'M800 300 C850 300 850 340 900 340',
+                ].map((path) => (
+                  <motion.path
+                    key={path}
+                    d={path}
+                    fill="none"
+                    stroke="#94a3b8"
+                    strokeWidth="1.5"
+                    strokeDasharray="5 8"
+                    strokeLinecap="round"
+                    animate={{ strokeDashoffset: [0, -26] }}
+                    transition={{ duration: 2.2, repeat: Infinity, ease: 'linear' }}
+                  />
+                ))}
+              </svg>
 
-      <div className="border-b border-slate-200 bg-slate-50 px-4 py-4 sm:px-6">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-          {scenes.map((scene, index) => {
-            const Icon = scene.icon
-            const isActive = currentScene === scene.id
-            const isCompleted = index < currentSceneIndex
+              <FlowNode className="left-[20px] top-[180px] bg-slate-950 text-white" label="Submission" sublabel={`${documents.length} files`} />
+              <FlowNode className="left-[245px] top-[92px] bg-blue-100 text-blue-900" label="ACORD PDFs" sublabel="extracted" />
+              <FlowNode className="left-[245px] top-[272px] bg-blue-100 text-blue-900" label="CSV Schedules" sublabel="SOV, P&L, losses" />
 
-            return (
-              <div key={scene.id} className="flex min-w-0 items-center">
-                <button
-                  type="button"
-                  onClick={() => jumpToScene(scene.id)}
-                  className="flex w-full flex-col items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-2 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0"
-                >
+              <div className="absolute left-[455px] top-[145px] z-10 w-[120px] rounded-lg border border-blue-200 bg-white p-3 text-center shadow-sm">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-blue-600 text-white">
                   <motion.div
-                    animate={{
-                      scale: isActive ? 1.1 : 1,
-                      opacity: isActive ? 1 : 0.6,
-                    }}
-                    whileHover={{ scale: 1.15, opacity: 1 }}
-                    transition={{ duration: 0.2 }}
-                    className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${
-                      isCompleted
-                        ? 'bg-emerald-500 text-white'
-                        : isActive
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-slate-300 text-slate-700'
-                    }`}
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 2.2, repeat: Infinity, ease: 'linear' }}
                   >
-                    <Icon className="h-5 w-5" />
+                    <Cog className="h-7 w-7" />
                   </motion.div>
-                  <span className={`text-xs font-medium ${isActive ? 'text-slate-900' : 'text-slate-500'}`}>
-                    {scene.label}
-                  </span>
-                </button>
-                {index < scenes.length - 1 && (
-                  <div className="mx-2 hidden h-1 flex-1 overflow-hidden rounded-full bg-slate-200 sm:block">
-                    <motion.div
-                      className={`h-full ${
-                        isCompleted
-                          ? 'bg-emerald-500'
-                          : isActive
-                            ? 'bg-blue-600'
-                            : 'bg-slate-200'
-                      }`}
-                      initial={{ width: '0%' }}
-                      animate={{
-                        width: isCompleted
-                          ? '100%'
-                          : isActive
-                            ? `${sceneProgress * 100}%`
-                            : '0%',
-                      }}
-                      transition={{ duration: 0.3 }}
-                    />
-                  </div>
-                )}
+                  <motion.div
+                    className="-ml-2 mt-4"
+                    animate={{ rotate: -360 }}
+                    transition={{ duration: 1.65, repeat: Infinity, ease: 'linear' }}
+                  >
+                    <Cog className="h-4 w-4" />
+                  </motion.div>
+                </div>
+                <p className="mt-2 text-sm font-semibold text-slate-950">AutoFil Engine</p>
+                <p className="mt-1 text-[11px] text-slate-500">extract, normalize, merge</p>
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                  <motion.div
+                    className="h-full rounded-full bg-blue-600"
+                    animate={{ width: `${Math.round(sceneProgress * 100)}%` }}
+                    transition={{ duration: 0.25 }}
+                  />
+                </div>
               </div>
-            )
-          })}
+
+              <FlowNode className="left-[690px] top-[92px] bg-indigo-100 text-indigo-950" label="Reviewed Data" sublabel="Primary values" />
+              <FlowNode className="left-[690px] top-[182px] bg-indigo-100 text-indigo-950" label="Source Links" sublabel="PDF pages" />
+              <FlowNode className="left-[690px] top-[272px] bg-indigo-100 text-indigo-950" label="Rules Check" sublabel="confidence" />
+
+              <FlowNode className="left-[900px] top-[56px] bg-emerald-100 text-emerald-950" label="ACORD 126" sublabel="filled PDF" compact />
+              <FlowNode className="left-[900px] top-[100px] bg-emerald-100 text-emerald-950" label="ACORD 140" sublabel="property" compact />
+              <FlowNode className="left-[900px] top-[190px] bg-emerald-100 text-emerald-950" label="AMS Send" sublabel="Applied Epic" compact />
+              <FlowNode className="left-[900px] top-[280px] bg-emerald-100 text-emerald-950" label="Download" sublabel="package" compact />
+              <FlowNode className="left-[900px] top-[324px] bg-emerald-100 text-emerald-950" label="Audit Trail" sublabel="sources" compact />
+
+              {[
+                { x: ['10%', '24%', '43%'], y: ['51%', '29%', '39%'], delay: 0 },
+                { x: ['10%', '24%', '43%'], y: ['51%', '71%', '61%'], delay: 1.25 },
+                { x: ['58%', '70%', '93%'], y: ['43%', '29%', '19%'], delay: 0.9 },
+                { x: ['58%', '70%', '93%'], y: ['50%', '50%', '50%'], delay: 2.15 },
+                { x: ['58%', '70%', '93%'], y: ['57%', '72%', '78%'], delay: 3.4 },
+              ].map((packet) => (
+                <motion.div
+                  key={`${packet.delay}`}
+                  className="absolute z-20 h-3 w-3 rounded-full bg-blue-600 shadow-lg shadow-blue-600/30"
+                  animate={{ left: packet.x, top: packet.y, opacity: [0, 1, 1, 0] }}
+                  transition={{
+                    delay: packet.delay,
+                    duration: 2.4,
+                    repeat: Infinity,
+                    ease: 'easeInOut',
+                    times: [0, 0.12, 0.88, 1],
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+          </div>
         </div>
       </div>
-
-      <LegacyDocumentPipelineRail documents={documents} currentScene={currentScene} />
-
-      <div className="min-h-[360px] bg-slate-50 p-4 sm:min-h-[460px] sm:p-8">
-        {currentScene === 'upload' && (
-          <LegacyUploadScene documents={documents} progress={sceneProgress} />
-        )}
-        {currentScene === 'extract' && (
-          <LegacyExtractScene
-            documents={documents}
-            extractedData={extractedData}
-            progress={sceneProgress}
-          />
-        )}
-        {currentScene === 'review' && (
-          <LegacyReviewScene extractedData={extractedData} progress={sceneProgress} />
-        )}
-        {currentScene === 'process' && (
-          <LegacyProcessScene documents={documents} progress={sceneProgress} />
-        )}
-        {currentScene === 'export' && (
-          <LegacyExportScene documents={documents} progress={sceneProgress} />
-        )}
-      </div>
-
-      <div className="flex flex-col gap-4 border-t border-slate-200 bg-slate-50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-        <p className="text-xs text-slate-500">
-          Demo only — real app integrates with your AMS, carrier portals, and email workflows.
-        </p>
-        <button
-          type="button"
-          onClick={restart}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
-        >
-          <RotateCcw className="h-4 w-4" />
-          Replay demo
-        </button>
-      </div>
     </div>
+  )
+}
+
+function FlowNode({
+  label,
+  sublabel,
+  className,
+  compact = false,
+}: {
+  label: string
+  sublabel: string
+  className: string
+  compact?: boolean
+}) {
+  return (
+    <motion.div
+      className={`absolute z-10 rounded-lg px-3 py-2 text-center shadow-sm ${compact ? 'w-[92px]' : 'w-[110px]'} ${className}`}
+      whileHover={{ scale: 1.04 }}
+      animate={{ y: [0, -2, 0] }}
+      transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+    >
+      <p className="truncate text-xs font-bold">{label}</p>
+      <p className="mt-1 truncate text-[10px] opacity-75">{sublabel}</p>
+    </motion.div>
   )
 }
 

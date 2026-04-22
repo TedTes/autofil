@@ -267,7 +267,7 @@ export default function LandingPage() {
 
       {/* HEADER */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4 lg:px-8">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center">
               <svg
@@ -293,7 +293,7 @@ export default function LandingPage() {
           <button
             onClick={() => handleGetStarted('start your workspace')}
             disabled={isCtaPending('start your workspace')}
-            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-all shadow-sm hover:shadow-md disabled:cursor-wait disabled:bg-blue-500"
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow-md disabled:cursor-wait disabled:bg-blue-500 sm:px-5 sm:py-2.5"
           >
             {isCtaPending('start your workspace') && <Loader2 className="h-4 w-4 animate-spin" />}
             Get Started
@@ -303,9 +303,9 @@ export default function LandingPage() {
 
       <main>
         {/* HERO SECTION */}
-        <section className="relative bg-gradient-to-b from-blue-50 via-white to-white py-20 sm:py-28">
+        <section className="relative bg-gradient-to-b from-blue-50 via-white to-white py-16 sm:py-24 lg:py-28">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center max-w-4xl mx-auto mb-16">
+            <div className="mx-auto mb-12 max-w-4xl text-center sm:mb-16">
               <div className="inline-flex items-center gap-2 rounded-full bg-blue-100 px-4 py-1.5 text-sm font-medium text-blue-700 mb-6">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
@@ -314,19 +314,19 @@ export default function LandingPage() {
                 Built for Insurance Teams
               </div>
 
-              <h2 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 mb-6 leading-tight">
+              <h2 className="mb-5 text-3xl font-bold leading-tight text-gray-900 sm:mb-6 sm:text-5xl lg:text-6xl">
                 Automate Insurance Document Submission Flow
               </h2>
               
-              <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
+              <p className="mx-auto mb-8 max-w-3xl text-base text-gray-600 sm:text-xl">
                 Upload client forms, policies, or templates — AutoFil extracts structured data and generates ready-to-send filled outputs in seconds.
               </p>
 
-              <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
+              <div className="mb-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center sm:gap-4">
                 <button
                   onClick={() => handleGetStarted('start using AutoFil')}
                   disabled={isCtaPending('start using AutoFil')}
-                  className="inline-flex items-center gap-2 px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105 disabled:cursor-wait disabled:bg-blue-500 disabled:transform-none"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3.5 text-base font-semibold text-white shadow-lg transition-all hover:bg-blue-700 hover:shadow-xl disabled:cursor-wait disabled:bg-blue-500 sm:px-8 sm:py-4 sm:text-lg"
                 >
                   {isCtaPending('start using AutoFil') && <Loader2 className="h-5 w-5 animate-spin" />}
                   Try AutoFil Free
@@ -337,7 +337,7 @@ export default function LandingPage() {
                     const el = document.getElementById('demo-section')
                     if (el) el.scrollIntoView({ behavior: 'smooth' })
                   }}
-                  className="inline-flex items-center gap-2 px-8 py-4 bg-white hover:bg-gray-50 text-gray-900 text-lg font-semibold rounded-xl border-2 border-gray-200 transition-all"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border-2 border-gray-200 bg-white px-6 py-3.5 text-base font-semibold text-gray-900 transition-all hover:bg-gray-50 sm:px-8 sm:py-4 sm:text-lg"
                 >
                   Watch Demo
                 </button>
@@ -349,15 +349,15 @@ export default function LandingPage() {
             </div>
 
             {/* Value Props Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-5xl mx-auto mb-16">
+            <div className="mx-auto mb-12 grid max-w-5xl grid-cols-1 gap-4 min-[420px]:grid-cols-2 md:mb-16 md:grid-cols-4 md:gap-6">
               {[
                 { label: 'Hours saved per submission', value: '2-4h' },
                 { label: 'Accuracy rate', value: '98%+' },
                 { label: 'Processing speed', value: '<60s' },
                 { label: 'Supported formats', value: '10+' },
               ].map((stat, i) => (
-                <div key={i} className="bg-white rounded-xl p-6 text-center border border-gray-200 shadow-sm">
-                  <div className="text-3xl font-bold text-blue-600 mb-2">{stat.value}</div>
+                <div key={i} className="rounded-xl border border-gray-200 bg-white p-5 text-center shadow-sm sm:p-6">
+                  <div className="mb-2 text-2xl font-bold text-blue-600 sm:text-3xl">{stat.value}</div>
                   <div className="text-sm text-gray-600">{stat.label}</div>
                 </div>
               ))}
@@ -382,8 +382,8 @@ export default function LandingPage() {
         />
 
         {/* ANIMATED DEMO SECTION */}
-        <section id="demo-section" className="py-20 bg-gray-50">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <section id="demo-section" className="overflow-hidden bg-gray-50 py-14 sm:py-20">
+          <div className="mx-auto max-w-7xl sm:px-6 lg:px-8">
             <AnimatedDemo
               onPrimaryCta={() => handleGetStarted('download a carrier package')}
               onSecondaryCta={() => handleGetStarted('open the submission workspace')}
@@ -392,19 +392,19 @@ export default function LandingPage() {
         </section>
 
         {/* HOW IT WORKS */}
-        <section id="how-it-works" className="py-20 bg-white">
+        <section id="how-it-works" className="bg-white py-14 sm:py-20">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-16">
+            <div className="mb-12 text-center sm:mb-16">
               <h3 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">How It Works</h3>
-              <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+              <p className="mx-auto max-w-2xl text-base text-gray-600 sm:text-xl">
                 Three simple steps to automate your insurance document workflow
               </p>
             </div>
 
-            <div className="grid md:grid-cols-3 gap-8">
+            <div className="grid gap-6 md:grid-cols-3 md:gap-8">
               {/* Step 1 */}
               <div className="relative">
-                <div className="bg-white border-2 border-gray-200 rounded-2xl p-8 hover:border-blue-300 hover:shadow-lg transition-all h-full">
+                <div className="h-full rounded-2xl border-2 border-gray-200 bg-white p-6 transition-all hover:border-blue-300 hover:shadow-lg sm:p-8">
                   <div className="absolute -top-4 -left-4 w-12 h-12 bg-blue-600 text-white rounded-xl flex items-center justify-center text-xl font-bold shadow-lg">
                     1
                   </div>
@@ -454,16 +454,16 @@ export default function LandingPage() {
         </section>
 
         {/* FEATURES */}
-        <section className="py-20 bg-gray-50">
+        <section className="bg-gray-50 py-14 sm:py-20">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-16">
+            <div className="mb-12 text-center sm:mb-16">
               <h3 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">Powerful Features</h3>
-              <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+              <p className="mx-auto max-w-2xl text-base text-gray-600 sm:text-xl">
                 Everything you need to streamline insurance document processing
               </p>
             </div>
 
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid gap-4 md:grid-cols-2 md:gap-6 lg:grid-cols-3">
               {[
                 {
                   icon: '📄',
@@ -510,19 +510,19 @@ export default function LandingPage() {
         </section>
 
         {/* USE CASES */}
-        <section className="py-20 bg-white">
+        <section className="bg-white py-14 sm:py-20">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-16">
+            <div className="mb-12 text-center sm:mb-16">
               <h3 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
                 Built for Insurance Workflows
               </h3>
-              <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+              <p className="mx-auto max-w-2xl text-base text-gray-600 sm:text-xl">
                 Trusted by brokers, underwriters, and agencies for document-heavy tasks
               </p>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
-              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-8">
+            <div className="mx-auto grid max-w-5xl gap-6 md:grid-cols-2 md:gap-8">
+              <div className="rounded-2xl bg-gradient-to-br from-blue-50 to-blue-100 p-6 sm:p-8">
                 <h4 className="text-2xl font-bold mb-4 text-gray-900">For Brokers</h4>
                 <ul className="space-y-3">
                   {[
@@ -539,7 +539,7 @@ export default function LandingPage() {
                 </ul>
               </div>
 
-              <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-8">
+              <div className="rounded-2xl bg-gradient-to-br from-purple-50 to-purple-100 p-6 sm:p-8">
                 <h4 className="text-2xl font-bold mb-4 text-gray-900">For Agencies</h4>
                 <ul className="space-y-3">
                   {[
@@ -560,19 +560,19 @@ export default function LandingPage() {
         </section>
 
         {/* CTA */}
-        <section className="py-20 bg-gradient-to-r from-blue-600 to-blue-700">
+        <section className="bg-gradient-to-r from-blue-600 to-blue-700 py-14 sm:py-20">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
             <h3 className="text-3xl sm:text-4xl font-bold text-white mb-4">
               Ready to Save Hours Every Week?
             </h3>
-            <p className="text-xl text-blue-100 mb-8">
+            <p className="mb-8 text-base text-blue-100 sm:text-xl">
               Join insurance professionals who have automated their document workflows with AutoFil.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <div className="flex flex-col justify-center gap-3 sm:flex-row sm:gap-4">
               <button
                 onClick={() => handleGetStarted('start your free trial')}
                 disabled={isCtaPending('start your free trial')}
-                className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white text-blue-700 text-lg font-semibold rounded-xl hover:bg-gray-50 shadow-xl transition-all transform hover:scale-105 disabled:cursor-wait disabled:bg-blue-50 disabled:transform-none"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-6 py-3.5 text-base font-semibold text-blue-700 shadow-xl transition-all hover:bg-gray-50 disabled:cursor-wait disabled:bg-blue-50 sm:px-8 sm:py-4 sm:text-lg"
               >
                 {isCtaPending('start your free trial') && <Loader2 className="h-5 w-5 animate-spin" />}
                 Start Free Trial
@@ -583,7 +583,7 @@ export default function LandingPage() {
                   const el = document.getElementById('demo-section')
                   if (el) el.scrollIntoView({ behavior: 'smooth' })
                 }}
-                className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-blue-800 text-white text-lg font-semibold rounded-xl hover:bg-blue-900 border-2 border-blue-500 transition-all"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border-2 border-blue-500 bg-blue-800 px-6 py-3.5 text-base font-semibold text-white transition-all hover:bg-blue-900 sm:px-8 sm:py-4 sm:text-lg"
               >
                 Watch Demo
               </button>

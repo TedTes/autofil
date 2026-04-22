@@ -160,9 +160,9 @@ export default function LandingUploadPanel({
   }
 
   return (
-    <section className="relative -mt-10 pb-20">
+    <section className="relative -mt-8 pb-14 sm:-mt-10 sm:pb-20">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="relative overflow-hidden rounded-[24px] border border-blue-100 bg-white shadow-[0_24px_64px_-24px_rgba(37,99,235,0.28)]">
+        <div className="relative overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-[0_24px_64px_-24px_rgba(37,99,235,0.28)] sm:rounded-[24px]">
           {/* Top accent line */}
           <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-blue-500 via-sky-400 to-emerald-400" />
 
@@ -193,7 +193,7 @@ export default function LandingUploadPanel({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.18 }}
-                className="p-6 sm:p-8"
+                className="p-4 sm:p-8"
               >
                 <div className="mb-6">
                   <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-blue-700 mb-3">
@@ -215,7 +215,7 @@ export default function LandingUploadPanel({
                   onDragLeave={() => setIsDragging(false)}
                   onDrop={(e) => { e.preventDefault(); setIsDragging(false); handleFiles(e.dataTransfer.files) }}
                   onClick={() => inputRef.current?.click()}
-                  className="group cursor-pointer rounded-2xl border-2 border-dashed py-14 px-8"
+                  className="group cursor-pointer rounded-2xl border-2 border-dashed px-4 py-10 sm:px-8 sm:py-14"
                 >
                   <div className="flex flex-col items-center text-center">
                     <motion.div
@@ -235,7 +235,7 @@ export default function LandingUploadPanel({
                       <Upload className="h-4 w-4" />
                       Browse files
                     </div>
-                    <div className="mt-5 flex items-center gap-4 text-xs text-gray-400">
+                    <div className="mt-5 flex flex-wrap items-center justify-center gap-3 text-xs text-gray-400 sm:gap-4">
                       {['PDF', 'Excel', 'CSV'].map((fmt) => (
                         <span key={fmt} className="flex items-center gap-1">
                           <span className="h-1 w-1 rounded-full bg-gray-300" />
@@ -266,10 +266,10 @@ export default function LandingUploadPanel({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.18 }}
-                className="p-6 sm:p-8"
+                className="p-4 sm:p-8"
               >
                 <div className="flex flex-col gap-5">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">
                         Staged locally
@@ -299,12 +299,12 @@ export default function LandingUploadPanel({
                           transition={{ duration: 0.15 }}
                           className="overflow-hidden"
                         >
-                          <div className="group/row flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 hover:border-gray-200 hover:bg-white transition-colors">
+                          <div className="group/row flex items-center gap-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 transition-colors hover:border-gray-200 hover:bg-white sm:gap-3">
                             <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-white shadow-sm ring-1 ring-gray-100">
                               {getFileIcon(file)}
                             </div>
                             <p className="flex-1 truncate text-sm font-medium text-gray-800">{file.name}</p>
-                            <span className="flex-shrink-0 text-xs text-gray-400 tabular-nums">
+                            <span className="hidden flex-shrink-0 text-xs tabular-nums text-gray-400 min-[420px]:inline">
                               {formatFileSize(file.size)}
                             </span>
                             <button
@@ -472,22 +472,22 @@ export default function LandingUploadPanel({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[65] flex items-center justify-center bg-slate-950/40 px-4 py-6 backdrop-blur-sm"
+            className="fixed inset-0 z-[65] flex items-center justify-center bg-slate-950/40 px-3 py-4 backdrop-blur-sm sm:px-4 sm:py-6"
           >
             <motion.div
               initial={{ opacity: 0, y: 16, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 8, scale: 0.98 }}
               transition={{ duration: 0.18 }}
-              className="w-full max-w-3xl overflow-hidden rounded-[28px] border border-blue-100 bg-white shadow-[0_40px_120px_-40px_rgba(15,23,42,0.55)]"
+              className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-[0_40px_120px_-40px_rgba(15,23,42,0.55)] sm:rounded-[28px]"
             >
-              <div className="border-b border-gray-100 px-6 py-5 sm:px-8">
+              <div className="border-b border-gray-100 px-4 py-4 sm:px-8 sm:py-5">
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">
                       Extraction preview
                     </p>
-                    <h3 className="mt-2 truncate text-2xl font-bold text-gray-900">
+                    <h3 className="mt-2 truncate text-lg font-bold text-gray-900 sm:text-2xl">
                       {previewFile?.name || 'Previewing your document'}
                     </h3>
                     {(previewMeta?.formType || previewMeta?.lineOfBusiness) && (
@@ -505,7 +505,7 @@ export default function LandingUploadPanel({
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex shrink-0 items-center gap-2 sm:gap-3">
                     {previewResult?.confidence !== undefined && !isPreviewLoading && !previewError && (
                       <div className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
                         {Math.round(previewResult.confidence * 100)}% confidence
@@ -523,7 +523,7 @@ export default function LandingUploadPanel({
                 </div>
               </div>
 
-              <div className="px-6 py-6 sm:px-8">
+              <div className="overflow-y-auto px-4 py-5 sm:px-8 sm:py-6">
                 {isPreviewLoading ? (
                   <div className="flex min-h-[220px] items-center justify-center rounded-2xl border border-gray-100 bg-gray-50">
                     <div className="w-full max-w-lg px-6">

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AnimatePresence,
   LayoutGroup,
@@ -247,6 +247,8 @@ const SUBMISSION_PACKAGE_FILES: DemoUploadFile[] = [
 ]
 
 const CREATED_SUBMISSION_NAME = 'Redwood renewal'
+const APP_FRAME_WIDTH = 1120
+const APP_FRAME_HEIGHT = 630
 
 const MOCK_DOCUMENTS: MockDocument[] = [
   ...SUBMISSION_PACKAGE_FILES.map(([filename], index) => ({
@@ -319,18 +321,18 @@ export default function AnimatedDemo({
   }, [scene])
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-12">
-      <div className="mb-10 text-center">
-        <h2 className="text-3xl font-bold text-slate-950 sm:text-4xl">
+    <div className="mx-auto w-full max-w-6xl px-0 py-10 sm:px-4 sm:py-12">
+      <div className="mb-8 px-4 text-center sm:mb-10 sm:px-0">
+        <h2 className="text-2xl font-bold text-slate-950 sm:text-4xl">
           See AutoFil in Action
         </h2>
-        <p className="mx-auto mt-3 max-w-2xl text-lg text-slate-600">
+        <p className="mx-auto mt-3 max-w-2xl text-base text-slate-600 sm:text-lg">
           A real submission workflow, recreated from the product screens: workspace setup, submission creation, and document intake.
         </p>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl shadow-slate-200/70">
-        <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
+      <div className="overflow-hidden rounded-none border-y border-slate-200 bg-white shadow-2xl shadow-slate-200/70 sm:rounded-lg sm:border">
+        <div className="border-b border-slate-200 bg-slate-50 px-4 py-4 sm:px-5">
           <div className="flex flex-wrap items-center gap-3">
             {steps.map((step, index) => {
               const Icon = step.icon
@@ -376,17 +378,17 @@ export default function AnimatedDemo({
           </div>
         </div>
 
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 sm:px-5">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
               Current step
             </p>
-            <h3 className="text-lg font-semibold text-slate-950">{activeTitle}</h3>
+            <h3 className="text-base font-semibold text-slate-950 sm:text-lg">{activeTitle}</h3>
           </div>
           <button
             type="button"
             onClick={restart}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+            className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
           >
             <RefreshCcw className="h-4 w-4" />
             Replay
@@ -400,7 +402,7 @@ export default function AnimatedDemo({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
             transition={{ duration: 0.25 }}
-            className="bg-slate-100 p-4 sm:p-6"
+            className="bg-slate-100 p-0 sm:p-4 lg:p-6"
           >
             <AppFrame>
               {scene === 'account' && <AccountScene />}
@@ -409,11 +411,11 @@ export default function AnimatedDemo({
           </motion.div>
         </AnimatePresence>
 
-        <div className="flex flex-col gap-3 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-t border-slate-200 bg-white px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
           <p className="text-sm text-slate-500">
             The animation loops through account setup, submission creation, and document intake.
           </p>
-          <div className="flex gap-3">
+          <div className="flex flex-col gap-3 min-[420px]:flex-row">
             <button
               type="button"
               onClick={onSecondaryCta}
@@ -564,27 +566,27 @@ function LegacyProcessingDemo() {
   }
 
   return (
-    <div className="mt-12 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl shadow-slate-200/60">
-      <div className="border-b border-slate-200 bg-slate-50 px-6 py-5">
-        <h3 className="text-2xl font-bold text-slate-950">Document Processing Flow</h3>
+    <div className="mt-10 overflow-hidden rounded-none border-y border-slate-200 bg-white shadow-2xl shadow-slate-200/60 sm:mt-12 sm:rounded-lg sm:border">
+      <div className="border-b border-slate-200 bg-slate-50 px-4 py-5 sm:px-6">
+        <h3 className="text-xl font-bold text-slate-950 sm:text-2xl">Document Processing Flow</h3>
         <p className="mt-2 max-w-2xl text-sm text-slate-600">
           The original pipeline demo: upload, extract, review, auto-fill, and export.
         </p>
       </div>
 
-      <div className="bg-slate-50 border-b border-slate-200 px-6 py-4">
-        <div className="flex items-center justify-between">
+      <div className="border-b border-slate-200 bg-slate-50 px-4 py-4 sm:px-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           {scenes.map((scene, index) => {
             const Icon = scene.icon
             const isActive = currentScene === scene.id
             const isCompleted = index < currentSceneIndex
 
             return (
-              <div key={scene.id} className="flex flex-1 items-center">
+              <div key={scene.id} className="flex min-w-0 items-center">
                 <button
                   type="button"
                   onClick={() => jumpToScene(scene.id)}
-                  className="flex flex-col items-center gap-2"
+                  className="flex w-full flex-col items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-2 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0"
                 >
                   <motion.div
                     animate={{
@@ -608,7 +610,7 @@ function LegacyProcessingDemo() {
                   </span>
                 </button>
                 {index < scenes.length - 1 && (
-                  <div className="mx-2 h-1 flex-1 overflow-hidden rounded-full bg-slate-200">
+                  <div className="mx-2 hidden h-1 flex-1 overflow-hidden rounded-full bg-slate-200 sm:block">
                     <motion.div
                       className={`h-full ${
                         isCompleted
@@ -637,7 +639,7 @@ function LegacyProcessingDemo() {
 
       <LegacyDocumentPipelineRail documents={documents} currentScene={currentScene} />
 
-      <div className="min-h-[460px] bg-slate-50 p-8">
+      <div className="min-h-[360px] bg-slate-50 p-4 sm:min-h-[460px] sm:p-8">
         {currentScene === 'upload' && (
           <LegacyUploadScene documents={documents} progress={sceneProgress} />
         )}
@@ -659,7 +661,7 @@ function LegacyProcessingDemo() {
         )}
       </div>
 
-      <div className="flex items-center justify-between gap-4 border-t border-slate-200 bg-slate-50 px-6 py-4">
+      <div className="flex flex-col gap-4 border-t border-slate-200 bg-slate-50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <p className="text-xs text-slate-500">
           Demo only — real app integrates with your AMS, carrier portals, and email workflows.
         </p>
@@ -677,25 +679,58 @@ function LegacyProcessingDemo() {
 }
 
 function AppFrame({ children }: { children: React.ReactNode }) {
+  const frameShellRef = useRef<HTMLDivElement>(null)
+  const [scale, setScale] = useState(1)
+
+  useEffect(() => {
+    const frameShell = frameShellRef.current
+    if (!frameShell) return
+
+    const updateScale = () => {
+      const availableWidth = frameShell.clientWidth
+      const nextScale = Math.min(1, availableWidth / APP_FRAME_WIDTH)
+      setScale(Number.isFinite(nextScale) && nextScale > 0 ? nextScale : 1)
+    }
+
+    updateScale()
+    const observer = new ResizeObserver(updateScale)
+    observer.observe(frameShell)
+    window.addEventListener('orientationchange', updateScale)
+
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('orientationchange', updateScale)
+    }
+  }, [])
+
   return (
-    <div className="relative mx-auto aspect-[16/9] min-h-[520px] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-      <aside className="absolute inset-y-0 left-0 w-[72px] border-r border-slate-200 bg-white">
-        <div className="flex h-full flex-col items-center gap-4 py-4">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white">
-            <BarChart3 className="h-4 w-4" />
+    <div
+      ref={frameShellRef}
+      className="relative w-full overflow-hidden"
+      style={{ height: APP_FRAME_HEIGHT * scale }}
+    >
+      <div
+        className="absolute left-1/2 top-0 h-[630px] w-[1120px] origin-top overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
+        style={{ transform: `translateX(-50%) scale(${scale})` }}
+      >
+        <aside className="absolute inset-y-0 left-0 w-[72px] border-r border-slate-200 bg-white">
+          <div className="flex h-full flex-col items-center gap-4 py-4">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white">
+              <BarChart3 className="h-4 w-4" />
+            </div>
+            <span className="text-[10px] font-semibold tracking-wide text-slate-500">AUTOFIL</span>
+            <NavIcon icon={BarChart3} label="Dashboard" />
+            <NavIcon icon={Layers3} label="Submissions" />
+            <NavIcon icon={Users} label="Accounts" />
+            <NavIcon icon={Folder} label="Documents" active />
+            <NavIcon icon={FileText} label="Library" />
+            <NavIcon icon={BarChart3} label="Reports" />
           </div>
-          <span className="text-[10px] font-semibold tracking-wide text-slate-500">AUTOFIL</span>
-          <NavIcon icon={BarChart3} label="Dashboard" />
-          <NavIcon icon={Layers3} label="Submissions" />
-          <NavIcon icon={Users} label="Accounts" />
-          <NavIcon icon={Folder} label="Documents" active />
-          <NavIcon icon={FileText} label="Library" />
-          <NavIcon icon={BarChart3} label="Reports" />
-        </div>
-      </aside>
-      <main className="absolute inset-y-0 left-[72px] right-0 overflow-hidden bg-white">
-        {children}
-      </main>
+        </aside>
+        <main className="absolute inset-y-0 left-[72px] right-0 overflow-hidden bg-white">
+          {children}
+        </main>
+      </div>
     </div>
   )
 }

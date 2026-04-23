@@ -154,7 +154,7 @@ const DEMO_TIMELINE: {
     cursorTimesMs: [0, 250, 900, 2100, 3200, 5000],
   },
   submission: {
-    durationMs: 39000,
+    durationMs: 36000,
     modalDurationMs: 6600,
     modalTimes: [0, 0.2, 0.26, 0.96, 1],
     typeSubmissionNameMs: 1850,
@@ -296,6 +296,7 @@ export default function AnimatedDemo({
 
   const prefersReducedMotion = useReducedMotion()
   const [scene, setScene] = useState<DemoScene>('account')
+  const [replayKey, setReplayKey] = useState(0)
 
   useEffect(() => {
     if (prefersReducedMotion) return
@@ -306,10 +307,9 @@ export default function AnimatedDemo({
     }
 
     const timer = window.setTimeout(() => {
-      setScene((current) => {
-        const nextIndex = steps.findIndex((step) => step.id === current) + 1
-        return steps[nextIndex % steps.length].id
-      })
+      const nextIndex = (currentIndex + 1) % steps.length
+      setReplayKey((key) => key + 1)
+      setScene(steps[nextIndex].id)
     }, sceneDurations[scene])
 
     return () => window.clearTimeout(timer)
@@ -329,7 +329,7 @@ export default function AnimatedDemo({
       <div className="overflow-hidden rounded-none border-y border-slate-200 bg-white shadow-2xl shadow-slate-200/70 sm:rounded-lg sm:border">
         <AnimatePresence mode="wait">
           <motion.div
-            key={scene}
+            key={`${scene}-${replayKey}`}
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}

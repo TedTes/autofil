@@ -772,6 +772,7 @@ class IntegrationService:
             "actions": actions,
             "canonical": canonical_payload,
             "mapped": self._map_canonical_for_ams(canonical_payload),
+            "action_payloads": self._action_payloads(canonical_payload, actions),
         }
 
     def _map_canonical_for_ams(self, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -779,7 +780,7 @@ class IntegrationService:
         insured = payload.get("insured") if isinstance(payload.get("insured"), dict) else {}
         policy = payload.get("policy") if isinstance(payload.get("policy"), dict) else {}
         coverages = payload.get("coverages") if isinstance(payload.get("coverages"), dict) else {}
-        source_files = payload.get("source_files") if isinstance(payload.get("source_files"), list) else []
+        documents = self._documents_for_attachment(payload)
         confidence = payload.get("confidence") if isinstance(payload.get("confidence"), dict) else {}
         return {
             "client": {
@@ -793,19 +794,45 @@ class IntegrationService:
                 "line_of_business": policy.get("line_of_business"),
             },
             "coverages": coverages,
-            "documents": [
-                {
-                    "name": source_file.get("name") or source_file.get("filename"),
-                    "type": source_file.get("type") or source_file.get("mime_type"),
-                }
-                for source_file in source_files
-                if isinstance(source_file, dict)
-            ],
+            "documents": documents,
             "quality": {
                 "field_count": int(confidence.get("field_count") or 0),
                 "overall_confidence": confidence.get("overall"),
             },
         }
+
+    def _action_payloads(self, payload: Dict[str, Any], actions: List[str]) -> Dict[str, Any]:
+        action_payloads: Dict[str, Any] = {}
+        if "attach_documents" in actions:
+            action_payloads["attach_documents"] = {
+                "documents": self._documents_for_attachment(payload),
+            }
+        return action_payloads
+
+    def _documents_for_attachment(self, payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+        source_files = payload.get("source_files") if isinstance(payload.get("source_files"), list) else []
+        documents = []
+        for source_file in source_files:
+            if not isinstance(source_file, dict):
+                continue
+            storage = source_file.get("storage") if isinstance(source_file.get("storage"), dict) else {}
+            documents.append(
+                {
+                    "input_id": source_file.get("input_id"),
+                    "name": (
+                        source_file.get("name")
+                        or source_file.get("filename")
+                        or source_file.get("file_name")
+                    ),
+                    "document_type": source_file.get("document_type") or source_file.get("type"),
+                    "mime_type": source_file.get("mime_type") or source_file.get("content_type"),
+                    "url": source_file.get("url") or source_file.get("signed_url"),
+                    "storage_path": storage.get("path") or source_file.get("storage_path"),
+                    "included_in_merge": source_file.get("included_in_merge", True),
+                    "attachment_kind": "source_document",
+                }
+            )
+        return documents
 
     def _post_webhook(
         self,

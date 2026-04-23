@@ -352,6 +352,8 @@ def test_adapter_payload_maps_canonical_data_for_ams():
     assert adapter_payload["mapped"]["client"]["name"] == "Redwood Custom Builders LLC"
     assert adapter_payload["mapped"]["policy"]["policy_number"] == "GL-TEST-2026-001"
     assert adapter_payload["mapped"]["documents"][0]["name"] == "accord.pdf"
+    assert adapter_payload["mapped"]["documents"][0]["attachment_kind"] == "source_document"
+    assert adapter_payload["action_payloads"]["attach_documents"]["documents"][0]["name"] == "accord.pdf"
 
 
 def test_send_submission_creates_and_completes_job():

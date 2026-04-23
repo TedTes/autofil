@@ -1,5 +1,6 @@
 import services.integration_service as integration_service_module
 import integrations.adapters as adapters_module
+import integrations.auth as auth_module
 import integrations.providers as providers_module
 from integrations.adapters import WebhookAdapter
 from services.integration_service import IntegrationService
@@ -135,6 +136,19 @@ class StubAdapter:
                 }
             ],
         }
+
+
+class StubAuthStrategy(auth_module.AuthStrategy):
+    strategy_name = "stub"
+
+    def prepare(self, *, provider_id, auth_config, runtime_auth_config=None):
+        return auth_module.PreparedAuth(
+            headers={"X-Provider": provider_id},
+            metadata={
+                "auth": dict(auth_config),
+                "runtime": dict(runtime_auth_config or {}),
+            },
+        )
 
 
 def test_create_destination_normalizes_defaults_and_owner_scope():
@@ -317,6 +331,45 @@ def test_provider_static_metadata_is_separate_from_runtime_config():
         providers_module.INTEGRATION_PROVIDER_RUNTIME_CONFIGS["applied_epic"]["auth"]["strategy"]
         == "oauth2_client_credentials"
     )
+
+
+def test_auth_strategy_registry_returns_registered_strategy():
+    original = dict(auth_module.AUTH_STRATEGIES)
+    auth_module.AUTH_STRATEGIES.clear()
+    auth_module.register_auth_strategy(StubAuthStrategy())
+
+    strategy = auth_module.get_auth_strategy("stub")
+    prepared = strategy.prepare(
+        provider_id="applied_epic",
+        auth_config={"clientId": "abc"},
+        runtime_auth_config={"configKey": "auth"},
+    )
+
+    assert isinstance(prepared, auth_module.PreparedAuth)
+    assert prepared.headers == {"X-Provider": "applied_epic"}
+    assert prepared.metadata["auth"] == {"clientId": "abc"}
+    assert prepared.metadata["runtime"] == {"configKey": "auth"}
+
+    auth_module.AUTH_STRATEGIES.clear()
+    auth_module.AUTH_STRATEGIES.update(original)
+
+
+def test_auth_strategy_registry_returns_unsupported_placeholder_for_unknown_strategy():
+    original = dict(auth_module.AUTH_STRATEGIES)
+    auth_module.AUTH_STRATEGIES.clear()
+
+    strategy = auth_module.get_auth_strategy("missing")
+
+    assert isinstance(strategy, auth_module.UnsupportedAuthStrategy)
+    try:
+        strategy.prepare(provider_id="nowcerts", auth_config={})
+    except NotImplementedError as exc:
+        assert "missing" in str(exc)
+    else:
+        raise AssertionError("expected UnsupportedAuthStrategy to raise")
+
+    auth_module.AUTH_STRATEGIES.clear()
+    auth_module.AUTH_STRATEGIES.update(original)
 
 
 def test_webhook_adapter_validates_and_sends_payload():

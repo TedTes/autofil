@@ -1,5 +1,6 @@
 import services.integration_service as integration_service_module
 import integrations.adapters as adapters_module
+import integrations.providers as providers_module
 from integrations.adapters import WebhookAdapter
 from services.integration_service import IntegrationService
 
@@ -267,6 +268,20 @@ def test_list_providers_exposes_ams_capabilities():
         "attach_documents",
         "create_activity",
     }
+
+
+def test_provider_static_metadata_is_separate_from_runtime_config():
+    applied_epic_static = next(
+        provider
+        for provider in providers_module.INTEGRATION_PROVIDER_STATIC
+        if provider["provider"] == "applied_epic"
+    )
+
+    assert "runtimeConfig" not in applied_epic_static
+    assert (
+        providers_module.INTEGRATION_PROVIDER_RUNTIME_CONFIGS["applied_epic"]["auth"]["strategy"]
+        == "oauth2_client_credentials"
+    )
 
 
 def test_webhook_adapter_validates_and_sends_payload():

@@ -149,7 +149,16 @@ def _runtime_config_schema(
     }
 
 
-INTEGRATION_PROVIDERS: List[Dict[str, Any]] = [
+def _provider(
+    static_metadata: Dict[str, Any],
+    runtime_config: Dict[str, Any],
+) -> Dict[str, Any]:
+    provider = dict(static_metadata)
+    provider["runtimeConfig"] = runtime_config
+    return provider
+
+
+INTEGRATION_PROVIDER_STATIC: List[Dict[str, Any]] = [
     {
         "provider": "webhook",
         "displayName": "Custom Webhook",
@@ -177,10 +186,6 @@ INTEGRATION_PROVIDERS: List[Dict[str, Any]] = [
             "requiresAgencySdkLicense": False,
         },
         "supportedActions": ["submit_structured_data"],
-        "runtimeConfig": _runtime_config_schema(
-            "webhook",
-            supports_submit=True,
-        ),
     },
     {
         "provider": "nowcerts",
@@ -216,13 +221,6 @@ INTEGRATION_PROVIDERS: List[Dict[str, Any]] = [
             "create_activity",
             "submit_structured_data",
         ],
-        "runtimeConfig": _runtime_config_schema(
-            "basic_auth",
-            supports_client_search=True,
-            supports_submit=True,
-            supports_document_attach=True,
-            supports_activity_create=True,
-        ),
     },
     {
         "provider": "applied_epic",
@@ -258,14 +256,6 @@ INTEGRATION_PROVIDERS: List[Dict[str, Any]] = [
             "create_activity",
             "submit_structured_data",
         ],
-        "runtimeConfig": _runtime_config_schema(
-            "oauth2_client_credentials",
-            supports_client_search=True,
-            requires_target_client=True,
-            supports_submit=True,
-            supports_document_attach=True,
-            supports_activity_create=True,
-        ),
     },
     {
         "provider": "ams360",
@@ -301,14 +291,6 @@ INTEGRATION_PROVIDERS: List[Dict[str, Any]] = [
             "create_activity",
             "submit_structured_data",
         ],
-        "runtimeConfig": _runtime_config_schema(
-            "basic_auth",
-            supports_client_search=True,
-            requires_target_client=True,
-            supports_submit=True,
-            supports_document_attach=True,
-            supports_activity_create=True,
-        ),
     },
     {
         "provider": "hawksoft",
@@ -343,14 +325,6 @@ INTEGRATION_PROVIDERS: List[Dict[str, Any]] = [
             "create_activity",
             "submit_structured_data",
         ],
-        "runtimeConfig": _runtime_config_schema(
-            "oauth2_client_credentials",
-            supports_client_search=True,
-            requires_target_client=True,
-            supports_submit=True,
-            supports_document_attach=True,
-            supports_activity_create=True,
-        ),
     },
     {
         "provider": "qqcatalyst",
@@ -386,26 +360,81 @@ INTEGRATION_PROVIDERS: List[Dict[str, Any]] = [
             "create_activity",
             "submit_structured_data",
         ],
-        "runtimeConfig": _runtime_config_schema(
-            "api_key",
-            supports_client_search=True,
-            supports_submit=True,
-            supports_document_attach=True,
-            supports_activity_create=True,
-        ),
     },
+]
+
+INTEGRATION_PROVIDER_RUNTIME_CONFIGS: Dict[str, Dict[str, Any]] = {
+    "webhook": _runtime_config_schema(
+        "webhook",
+        supports_submit=True,
+    ),
+    "nowcerts": _runtime_config_schema(
+        "basic_auth",
+        supports_client_search=True,
+        supports_submit=True,
+        supports_document_attach=True,
+        supports_activity_create=True,
+    ),
+    "applied_epic": _runtime_config_schema(
+        "oauth2_client_credentials",
+        supports_client_search=True,
+        requires_target_client=True,
+        supports_submit=True,
+        supports_document_attach=True,
+        supports_activity_create=True,
+    ),
+    "ams360": _runtime_config_schema(
+        "basic_auth",
+        supports_client_search=True,
+        requires_target_client=True,
+        supports_submit=True,
+        supports_document_attach=True,
+        supports_activity_create=True,
+    ),
+    "hawksoft": _runtime_config_schema(
+        "oauth2_client_credentials",
+        supports_client_search=True,
+        requires_target_client=True,
+        supports_submit=True,
+        supports_document_attach=True,
+        supports_activity_create=True,
+    ),
+    "qqcatalyst": _runtime_config_schema(
+        "api_key",
+        supports_client_search=True,
+        supports_submit=True,
+        supports_document_attach=True,
+        supports_activity_create=True,
+    ),
+}
+
+
+def _hydrate_provider(provider: Dict[str, Any]) -> Dict[str, Any]:
+    hydrated = dict(provider)
+    hydrated["runtimeConfig"] = dict(
+        INTEGRATION_PROVIDER_RUNTIME_CONFIGS.get(str(provider.get("provider") or ""), {})
+    )
+    return hydrated
+
+
+INTEGRATION_PROVIDERS: List[Dict[str, Any]] = [
+    _provider(
+        provider,
+        INTEGRATION_PROVIDER_RUNTIME_CONFIGS.get(provider["provider"], {}),
+    )
+    for provider in INTEGRATION_PROVIDER_STATIC
 ]
 
 
 def list_providers() -> List[Dict[str, Any]]:
     """Return a copy of all provider definitions."""
-    return [dict(provider) for provider in INTEGRATION_PROVIDERS]
+    return [_hydrate_provider(provider) for provider in INTEGRATION_PROVIDER_STATIC]
 
 
 def get_provider(provider_id: str) -> Optional[Dict[str, Any]]:
     """Return one provider definition by id."""
     normalized = str(provider_id or "").strip().lower()
-    for provider in INTEGRATION_PROVIDERS:
+    for provider in INTEGRATION_PROVIDER_STATIC:
         if provider["provider"] == normalized:
-            return dict(provider)
+            return _hydrate_provider(provider)
     return None

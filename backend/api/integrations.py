@@ -235,6 +235,23 @@ def get_send_job(job_id: str):
         return internal_server_error(logger, "Failed to get integration send job", exc)
 
 
+@integration_bp.route("/send-history", methods=["GET"])
+@require_auth
+def list_send_history():
+    try:
+        jobs = _integration_service().list_send_history(
+            submission_id=request.args.get("submission_id"),
+            connection_id=request.args.get("connection_id"),
+            provider=request.args.get("provider"),
+            limit=int(request.args.get("limit") or 25),
+        )
+        return jsonify({"success": True, "data": jobs}), 200
+    except ValueError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return internal_server_error(logger, "Failed to list integration send history", exc)
+
+
 @integration_bp.route("/submissions/<submission_id>/send", methods=["POST"])
 @require_auth
 def send_submission(submission_id: str):

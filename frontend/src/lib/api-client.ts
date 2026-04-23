@@ -970,6 +970,30 @@ export async function getIntegrationSendJob(jobId: string): Promise<IntegrationJ
   }
 }
 
+export async function getIntegrationSendHistory(options?: {
+  submissionId?: string
+  connectionId?: string
+  provider?: string
+  limit?: number
+}): Promise<IntegrationJob[]> {
+  try {
+    const response = await api.get('/integrations/send-history', {
+      params: {
+        submission_id: options?.submissionId,
+        connection_id: options?.connectionId,
+        provider: options?.provider,
+        limit: options?.limit,
+      },
+    })
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to load integration send history')
+    }
+    return response.data.data as IntegrationJob[]
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
 export async function sendSubmissionToIntegration(
   submissionId: string,
   destinationId: string

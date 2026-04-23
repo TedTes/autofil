@@ -242,6 +242,30 @@ class IntegrationService:
         rows = self.db.select_rows(self.JOBS_TABLE, filters=filters, limit=1)
         return rows[0] if rows else None
 
+    def list_send_history(
+        self,
+        *,
+        submission_id: Optional[str] = None,
+        connection_id: Optional[str] = None,
+        provider: Optional[str] = None,
+        limit: int = 25,
+    ) -> List[Dict[str, Any]]:
+        filters: Dict[str, str] = {}
+        if self.current_user_id:
+            filters["owner_user_id"] = self.current_user_id
+        if submission_id:
+            filters["submission_id"] = submission_id
+        if connection_id:
+            filters["destination_id"] = connection_id
+        if provider:
+            filters["provider"] = provider
+        return self.db.select_rows(
+            self.JOBS_TABLE,
+            filters=filters,
+            order="created_at.desc",
+            limit=max(1, min(int(limit or 25), 100)),
+        )
+
     def send(
         self,
         submission_id: str,

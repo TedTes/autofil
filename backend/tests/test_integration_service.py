@@ -179,6 +179,26 @@ def test_get_job_filters_by_owner_and_job_id():
     assert job["filters"] == {"id": "job-1", "owner_user_id": "user-1"}
 
 
+def test_list_send_history_filters_audit_rows():
+    db = FakeDb()
+    service = IntegrationService(db=db, current_user_id="user-1")
+
+    rows = service.list_send_history(
+        submission_id="sub-1",
+        connection_id="dest-1",
+        provider="applied_epic",
+        limit=250,
+    )
+
+    assert rows[0]["table"] == "integration_jobs"
+    assert rows[0]["filters"] == {
+        "owner_user_id": "user-1",
+        "submission_id": "sub-1",
+        "destination_id": "dest-1",
+        "provider": "applied_epic",
+    }
+
+
 def test_list_providers_exposes_ams_capabilities():
     service = IntegrationService(db=FakeDb(), current_user_id="user-1")
 

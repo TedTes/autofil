@@ -59,6 +59,17 @@ class PlannedProviderAdapter(IntegrationAdapter):
             "message": f"{self.provider_id} adapter is not implemented yet.",
         }
 
+    def search_clients(
+        self,
+        query: str,
+        *,
+        config: Dict[str, Any],
+        limit: int = 10,
+    ) -> List[Dict[str, Any]]:
+        void_values = (query, config, limit)
+        del void_values
+        raise NotImplementedError(f"{self.provider_id} client search is not implemented yet")
+
     def send_submission(
         self,
         payload: Dict[str, Any],
@@ -93,6 +104,17 @@ class WebhookAdapter(IntegrationAdapter):
             "status": "valid",
             "message": "Webhook configuration is valid.",
         }
+
+    def search_clients(
+        self,
+        query: str,
+        *,
+        config: Dict[str, Any],
+        limit: int = 10,
+    ) -> List[Dict[str, Any]]:
+        void_values = (query, config, limit)
+        del void_values
+        raise NotImplementedError("Webhook destinations do not support client search")
 
     def send_submission(
         self,

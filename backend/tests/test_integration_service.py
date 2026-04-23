@@ -211,6 +211,38 @@ def test_test_planned_ams_connection_marks_invalid_until_adapter_exists():
     assert result["connection"]["connection_status"] == "invalid"
 
 
+def test_search_clients_requires_query():
+    db = SendFakeDb()
+    service = IntegrationService(db=db, current_user_id="user-1")
+
+    try:
+        service.search_clients("dest-1", "r")
+    except ValueError as exc:
+        assert "at least 2 characters" in str(exc)
+    else:
+        raise AssertionError("Expected short query to fail")
+
+
+def test_search_clients_returns_stable_not_implemented_response():
+    db = SendFakeDb()
+    db.destination = {
+        **db.destination,
+        "type": "ams",
+        "provider": "applied_epic",
+        "url": None,
+        "auth_config": {"baseUrl": "https://epic.example.test"},
+    }
+    service = IntegrationService(db=db, current_user_id="user-1")
+
+    result = service.search_clients("dest-1", "Redwood", limit=50)
+
+    assert result["ok"] is False
+    assert result["provider"] == "applied_epic"
+    assert result["query"] == "Redwood"
+    assert result["results"] == []
+    assert "not implemented yet" in result["message"]
+
+
 def test_send_submission_creates_and_completes_job():
     db = SendFakeDb()
     service = IntegrationService(db=db, current_user_id="user-1")

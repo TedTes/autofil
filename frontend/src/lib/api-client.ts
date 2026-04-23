@@ -28,6 +28,7 @@ import type {
   CreateIntegrationConnectionRequest,
   UpdateIntegrationConnectionRequest,
   IntegrationConnectionTestResult,
+  IntegrationClientSearchResponse,
   IntegrationDestination,
   CreateIntegrationDestinationRequest,
   UpdateIntegrationDestinationRequest,
@@ -853,6 +854,26 @@ export async function testIntegrationConnection(
       throw new Error(response.data.error || 'Failed to test integration connection')
     }
     return response.data.data as IntegrationConnectionTestResult
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
+export async function searchIntegrationClients(payload: {
+  connectionId: string
+  query: string
+  limit?: number
+}): Promise<IntegrationClientSearchResponse> {
+  try {
+    const response = await api.post('/integrations/search-clients', {
+      connection_id: payload.connectionId,
+      query: payload.query,
+      limit: payload.limit,
+    })
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to search integration clients')
+    }
+    return response.data.data as IntegrationClientSearchResponse
   } catch (error) {
     handleApiError(error)
   }

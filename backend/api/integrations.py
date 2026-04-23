@@ -116,6 +116,29 @@ def test_connection(connection_id: str):
         return internal_server_error(logger, "Failed to test integration connection", exc)
 
 
+@integration_bp.route("/search-clients", methods=["POST"])
+@require_auth
+def search_clients():
+    try:
+        payload = request.get_json(silent=True) or {}
+        connection_id = payload.get("connection_id")
+        query = payload.get("query")
+        limit = payload.get("limit") or 10
+        if not connection_id:
+            return jsonify({"success": False, "error": "connection_id is required"}), 400
+
+        result = _integration_service().search_clients(
+            connection_id,
+            query,
+            limit=limit,
+        )
+        return jsonify({"success": True, "data": result}), 200
+    except ValueError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return internal_server_error(logger, "Failed to search integration clients", exc)
+
+
 @integration_bp.route("/destinations/<destination_id>", methods=["DELETE"])
 @require_auth
 def delete_destination(destination_id: str):

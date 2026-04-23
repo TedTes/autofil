@@ -121,6 +121,50 @@ class IntegrationService:
             "connection": updated,
         }
 
+    def search_clients(
+        self,
+        connection_id: str,
+        query: str,
+        *,
+        limit: int = 10,
+    ) -> Dict[str, Any]:
+        connection = self.get_destination(connection_id)
+        if not connection:
+            raise ValueError("Integration connection not found")
+        if not connection.get("enabled", True):
+            raise ValueError("Integration connection is disabled")
+
+        cleaned_query = str(query or "").strip()
+        if len(cleaned_query) < 2:
+            raise ValueError("query must be at least 2 characters")
+        safe_limit = max(1, min(int(limit or 10), 25))
+
+        provider_id = str(connection.get("provider") or connection.get("type") or "webhook")
+        adapter = get_adapter(provider_id)
+        config = self._connection_test_config(connection)
+        try:
+            results = adapter.search_clients(
+                cleaned_query,
+                config=config,
+                limit=safe_limit,
+            )
+        except NotImplementedError as exc:
+            return {
+                "ok": False,
+                "provider": provider_id,
+                "query": cleaned_query,
+                "results": [],
+                "message": str(exc),
+            }
+
+        return {
+            "ok": True,
+            "provider": provider_id,
+            "query": cleaned_query,
+            "results": [self._normalize_client_result(result) for result in results],
+            "message": None,
+        }
+
     def list_jobs(self, submission_id: str) -> List[Dict[str, Any]]:
         filters = {"submission_id": submission_id}
         if self.current_user_id:
@@ -364,6 +408,16 @@ class IntegrationService:
         if connection.get("secret_ref"):
             config["secret_ref"] = connection.get("secret_ref")
         return config
+
+    def _normalize_client_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        external_id = result.get("id") or result.get("client_id") or result.get("external_id")
+        name = result.get("name") or result.get("display") or result.get("insured_name")
+        return {
+            "id": str(external_id or ""),
+            "name": str(name or external_id or ""),
+            "display": str(result.get("display") or name or external_id or ""),
+            "metadata": result.get("metadata") if isinstance(result.get("metadata"), dict) else {},
+        }
 
     def _post_webhook(
         self,

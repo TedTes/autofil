@@ -127,6 +127,21 @@ export interface IntegrationConnectionTestResult {
   connection: IntegrationConnection
 }
 
+export interface IntegrationClientSearchResult {
+  id: string
+  name: string
+  display: string
+  metadata: Record<string, unknown>
+}
+
+export interface IntegrationClientSearchResponse {
+  ok: boolean
+  provider: string
+  query: string
+  results: IntegrationClientSearchResult[]
+  message?: string | null
+}
+
 export interface IntegrationJob {
   id: string
   owner_user_id?: string

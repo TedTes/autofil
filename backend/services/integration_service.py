@@ -315,6 +315,44 @@ class IntegrationService:
             idempotency_key=idempotency_key,
         )
 
+    def retry_job(self, job_id: str) -> Dict[str, Any]:
+        previous_job = self.get_job(job_id)
+        if not previous_job:
+            raise ValueError("Integration send job not found")
+        destination_id = previous_job.get("destination_id")
+        if not destination_id:
+            raise ValueError("Integration send job has no destination to retry")
+        connection = self.get_destination(str(destination_id))
+        if not connection:
+            raise ValueError("Integration connection not found")
+        if not connection.get("enabled", True):
+            raise ValueError("Integration connection is disabled")
+
+        request_payload = previous_job.get("request_payload")
+        if not isinstance(request_payload, dict):
+            raise ValueError("Integration send job has no request payload to retry")
+        actions = previous_job.get("actions") if isinstance(previous_job.get("actions"), list) else []
+        target = previous_job.get("target") if isinstance(previous_job.get("target"), dict) else {}
+        idempotency_key = f"{previous_job.get('submission_id')}:{destination_id}:retry:{uuid.uuid4()}"
+        job = self._create_job(
+            submission_id=str(previous_job.get("submission_id") or ""),
+            destination=connection,
+            idempotency_key=idempotency_key,
+            request_payload=request_payload,
+            target=target,
+            actions=[str(action) for action in actions],
+        )
+        if not job:
+            raise RuntimeError("Failed to create integration retry job")
+        return self._send_adapter_job(
+            job,
+            connection,
+            request_payload,
+            target=target,
+            actions=[str(action) for action in actions],
+            idempotency_key=idempotency_key,
+        )
+
     def send_submission(
         self,
         submission_id: str,
@@ -738,7 +776,7 @@ class IntegrationService:
                     }
                     for action in actions
                 ]
-            status = str(result.get("status") or ("succeeded" if ok else "failed"))
+            status = str(result.get("status") or self._status_from_action_results(action_results, ok))
             return self._update_job(
                 job["id"],
                 {
@@ -788,6 +826,20 @@ class IntegrationService:
                     "updated_at": datetime.utcnow().isoformat(),
                 },
             )
+
+    def _status_from_action_results(
+        self,
+        action_results: List[Dict[str, Any]],
+        fallback_ok: bool,
+    ) -> str:
+        if not action_results:
+            return "succeeded" if fallback_ok else "failed"
+        statuses = {str(result.get("status") or "").lower() for result in action_results}
+        if statuses and statuses <= {"succeeded"}:
+            return "succeeded"
+        if "succeeded" in statuses and statuses - {"succeeded"}:
+            return "partially_succeeded"
+        return "failed"
 
     def _adapter_payload(
         self,

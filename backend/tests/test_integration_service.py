@@ -50,6 +50,26 @@ class SendFakeDb(FakeDb):
         return row
 
 
+class RetryFakeDb(SendFakeDb):
+    def __init__(self):
+        super().__init__()
+        self.previous_job = {
+            "id": "job-old",
+            "owner_user_id": "user-1",
+            "submission_id": "sub-1",
+            "destination_id": "dest-1",
+            "request_payload": StubPayloadService().build_payload("sub-1"),
+            "target": {"clientId": "ams-client-1"},
+            "actions": ["attach_documents"],
+        }
+
+    def select_rows(self, table, **kwargs):
+        filters = kwargs.get("filters") or {}
+        if table == "integration_jobs" and filters.get("id") == "job-old":
+            return [self.previous_job]
+        return super().select_rows(table, **kwargs)
+
+
 class StubPayloadService:
     def build_payload(self, submission_id):
         return {
@@ -493,3 +513,37 @@ def test_send_records_not_implemented_adapter_failure():
     assert job["status"] == "failed"
     assert job["action_results"][0]["action"] == "attach_documents"
     assert "not implemented yet" in job["error_message"]
+
+
+def test_status_from_action_results_detects_partial_failure():
+    service = IntegrationService(db=FakeDb(), current_user_id="user-1")
+
+    status = service._status_from_action_results(
+        [
+            {"action": "attach_documents", "status": "succeeded"},
+            {"action": "create_activity", "status": "failed"},
+        ],
+        fallback_ok=False,
+    )
+
+    assert status == "partially_succeeded"
+
+
+def test_retry_job_creates_new_send_attempt():
+    db = RetryFakeDb()
+    service = IntegrationService(db=db, current_user_id="user-1")
+    original_get_adapter = integration_service_module.get_adapter
+    integration_service_module.get_adapter = lambda provider_id: StubAdapter()
+
+    try:
+        job = service.retry_job("job-old")
+    finally:
+        integration_service_module.get_adapter = original_get_adapter
+
+    inserted_table, inserted_job = db.rows[0]
+    assert inserted_table == "integration_jobs"
+    assert inserted_job["submission_id"] == "sub-1"
+    assert inserted_job["actions"] == ["attach_documents"]
+    assert inserted_job["target"] == {"clientId": "ams-client-1"}
+    assert ":retry:" in inserted_job["idempotency_key"]
+    assert job["status"] == "succeeded"

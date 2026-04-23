@@ -252,6 +252,18 @@ def list_send_history():
         return internal_server_error(logger, "Failed to list integration send history", exc)
 
 
+@integration_bp.route("/send-jobs/<job_id>/retry", methods=["POST"])
+@require_auth
+def retry_send_job(job_id: str):
+    try:
+        job = _integration_service().retry_job(job_id)
+        return jsonify({"success": True, "data": job}), 200
+    except ValueError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return internal_server_error(logger, "Failed to retry integration send job", exc)
+
+
 @integration_bp.route("/submissions/<submission_id>/send", methods=["POST"])
 @require_auth
 def send_submission(submission_id: str):

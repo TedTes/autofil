@@ -994,6 +994,18 @@ export async function getIntegrationSendHistory(options?: {
   }
 }
 
+export async function retryIntegrationSendJob(jobId: string): Promise<IntegrationJob> {
+  try {
+    const response = await api.post(`/integrations/send-jobs/${jobId}/retry`)
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to retry integration send job')
+    }
+    return response.data.data as IntegrationJob
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
 export async function sendSubmissionToIntegration(
   submissionId: string,
   destinationId: string

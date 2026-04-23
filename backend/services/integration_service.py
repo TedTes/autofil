@@ -22,6 +22,16 @@ from services.supabase_db_service import SupabaseDatabaseService
 class IntegrationService:
     DESTINATIONS_TABLE = "integration_destinations"
     JOBS_TABLE = "integration_jobs"
+    ACTION_LABELS = {
+        "attach_documents": "Attach documents",
+        "create_activity": "Create activity",
+        "submit_structured_data": "Submit structured data",
+    }
+    ACTION_CAPABILITIES = {
+        "attach_documents": "supportsDocumentAttach",
+        "create_activity": "supportsActivities",
+        "submit_structured_data": "supportsStructuredDataSubmit",
+    }
 
     def __init__(
         self,
@@ -163,6 +173,46 @@ class IntegrationService:
             "query": cleaned_query,
             "results": [self._normalize_client_result(result) for result in results],
             "message": None,
+        }
+
+    def preview_send(
+        self,
+        submission_id: str,
+        connection_id: str,
+        *,
+        target: Optional[Dict[str, Any]] = None,
+        actions: Optional[List[str]] = None,
+        payload_service: Optional[IntegrationPayloadService] = None,
+    ) -> Dict[str, Any]:
+        connection = self.get_destination(connection_id)
+        if not connection:
+            raise ValueError("Integration connection not found")
+        if not connection.get("enabled", True):
+            raise ValueError("Integration connection is disabled")
+
+        payload_builder = payload_service or IntegrationPayloadService()
+        request_payload = payload_builder.build_payload(submission_id)
+        provider_id = str(connection.get("provider") or connection.get("type") or "webhook")
+        provider = get_provider(provider_id) or {}
+        capabilities = self._connection_capabilities(connection, provider)
+        requested_actions = self._preview_actions(actions, capabilities)
+        warnings = self._preview_warnings(
+            capabilities=capabilities,
+            target=target or {},
+            action_previews=requested_actions,
+            request_payload=request_payload,
+        )
+
+        return {
+            "ok": not any(action["blocking"] for action in requested_actions),
+            "provider": provider_id,
+            "connection_id": connection_id,
+            "submission_id": submission_id,
+            "target": target or {},
+            "actions": requested_actions,
+            "warnings": warnings,
+            "requires_target_client": bool(capabilities.get("requiresTargetClient")),
+            "payload_summary": self._payload_summary(request_payload),
         }
 
     def list_jobs(self, submission_id: str) -> List[Dict[str, Any]]:
@@ -418,6 +468,91 @@ class IntegrationService:
             "display": str(result.get("display") or name or external_id or ""),
             "metadata": result.get("metadata") if isinstance(result.get("metadata"), dict) else {},
         }
+
+    def _connection_capabilities(
+        self,
+        connection: Dict[str, Any],
+        provider: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        capabilities = dict(provider.get("capabilities") or {})
+        if isinstance(connection.get("capabilities"), dict):
+            capabilities.update(connection["capabilities"])
+        return capabilities
+
+    def _preview_actions(
+        self,
+        actions: Optional[List[str]],
+        capabilities: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        normalized_actions = [str(action).strip() for action in actions or [] if str(action).strip()]
+        if not normalized_actions:
+            normalized_actions = [
+                action
+                for action, capability in self.ACTION_CAPABILITIES.items()
+                if self._capability_enabled(capabilities.get(capability))
+            ]
+        if not normalized_actions:
+            normalized_actions = ["submit_structured_data"]
+
+        previews = []
+        seen = set()
+        for action in normalized_actions:
+            if action in seen:
+                continue
+            seen.add(action)
+            capability = self.ACTION_CAPABILITIES.get(action)
+            supported = bool(capability and self._capability_enabled(capabilities.get(capability)))
+            previews.append(
+                {
+                    "action": action,
+                    "label": self.ACTION_LABELS.get(action, action.replace("_", " ").title()),
+                    "supported": supported,
+                    "blocking": not supported,
+                    "capability": capability,
+                }
+            )
+        return previews
+
+    def _preview_warnings(
+        self,
+        *,
+        capabilities: Dict[str, Any],
+        target: Dict[str, Any],
+        action_previews: List[Dict[str, Any]],
+        request_payload: Dict[str, Any],
+    ) -> List[str]:
+        warnings = []
+        target_client_id = target.get("clientId") or target.get("client_id")
+        if capabilities.get("requiresTargetClient") and not target_client_id:
+            warnings.append("This provider requires a selected target client before sending.")
+        unsupported = [action["label"] for action in action_previews if not action["supported"]]
+        if unsupported:
+            warnings.append(f"Unsupported actions: {', '.join(unsupported)}.")
+        if not (request_payload.get("review_status") or {}).get("reviewed"):
+            warnings.append("Submission has not been marked reviewed.")
+        return warnings
+
+    def _payload_summary(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        submission = payload.get("submission") if isinstance(payload.get("submission"), dict) else {}
+        insured = payload.get("insured") if isinstance(payload.get("insured"), dict) else {}
+        policy = payload.get("policy") if isinstance(payload.get("policy"), dict) else {}
+        confidence = payload.get("confidence") if isinstance(payload.get("confidence"), dict) else {}
+        source_files = payload.get("source_files") if isinstance(payload.get("source_files"), list) else []
+        review_status = (
+            payload.get("review_status") if isinstance(payload.get("review_status"), dict) else {}
+        )
+        return {
+            "submission_id": submission.get("submission_id"),
+            "client_name": submission.get("client_name"),
+            "insured_name": insured.get("name") or insured.get("named_insured"),
+            "policy_number": policy.get("policy_number"),
+            "source_file_count": len(source_files),
+            "field_count": int(confidence.get("field_count") or 0),
+            "reviewed": bool(review_status.get("reviewed")),
+        }
+
+    def _capability_enabled(self, value: Any) -> bool:
+        return value is True or value == "limited"
 
     def _post_webhook(
         self,

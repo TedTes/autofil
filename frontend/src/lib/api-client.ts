@@ -29,6 +29,7 @@ import type {
   UpdateIntegrationConnectionRequest,
   IntegrationConnectionTestResult,
   IntegrationClientSearchResponse,
+  IntegrationSendPreviewResponse,
   IntegrationDestination,
   CreateIntegrationDestinationRequest,
   UpdateIntegrationDestinationRequest,
@@ -874,6 +875,28 @@ export async function searchIntegrationClients(payload: {
       throw new Error(response.data.error || 'Failed to search integration clients')
     }
     return response.data.data as IntegrationClientSearchResponse
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
+export async function previewIntegrationSend(payload: {
+  connectionId: string
+  submissionId: string
+  target?: Record<string, unknown>
+  actions?: string[]
+}): Promise<IntegrationSendPreviewResponse> {
+  try {
+    const response = await api.post('/integrations/send-preview', {
+      connection_id: payload.connectionId,
+      submission_id: payload.submissionId,
+      target: payload.target,
+      actions: payload.actions,
+    })
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to preview integration send')
+    }
+    return response.data.data as IntegrationSendPreviewResponse
   } catch (error) {
     handleApiError(error)
   }

@@ -142,6 +142,34 @@ export interface IntegrationClientSearchResponse {
   message?: string | null
 }
 
+export interface IntegrationSendPreviewAction {
+  action: string
+  label: string
+  supported: boolean
+  blocking: boolean
+  capability?: keyof IntegrationProvider['capabilities'] | null
+}
+
+export interface IntegrationSendPreviewResponse {
+  ok: boolean
+  provider: string
+  connection_id: string
+  submission_id: string
+  target: Record<string, unknown>
+  actions: IntegrationSendPreviewAction[]
+  warnings: string[]
+  requires_target_client: boolean
+  payload_summary: {
+    submission_id?: string
+    client_name?: string
+    insured_name?: string
+    policy_number?: string
+    source_file_count: number
+    field_count: number
+    reviewed: boolean
+  }
+}
+
 export interface IntegrationJob {
   id: string
   owner_user_id?: string

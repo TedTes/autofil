@@ -51,7 +51,17 @@ class SendFakeDb(FakeDb):
 
 class StubPayloadService:
     def build_payload(self, submission_id):
-        return {"submission": {"submission_id": submission_id}}
+        return {
+            "submission": {
+                "submission_id": submission_id,
+                "client_name": "Northstar Risk Partners",
+            },
+            "review_status": {"reviewed": True},
+            "insured": {"name": "Redwood Custom Builders LLC"},
+            "policy": {"policy_number": "GL-TEST-2026-001"},
+            "source_files": [{"name": "accord.pdf"}],
+            "confidence": {"field_count": 42},
+        }
 
 
 class StubResponse:
@@ -241,6 +251,58 @@ def test_search_clients_returns_stable_not_implemented_response():
     assert result["query"] == "Redwood"
     assert result["results"] == []
     assert "not implemented yet" in result["message"]
+
+
+def test_preview_send_builds_payload_summary_and_action_support():
+    db = SendFakeDb()
+    service = IntegrationService(db=db, current_user_id="user-1")
+
+    preview = service.preview_send(
+        "sub-1",
+        "dest-1",
+        actions=["submit_structured_data", "attach_documents"],
+        payload_service=StubPayloadService(),
+    )
+
+    assert preview["ok"] is False
+    assert preview["provider"] == "webhook"
+    assert preview["payload_summary"]["insured_name"] == "Redwood Custom Builders LLC"
+    assert preview["payload_summary"]["field_count"] == 42
+    assert preview["actions"][0]["supported"] is True
+    assert preview["actions"][1]["supported"] is False
+    assert "Unsupported actions: Attach documents." in preview["warnings"]
+
+
+def test_preview_send_warns_when_provider_requires_target_client():
+    db = SendFakeDb()
+    db.destination = {
+        **db.destination,
+        "type": "ams",
+        "provider": "applied_epic",
+        "url": None,
+        "capabilities": {
+            "supportsDocumentAttach": True,
+            "supportsActivities": True,
+            "supportsStructuredDataSubmit": "limited",
+            "requiresTargetClient": True,
+        },
+    }
+    service = IntegrationService(db=db, current_user_id="user-1")
+
+    preview = service.preview_send(
+        "sub-1",
+        "dest-1",
+        payload_service=StubPayloadService(),
+    )
+
+    assert preview["ok"] is True
+    assert preview["requires_target_client"] is True
+    assert [action["action"] for action in preview["actions"]] == [
+        "attach_documents",
+        "create_activity",
+        "submit_structured_data",
+    ]
+    assert "requires a selected target client" in preview["warnings"][0]
 
 
 def test_send_submission_creates_and_completes_job():

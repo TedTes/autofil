@@ -83,9 +83,29 @@ def _runtime_operation(
     return config
 
 
+def _runtime_endpoint(
+    endpoint_id: str,
+    *,
+    method: str,
+    path: str,
+    source: str = "base_url",
+    required: bool = True,
+    timeout_seconds: int = 20,
+) -> Dict[str, Any]:
+    return {
+        "id": endpoint_id,
+        "method": method.upper(),
+        "path": path,
+        "source": source,
+        "required": required,
+        "timeoutSeconds": timeout_seconds,
+    }
+
+
 def _runtime_config_schema(
     auth_strategy: str,
     auth_fields: List[Dict[str, Any]],
+    endpoint_definitions: List[Dict[str, Any]],
     *,
     supports_client_search: bool = False,
     requires_target_client: bool = False,
@@ -156,6 +176,7 @@ def _runtime_config_schema(
         "endpoints": {
             "configKey": "endpoints",
             "allowOverrides": True,
+            "definitions": endpoint_definitions,
         },
         "requestMappings": {
             "configKey": "requestMappings",
@@ -407,6 +428,10 @@ INTEGRATION_PROVIDER_RUNTIME_CONFIGS: Dict[str, Dict[str, Any]] = {
                 storage_target="secret_ref",
             ),
         ],
+        [
+            _runtime_endpoint("testConnection", method="HEAD", path="", source="url"),
+            _runtime_endpoint("submitStructuredData", method="POST", path="", source="url"),
+        ],
         supports_submit=True,
     ),
     "nowcerts": _runtime_config_schema(
@@ -416,6 +441,13 @@ INTEGRATION_PROVIDER_RUNTIME_CONFIGS: Dict[str, Dict[str, Any]] = {
             _runtime_auth_field("username", "Username"),
             _runtime_auth_field("password", "Password", AUTH_FIELD_PASSWORD, secret=True),
             _runtime_auth_field("agencyId", "Agency ID", required=False),
+        ],
+        [
+            _runtime_endpoint("testConnection", method="GET", path="/api/health"),
+            _runtime_endpoint("searchClients", method="GET", path="/api/insureds/search"),
+            _runtime_endpoint("submitStructuredData", method="POST", path="/api/submissions"),
+            _runtime_endpoint("attachDocuments", method="POST", path="/api/documents"),
+            _runtime_endpoint("createActivity", method="POST", path="/api/activities"),
         ],
         supports_client_search=True,
         supports_submit=True,
@@ -429,6 +461,14 @@ INTEGRATION_PROVIDER_RUNTIME_CONFIGS: Dict[str, Dict[str, Any]] = {
             _runtime_auth_field("clientId", "Client ID"),
             _runtime_auth_field("clientSecret", "Client Secret", AUTH_FIELD_PASSWORD, secret=True),
             _runtime_auth_field("databaseName", "Epic Database"),
+        ],
+        [
+            _runtime_endpoint("testConnection", method="GET", path="/api/health"),
+            _runtime_endpoint("searchClients", method="POST", path="/api/clients/search"),
+            _runtime_endpoint("resolveTargetClient", method="GET", path="/api/clients/{clientId}"),
+            _runtime_endpoint("submitStructuredData", method="POST", path="/api/submissions"),
+            _runtime_endpoint("attachDocuments", method="POST", path="/api/documents"),
+            _runtime_endpoint("createActivity", method="POST", path="/api/activities"),
         ],
         supports_client_search=True,
         requires_target_client=True,
@@ -444,6 +484,14 @@ INTEGRATION_PROVIDER_RUNTIME_CONFIGS: Dict[str, Dict[str, Any]] = {
             _runtime_auth_field("loginId", "WSAPI Login ID"),
             _runtime_auth_field("password", "WSAPI Password", AUTH_FIELD_PASSWORD, secret=True),
         ],
+        [
+            _runtime_endpoint("testConnection", method="GET", path="/api/health"),
+            _runtime_endpoint("searchClients", method="POST", path="/api/clients/search"),
+            _runtime_endpoint("resolveTargetClient", method="GET", path="/api/clients/{clientId}"),
+            _runtime_endpoint("submitStructuredData", method="POST", path="/api/policies"),
+            _runtime_endpoint("attachDocuments", method="POST", path="/api/documents"),
+            _runtime_endpoint("createActivity", method="POST", path="/api/activities"),
+        ],
         supports_client_search=True,
         requires_target_client=True,
         supports_submit=True,
@@ -456,6 +504,14 @@ INTEGRATION_PROVIDER_RUNTIME_CONFIGS: Dict[str, Dict[str, Any]] = {
             _runtime_auth_field("baseUrl", "API Base URL", AUTH_FIELD_URL, required=False),
             _runtime_auth_field("clientId", "Client ID"),
             _runtime_auth_field("clientSecret", "Client Secret", AUTH_FIELD_PASSWORD, secret=True),
+        ],
+        [
+            _runtime_endpoint("testConnection", method="GET", path="/api/health"),
+            _runtime_endpoint("searchClients", method="GET", path="/api/clients/search"),
+            _runtime_endpoint("resolveTargetClient", method="GET", path="/api/clients/{clientId}"),
+            _runtime_endpoint("submitStructuredData", method="POST", path="/api/submissions"),
+            _runtime_endpoint("attachDocuments", method="POST", path="/api/documents"),
+            _runtime_endpoint("createActivity", method="POST", path="/api/activities"),
         ],
         supports_client_search=True,
         requires_target_client=True,
@@ -470,6 +526,13 @@ INTEGRATION_PROVIDER_RUNTIME_CONFIGS: Dict[str, Dict[str, Any]] = {
             _runtime_auth_field("username", "Username"),
             _runtime_auth_field("password", "Password", AUTH_FIELD_PASSWORD, secret=True),
             _runtime_auth_field("apiKey", "API Key", AUTH_FIELD_PASSWORD, secret=True),
+        ],
+        [
+            _runtime_endpoint("testConnection", method="GET", path="/api/health"),
+            _runtime_endpoint("searchClients", method="GET", path="/api/clients/search"),
+            _runtime_endpoint("submitStructuredData", method="POST", path="/api/submissions"),
+            _runtime_endpoint("attachDocuments", method="POST", path="/api/documents"),
+            _runtime_endpoint("createActivity", method="POST", path="/api/activities"),
         ],
         supports_client_search=True,
         supports_submit=True,

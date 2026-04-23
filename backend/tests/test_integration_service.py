@@ -307,6 +307,56 @@ def test_list_providers_exposes_ams_capabilities():
             "secret": False,
         },
     ]
+    assert applied_epic["runtimeConfig"]["endpoints"]["definitions"] == [
+        {
+            "id": "testConnection",
+            "method": "GET",
+            "path": "/api/health",
+            "source": "base_url",
+            "required": True,
+            "timeoutSeconds": 20,
+        },
+        {
+            "id": "searchClients",
+            "method": "POST",
+            "path": "/api/clients/search",
+            "source": "base_url",
+            "required": True,
+            "timeoutSeconds": 20,
+        },
+        {
+            "id": "resolveTargetClient",
+            "method": "GET",
+            "path": "/api/clients/{clientId}",
+            "source": "base_url",
+            "required": True,
+            "timeoutSeconds": 20,
+        },
+        {
+            "id": "submitStructuredData",
+            "method": "POST",
+            "path": "/api/submissions",
+            "source": "base_url",
+            "required": True,
+            "timeoutSeconds": 20,
+        },
+        {
+            "id": "attachDocuments",
+            "method": "POST",
+            "path": "/api/documents",
+            "source": "base_url",
+            "required": True,
+            "timeoutSeconds": 20,
+        },
+        {
+            "id": "createActivity",
+            "method": "POST",
+            "path": "/api/activities",
+            "source": "base_url",
+            "required": True,
+            "timeoutSeconds": 20,
+        },
+    ]
     assert {
         operation["operation"] for operation in applied_epic["runtimeConfig"]["operations"]
     } == {

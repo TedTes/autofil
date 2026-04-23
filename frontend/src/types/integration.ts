@@ -65,6 +65,15 @@ export interface IntegrationRuntimeAuthField {
   secret: boolean
 }
 
+export interface IntegrationRuntimeEndpointDefinition {
+  id: string
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD'
+  path: string
+  source: 'base_url' | 'url'
+  required: boolean
+  timeoutSeconds: number
+}
+
 export interface IntegrationRuntimeConfig {
   version: string
   auth: {
@@ -80,6 +89,7 @@ export interface IntegrationRuntimeConfig {
   endpoints: {
     configKey: string
     allowOverrides: boolean
+    definitions: IntegrationRuntimeEndpointDefinition[]
   }
   requestMappings: {
     configKey: string

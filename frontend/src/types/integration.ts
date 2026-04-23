@@ -94,6 +94,8 @@ export interface IntegrationDestination {
   updated_at?: string
 }
 
+export type IntegrationConnection = IntegrationDestination
+
 export interface CreateIntegrationDestinationRequest {
   client_id: string
   name: string
@@ -109,8 +111,13 @@ export interface CreateIntegrationDestinationRequest {
   enabled?: boolean
 }
 
+export type CreateIntegrationConnectionRequest = CreateIntegrationDestinationRequest
+
 export type UpdateIntegrationDestinationRequest =
   Partial<CreateIntegrationDestinationRequest>
+
+export type UpdateIntegrationConnectionRequest =
+  Partial<CreateIntegrationConnectionRequest>
 
 export interface IntegrationJob {
   id: string

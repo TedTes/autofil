@@ -37,6 +37,17 @@ def list_destinations():
         return internal_server_error(logger, "Failed to list integration destinations", exc)
 
 
+@integration_bp.route("/connections", methods=["GET"])
+@require_auth
+def list_connections():
+    try:
+        client_id = request.args.get("client_id")
+        connections = _integration_service().list_destinations(client_id=client_id)
+        return jsonify({"success": True, "data": connections}), 200
+    except Exception as exc:
+        return internal_server_error(logger, "Failed to list integration connections", exc)
+
+
 @integration_bp.route("/destinations", methods=["POST"])
 @require_auth
 def create_destination():
@@ -48,6 +59,19 @@ def create_destination():
         return jsonify({"success": False, "error": str(exc)}), 400
     except Exception as exc:
         return internal_server_error(logger, "Failed to create integration destination", exc)
+
+
+@integration_bp.route("/connections", methods=["POST"])
+@require_auth
+def create_connection():
+    try:
+        payload = request.get_json(silent=True) or {}
+        connection = _integration_service().create_destination(payload)
+        return jsonify({"success": True, "data": connection}), 201
+    except ValueError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return internal_server_error(logger, "Failed to create integration connection", exc)
 
 
 @integration_bp.route("/destinations/<destination_id>", methods=["PATCH"])
@@ -65,6 +89,21 @@ def update_destination(destination_id: str):
         return internal_server_error(logger, "Failed to update integration destination", exc)
 
 
+@integration_bp.route("/connections/<connection_id>", methods=["PATCH"])
+@require_auth
+def update_connection(connection_id: str):
+    try:
+        payload = request.get_json(silent=True) or {}
+        connection = _integration_service().update_destination(connection_id, payload)
+        if not connection:
+            return jsonify({"success": False, "error": "Integration connection not found"}), 404
+        return jsonify({"success": True, "data": connection}), 200
+    except ValueError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return internal_server_error(logger, "Failed to update integration connection", exc)
+
+
 @integration_bp.route("/destinations/<destination_id>", methods=["DELETE"])
 @require_auth
 def delete_destination(destination_id: str):
@@ -75,6 +114,18 @@ def delete_destination(destination_id: str):
         return jsonify({"success": True, "message": "Integration destination disabled"}), 200
     except Exception as exc:
         return internal_server_error(logger, "Failed to delete integration destination", exc)
+
+
+@integration_bp.route("/connections/<connection_id>", methods=["DELETE"])
+@require_auth
+def delete_connection(connection_id: str):
+    try:
+        deleted = _integration_service().delete_destination(connection_id)
+        if not deleted:
+            return jsonify({"success": False, "error": "Integration connection not found"}), 404
+        return jsonify({"success": True, "message": "Integration connection disabled"}), 200
+    except Exception as exc:
+        return internal_server_error(logger, "Failed to delete integration connection", exc)
 
 
 @integration_bp.route("/submissions/<submission_id>/jobs", methods=["GET"])

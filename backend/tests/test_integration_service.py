@@ -105,6 +105,25 @@ def test_create_ams_destination_uses_provider_metadata():
     assert destination["capabilities"]["requiresAgencySdkLicense"] is True
 
 
+def test_create_connection_alias_uses_destination_normalization():
+    db = FakeDb()
+    service = IntegrationService(db=db, current_user_id="user-1")
+
+    connection = service.create_destination(
+        {
+            "client_id": "client-1",
+            "name": "NowCerts",
+            "provider": "nowcerts",
+            "auth_config": {"username": "agent@example.test"},
+        }
+    )
+
+    assert connection["type"] == "ams"
+    assert connection["provider"] == "nowcerts"
+    assert connection["auth_type"] == "api_credentials"
+    assert connection["capabilities"]["supportsStructuredDataSubmit"] is True
+
+
 def test_list_destinations_filters_by_owner_and_client():
     db = FakeDb()
     service = IntegrationService(db=db, current_user_id="user-1")

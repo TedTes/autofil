@@ -24,6 +24,9 @@ import type {
   FieldCatalog,
   IntegrationPayload,
   IntegrationProvider,
+  IntegrationConnection,
+  CreateIntegrationConnectionRequest,
+  UpdateIntegrationConnectionRequest,
   IntegrationDestination,
   CreateIntegrationDestinationRequest,
   UpdateIntegrationDestinationRequest,
@@ -766,6 +769,22 @@ export async function getIntegrationDestinations(options?: {
   }
 }
 
+export async function getIntegrationConnections(options?: {
+  clientId?: string
+}): Promise<IntegrationConnection[]> {
+  try {
+    const response = await api.get('/integrations/connections', {
+      params: options?.clientId ? { client_id: options.clientId } : undefined,
+    })
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to load integration connections')
+    }
+    return response.data.data as IntegrationConnection[]
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
 export async function createIntegrationDestination(
   payload: CreateIntegrationDestinationRequest
 ): Promise<IntegrationDestination> {
@@ -775,6 +794,20 @@ export async function createIntegrationDestination(
       throw new Error(response.data.error || 'Failed to create integration destination')
     }
     return response.data.data as IntegrationDestination
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
+export async function createIntegrationConnection(
+  payload: CreateIntegrationConnectionRequest
+): Promise<IntegrationConnection> {
+  try {
+    const response = await api.post('/integrations/connections', payload)
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to create integration connection')
+    }
+    return response.data.data as IntegrationConnection
   } catch (error) {
     handleApiError(error)
   }
@@ -795,11 +828,37 @@ export async function updateIntegrationDestination(
   }
 }
 
+export async function updateIntegrationConnection(
+  connectionId: string,
+  payload: UpdateIntegrationConnectionRequest
+): Promise<IntegrationConnection> {
+  try {
+    const response = await api.patch(`/integrations/connections/${connectionId}`, payload)
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to update integration connection')
+    }
+    return response.data.data as IntegrationConnection
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
 export async function deleteIntegrationDestination(destinationId: string): Promise<void> {
   try {
     const response = await api.delete(`/integrations/destinations/${destinationId}`)
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to delete integration destination')
+    }
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
+export async function deleteIntegrationConnection(connectionId: string): Promise<void> {
+  try {
+    const response = await api.delete(`/integrations/connections/${connectionId}`)
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to delete integration connection')
     }
   } catch (error) {
     handleApiError(error)

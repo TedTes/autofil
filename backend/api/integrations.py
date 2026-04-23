@@ -164,6 +164,31 @@ def preview_send():
         return internal_server_error(logger, "Failed to preview integration send", exc)
 
 
+@integration_bp.route("/send", methods=["POST"])
+@require_auth
+def send():
+    try:
+        payload = request.get_json(silent=True) or {}
+        connection_id = payload.get("connection_id")
+        submission_id = payload.get("submission_id")
+        if not connection_id:
+            return jsonify({"success": False, "error": "connection_id is required"}), 400
+        if not submission_id:
+            return jsonify({"success": False, "error": "submission_id is required"}), 400
+
+        job = _integration_service().send(
+            submission_id=str(submission_id),
+            connection_id=str(connection_id),
+            target=payload.get("target") if isinstance(payload.get("target"), dict) else {},
+            actions=payload.get("actions") if isinstance(payload.get("actions"), list) else None,
+        )
+        return jsonify({"success": True, "data": job}), 200
+    except ValueError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return internal_server_error(logger, "Failed to send integration payload", exc)
+
+
 @integration_bp.route("/destinations/<destination_id>", methods=["DELETE"])
 @require_auth
 def delete_destination(destination_id: str):

@@ -902,6 +902,28 @@ export async function previewIntegrationSend(payload: {
   }
 }
 
+export async function sendToIntegration(payload: {
+  connectionId: string
+  submissionId: string
+  target?: Record<string, unknown>
+  actions?: string[]
+}): Promise<IntegrationJob> {
+  try {
+    const response = await api.post('/integrations/send', {
+      connection_id: payload.connectionId,
+      submission_id: payload.submissionId,
+      target: payload.target,
+      actions: payload.actions,
+    })
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to send integration payload')
+    }
+    return response.data.data as IntegrationJob
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
 export async function deleteIntegrationDestination(destinationId: string): Promise<void> {
   try {
     const response = await api.delete(`/integrations/destinations/${destinationId}`)

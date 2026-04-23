@@ -326,3 +326,81 @@ def test_send_submission_creates_and_completes_job():
     assert inserted_job["request_payload"]["submission"]["submission_id"] == "sub-1"
     assert job["status"] == "succeeded"
     assert job["response_status"] == 200
+
+
+def test_send_creates_provider_job_for_webhook_connection():
+    db = SendFakeDb()
+    service = IntegrationService(db=db, current_user_id="user-1")
+    service._post_webhook = lambda destination, payload, key: StubResponse()
+
+    job = service.send(
+        "sub-1",
+        "dest-1",
+        payload_service=StubPayloadService(),
+    )
+
+    inserted_table, inserted_job = db.rows[0]
+    assert inserted_table == "integration_jobs"
+    assert inserted_job["destination_id"] == "dest-1"
+    assert inserted_job["actions"] == ["submit_structured_data"]
+    assert inserted_job["request_payload"]["insured"]["name"] == "Redwood Custom Builders LLC"
+    assert job["status"] == "succeeded"
+    assert job["action_results"][0]["status"] == "succeeded"
+
+
+def test_send_requires_target_for_targeted_ams_provider():
+    db = SendFakeDb()
+    db.destination = {
+        **db.destination,
+        "type": "ams",
+        "provider": "applied_epic",
+        "url": None,
+        "capabilities": {
+            "supportsDocumentAttach": True,
+            "requiresTargetClient": True,
+        },
+    }
+    service = IntegrationService(db=db, current_user_id="user-1")
+
+    try:
+        service.send(
+            "sub-1",
+            "dest-1",
+            actions=["attach_documents"],
+            payload_service=StubPayloadService(),
+        )
+    except ValueError as exc:
+        assert "Target client is required" in str(exc)
+    else:
+        raise AssertionError("Expected missing target client to fail")
+
+
+def test_send_records_not_implemented_adapter_failure():
+    db = SendFakeDb()
+    db.destination = {
+        **db.destination,
+        "type": "ams",
+        "provider": "applied_epic",
+        "url": None,
+        "capabilities": {
+            "supportsDocumentAttach": True,
+            "requiresTargetClient": True,
+        },
+    }
+    service = IntegrationService(db=db, current_user_id="user-1")
+
+    job = service.send(
+        "sub-1",
+        "dest-1",
+        target={"clientId": "epic-client-1"},
+        actions=["attach_documents"],
+        payload_service=StubPayloadService(),
+    )
+
+    inserted_table, inserted_job = db.rows[0]
+    assert inserted_table == "integration_jobs"
+    assert inserted_job["target"] == {"clientId": "epic-client-1"}
+    assert inserted_job["provider"] == "applied_epic"
+    assert job["status"] == "failed"
+    assert job["action_results"][0]["action"] == "attach_documents"
+    assert "not implemented yet" in job["error_message"]

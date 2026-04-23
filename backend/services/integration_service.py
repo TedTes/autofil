@@ -225,6 +225,62 @@ class IntegrationService:
             order="created_at.desc",
         )
 
+    def send(
+        self,
+        submission_id: str,
+        connection_id: str,
+        *,
+        target: Optional[Dict[str, Any]] = None,
+        actions: Optional[List[str]] = None,
+        payload_service: Optional[IntegrationPayloadService] = None,
+    ) -> Dict[str, Any]:
+        connection = self.get_destination(connection_id)
+        if not connection:
+            raise ValueError("Integration connection not found")
+        if not connection.get("enabled", True):
+            raise ValueError("Integration connection is disabled")
+
+        provider_id = str(connection.get("provider") or connection.get("type") or "webhook")
+        provider = get_provider(provider_id) or {}
+        capabilities = self._connection_capabilities(connection, provider)
+        action_previews = self._preview_actions(actions, capabilities)
+        blocking_actions = [action["label"] for action in action_previews if action["blocking"]]
+        if blocking_actions:
+            raise ValueError(f"Unsupported actions: {', '.join(blocking_actions)}")
+        if capabilities.get("requiresTargetClient") and not self._target_client_id(target or {}):
+            raise ValueError("Target client is required for this provider")
+
+        payload_builder = payload_service or IntegrationPayloadService()
+        request_payload = payload_builder.build_payload(submission_id)
+        requested_actions = [action["action"] for action in action_previews]
+        idempotency_key = f"{submission_id}:{connection_id}:{uuid.uuid4()}"
+        job = self._create_job(
+            submission_id=submission_id,
+            destination=connection,
+            idempotency_key=idempotency_key,
+            request_payload=request_payload,
+            target=target or {},
+            actions=requested_actions,
+        )
+        if not job:
+            raise RuntimeError("Failed to create integration job")
+
+        if provider_id == "webhook":
+            return self._send_webhook_job(
+                job,
+                connection,
+                request_payload,
+                idempotency_key,
+            )
+        return self._send_adapter_job(
+            job,
+            connection,
+            request_payload,
+            target=target or {},
+            actions=requested_actions,
+            idempotency_key=idempotency_key,
+        )
+
     def send_submission(
         self,
         submission_id: str,
@@ -406,6 +462,8 @@ class IntegrationService:
         destination: Dict[str, Any],
         idempotency_key: str,
         request_payload: Dict[str, Any],
+        target: Optional[Dict[str, Any]] = None,
+        actions: Optional[List[str]] = None,
     ) -> Optional[Dict[str, Any]]:
         now = datetime.utcnow().isoformat()
         return self.db.insert_row(
@@ -420,8 +478,8 @@ class IntegrationService:
                 "status": "running",
                 "attempt_count": 0,
                 "idempotency_key": idempotency_key,
-                "target": {},
-                "actions": ["submit_structured_data"],
+                "target": target or {},
+                "actions": actions or ["submit_structured_data"],
                 "request_payload": request_payload,
                 "action_results": [],
                 "created_at": now,
@@ -553,6 +611,140 @@ class IntegrationService:
 
     def _capability_enabled(self, value: Any) -> bool:
         return value is True or value == "limited"
+
+    def _target_client_id(self, target: Dict[str, Any]) -> Optional[Any]:
+        return target.get("clientId") or target.get("client_id")
+
+    def _send_webhook_job(
+        self,
+        job: Dict[str, Any],
+        destination: Dict[str, Any],
+        request_payload: Dict[str, Any],
+        idempotency_key: str,
+    ) -> Dict[str, Any]:
+        try:
+            response = self._post_webhook(destination, request_payload, idempotency_key)
+            response_body = self._response_body(response)
+            status = "succeeded" if 200 <= response.status_code < 300 else "failed"
+            error_message = None if status == "succeeded" else response.text[:500]
+            return self._update_job(
+                job["id"],
+                {
+                    "status": status,
+                    "attempt_count": int(job.get("attempt_count") or 0) + 1,
+                    "response_status": response.status_code,
+                    "response_body": response_body,
+                    "action_results": [
+                        {
+                            "action": "submit_structured_data",
+                            "status": status,
+                            "message": error_message,
+                        }
+                    ],
+                    "error_message": error_message,
+                    "sent_at": datetime.utcnow().isoformat() if status == "succeeded" else None,
+                    "updated_at": datetime.utcnow().isoformat(),
+                },
+            )
+        except Exception as exc:
+            return self._update_job(
+                job["id"],
+                {
+                    "status": "failed",
+                    "attempt_count": int(job.get("attempt_count") or 0) + 1,
+                    "action_results": [
+                        {
+                            "action": "submit_structured_data",
+                            "status": "failed",
+                            "message": str(exc)[:500],
+                        }
+                    ],
+                    "error_message": str(exc)[:500],
+                    "updated_at": datetime.utcnow().isoformat(),
+                },
+            )
+
+    def _send_adapter_job(
+        self,
+        job: Dict[str, Any],
+        connection: Dict[str, Any],
+        request_payload: Dict[str, Any],
+        *,
+        target: Dict[str, Any],
+        actions: List[str],
+        idempotency_key: str,
+    ) -> Dict[str, Any]:
+        provider_id = str(connection.get("provider") or connection.get("type") or "webhook")
+        adapter = get_adapter(provider_id)
+        config = self._connection_test_config(connection)
+        try:
+            result = adapter.send_submission(
+                request_payload,
+                config=config,
+                target=target,
+                actions=actions,
+                idempotency_key=idempotency_key,
+            )
+            ok = bool(result.get("ok"))
+            action_results = result.get("action_results")
+            if not isinstance(action_results, list):
+                action_results = [
+                    {
+                        "action": action,
+                        "status": "succeeded" if ok else "failed",
+                        "message": result.get("message"),
+                    }
+                    for action in actions
+                ]
+            status = str(result.get("status") or ("succeeded" if ok else "failed"))
+            return self._update_job(
+                job["id"],
+                {
+                    "status": status,
+                    "attempt_count": int(job.get("attempt_count") or 0) + 1,
+                    "response_body": result if isinstance(result, dict) else {},
+                    "action_results": action_results,
+                    "error_message": None if ok else str(result.get("message") or "")[:500],
+                    "sent_at": datetime.utcnow().isoformat() if ok else None,
+                    "updated_at": datetime.utcnow().isoformat(),
+                },
+            )
+        except NotImplementedError as exc:
+            return self._update_job(
+                job["id"],
+                {
+                    "status": "failed",
+                    "attempt_count": int(job.get("attempt_count") or 0) + 1,
+                    "action_results": [
+                        {
+                            "action": action,
+                            "status": "failed",
+                            "message": str(exc),
+                        }
+                        for action in actions
+                    ],
+                    "error_message": str(exc)[:500],
+                    "updated_at": datetime.utcnow().isoformat(),
+                },
+            )
+        except Exception as exc:
+            return self._update_job(
+                job["id"],
+                {
+                    "status": "failed",
+                    "attempt_count": int(job.get("attempt_count") or 0) + 1,
+                    "action_results": [
+                        {
+                            "action": action,
+                            "status": "failed",
+                            "message": str(exc)[:500],
+                        }
+                        for action in actions
+                    ],
+                    "error_message": str(exc)[:500],
+                    "updated_at": datetime.utcnow().isoformat(),
+                },
+            )
 
     def _post_webhook(
         self,

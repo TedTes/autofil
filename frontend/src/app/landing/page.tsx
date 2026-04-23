@@ -2,7 +2,20 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Upload, Zap, Download, CheckCircle, ArrowRight, Loader2 } from 'lucide-react'
+import {
+  Upload,
+  GitMerge,
+  Send,
+  CheckCircle,
+  ArrowRight,
+  Loader2,
+  FileText,
+  Layers3,
+  Target,
+  ShieldCheck,
+  History,
+  Building2,
+} from 'lucide-react'
 import AnimatedDemo from '@/components/landing/AnimatedDemo'
 import FieldLocatorDemo from '@/components/landing/FieldLocatorDemo'
 import LandingUploadPanel from '@/components/landing/LandingUploadPanel'
@@ -65,6 +78,64 @@ export default function LandingPage() {
     if (!previewFile) return null
     return `${previewFile.name}:${previewFile.size}:${previewFile.lastModified}`
   }, [previewFile])
+
+  const featureCards = [
+    {
+      icon: FileText,
+      title: 'Universal Form Support',
+      desc: 'Works with ACORD forms, carrier applications, loss runs, SOVs, and custom documents.',
+    },
+    {
+      icon: Layers3,
+      title: 'Batch Processing',
+      desc: 'Upload and process multiple documents simultaneously. Handle entire client folders at once.',
+    },
+    {
+      icon: Target,
+      title: 'Smart Data Extraction',
+      desc: 'AI-powered OCR and NLP extract fields with high accuracy across varied insurance documents.',
+    },
+    {
+      icon: CheckCircle,
+      title: 'Confidence Indicators',
+      desc: 'See confidence scores for every field and quickly focus review time where it matters.',
+    },
+    {
+      icon: ShieldCheck,
+      title: 'Secure Workflow',
+      desc: 'Keep sensitive submissions controlled while standardizing review and export steps.',
+    },
+    {
+      icon: History,
+      title: 'Audit Trail',
+      desc: 'Track changes, preserve review history, and maintain a clear operational record.',
+    },
+  ]
+
+  const useCaseCards = [
+    {
+      icon: Building2,
+      title: 'For Brokers',
+      accent: 'blue',
+      items: [
+        'Prepare submissions faster',
+        'Reduce repetitive data entry',
+        'Handle renewals in minutes',
+        'Process multiple quotes in one workflow',
+      ],
+    },
+    {
+      icon: ShieldCheck,
+      title: 'For Agencies',
+      accent: 'slate',
+      items: [
+        'Standardize document workflows across teams',
+        'Keep client communication consistent',
+        'Scale operations without adding manual steps',
+        'Reduce E&O exposure from avoidable entry errors',
+      ],
+    },
+  ] as const
 
   const continueGetStarted = useCallback(async (actionLabel = 'start your workspace') => {
     if (user) {
@@ -400,7 +471,7 @@ export default function LandingPage() {
             <div className="mb-12 text-center sm:mb-16">
               <h3 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">How It Works</h3>
               <p className="mx-auto max-w-2xl text-base text-gray-600 sm:text-xl">
-                Three simple steps to automate your insurance document workflow
+                Three simple steps to move from raw insurance documents to a ready submission
               </p>
             </div>
 
@@ -416,7 +487,7 @@ export default function LandingPage() {
                   </div>
                   <h4 className="text-xl font-bold mb-3 text-gray-900">Upload Documents</h4>
                   <p className="text-gray-600">
-                    Drag and drop your PDFs, Excel files, or CSVs. AutoFil automatically scans and extracts all relevant data.
+                    Add ACORD forms, policies, schedules, and supporting files. AutoFil extracts fields from the full submission set.
                   </p>
                 </div>
               </div>
@@ -428,11 +499,11 @@ export default function LandingPage() {
                     2
                   </div>
                   <div className="w-16 h-16 mx-auto bg-blue-100 rounded-2xl flex items-center justify-center mb-6 mt-4">
-                    <Zap className="w-8 h-8 text-blue-600" />
+                    <GitMerge className="w-8 h-8 text-blue-600" />
                   </div>
-                  <h4 className="text-xl font-bold mb-3 text-gray-900">Review & Edit</h4>
+                  <h4 className="text-xl font-bold mb-3 text-gray-900">Review Merged Data</h4>
                   <p className="text-gray-600">
-                    Verify extracted fields with confidence scores. Make quick edits if needed before processing.
+                    AutoFil normalizes and merges the extracted values into one review set, with confidence and source visibility for each field.
                   </p>
                 </div>
               </div>
@@ -444,11 +515,11 @@ export default function LandingPage() {
                     3
                   </div>
                   <div className="w-16 h-16 mx-auto bg-blue-100 rounded-2xl flex items-center justify-center mb-6 mt-4">
-                    <Download className="w-8 h-8 text-blue-600" />
+                    <Send className="w-8 h-8 text-blue-600" />
                   </div>
-                  <h4 className="text-xl font-bold mb-3 text-gray-900">Export & Download</h4>
+                  <h4 className="text-xl font-bold mb-3 text-gray-900">Generate And Send</h4>
                   <p className="text-gray-600">
-                    Download filled forms instantly. Batch process multiple documents with one click.
+                    Generate filled outputs, assemble carrier-ready packages, or send the reviewed submission into your AMS workflow.
                   </p>
                 </div>
               </div>
@@ -467,47 +538,20 @@ export default function LandingPage() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 md:gap-6 lg:grid-cols-3">
-              {[
-                {
-                  icon: '📄',
-                  title: 'Universal Form Support',
-                  desc: 'Works with ACORD forms, carrier applications, loss runs, SOVs, and custom documents.',
-                },
-                {
-                  icon: '⚡',
-                  title: 'Batch Processing',
-                  desc: 'Upload and process multiple documents simultaneously. Handle entire client folders at once.',
-                },
-                {
-                  icon: '🎯',
-                  title: 'Smart Data Extraction',
-                  desc: 'AI-powered OCR and NLP extract fields with 98%+ accuracy across various document types.',
-                },
-                {
-                  icon: '✅',
-                  title: 'Confidence Indicators',
-                  desc: 'See extraction confidence scores for every field. Quickly identify items needing review.',
-                },
-                {
-                  icon: '🔒',
-                  title: 'Secure & Private',
-                  desc: 'All processing happens locally in your browser. Your documents never leave your device.',
-                },
-                {
-                  icon: '📊',
-                  title: 'Audit Trail',
-                  desc: 'Track all changes and maintain complete version history for compliance and record-keeping.',
-                },
-              ].map((feature, i) => (
+              {featureCards.map((feature, i) => {
+                const Icon = feature.icon
+                return (
                 <div
                   key={i}
-                  className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg hover:border-blue-200 transition-all"
+                  className="rounded-2xl border-2 border-gray-200 bg-white p-6 transition-all hover:border-blue-300 hover:shadow-lg sm:p-8"
                 >
-                  <div className="text-4xl mb-4">{feature.icon}</div>
+                  <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-100">
+                    <Icon className="h-8 w-8 text-blue-600" />
+                  </div>
                   <h4 className="text-lg font-bold mb-2 text-gray-900">{feature.title}</h4>
-                  <p className="text-gray-600 text-sm">{feature.desc}</p>
+                  <p className="text-sm leading-6 text-gray-600">{feature.desc}</p>
                 </div>
-              ))}
+              )})}
             </div>
           </div>
         </section>
@@ -525,39 +569,45 @@ export default function LandingPage() {
             </div>
 
             <div className="mx-auto grid max-w-5xl gap-6 md:grid-cols-2 md:gap-8">
-              <div className="rounded-2xl bg-gradient-to-br from-blue-50 to-blue-100 p-6 sm:p-8">
-                <h4 className="text-2xl font-bold mb-4 text-gray-900">For Brokers</h4>
-                <ul className="space-y-3">
-                  {[
-                    'Prepare submissions 10x faster',
-                    'Reduce manual data entry errors',
-                    'Handle renewals in minutes, not hours',
-                    'Process multiple quotes simultaneously',
-                  ].map((item, i) => (
-                    <li key={i} className="flex items-start gap-3">
-                      <CheckCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                      <span className="text-gray-700">{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              {useCaseCards.map((card) => {
+                const Icon = card.icon
+                const accentClasses =
+                  card.accent === 'blue'
+                    ? {
+                        panel: 'border-blue-200 bg-blue-50/70',
+                        iconWrap: 'bg-blue-100',
+                        icon: 'text-blue-600',
+                        check: 'text-blue-600',
+                      }
+                    : {
+                        panel: 'border-slate-200 bg-slate-50',
+                        iconWrap: 'bg-slate-200',
+                        icon: 'text-slate-700',
+                        check: 'text-slate-700',
+                      }
 
-              <div className="rounded-2xl bg-gradient-to-br from-purple-50 to-purple-100 p-6 sm:p-8">
-                <h4 className="text-2xl font-bold mb-4 text-gray-900">For Agencies</h4>
-                <ul className="space-y-3">
-                  {[
-                    'Standardize document workflows across teams',
-                    'Maintain consistency in client communications',
-                    'Scale operations without adding headcount',
-                    'Reduce E&O exposure from manual errors',
-                  ].map((item, i) => (
-                    <li key={i} className="flex items-start gap-3">
-                      <CheckCircle className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
-                      <span className="text-gray-700">{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+                return (
+                  <div
+                    key={card.title}
+                    className={`rounded-2xl border-2 p-6 sm:p-8 ${accentClasses.panel}`}
+                  >
+                    <div className="mb-5 flex items-center gap-4">
+                      <div className={`flex h-14 w-14 items-center justify-center rounded-2xl ${accentClasses.iconWrap}`}>
+                        <Icon className={`h-7 w-7 ${accentClasses.icon}`} />
+                      </div>
+                      <h4 className="text-2xl font-bold text-gray-900">{card.title}</h4>
+                    </div>
+                    <ul className="space-y-3">
+                      {card.items.map((item) => (
+                        <li key={item} className="flex items-start gap-3">
+                          <CheckCircle className={`mt-0.5 h-5 w-5 flex-shrink-0 ${accentClasses.check}`} />
+                          <span className="text-gray-700">{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )
+              })}
             </div>
           </div>
         </section>

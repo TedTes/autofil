@@ -13,6 +13,7 @@ import {
 import {
   getIntegrationConnections,
   getIntegrationJobs,
+  getIntegrationSendJob,
   getIntegrationProviders,
   previewIntegrationSend,
   searchIntegrationClients,
@@ -75,6 +76,7 @@ export default function SendToAmsModal({
   const [isSearchingClients, setIsSearchingClients] = useState(false)
   const [isPreviewing, setIsPreviewing] = useState(false)
   const [isSending, setIsSending] = useState(false)
+  const [refreshingJobId, setRefreshingJobId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
 
@@ -215,6 +217,19 @@ export default function SendToAmsModal({
       setError(err instanceof Error ? err.message : 'Failed to send to AMS')
     } finally {
       setIsSending(false)
+    }
+  }
+
+  const handleRefreshJob = async (jobId: string) => {
+    setRefreshingJobId(jobId)
+    setError(null)
+    try {
+      const job = await getIntegrationSendJob(jobId)
+      setJobs((current) => current.map((item) => (item.id === job.id ? job : item)))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to refresh send job')
+    } finally {
+      setRefreshingJobId(null)
     }
   }
 
@@ -480,6 +495,36 @@ export default function SendToAmsModal({
                           {job.status}
                         </span>
                       </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        {(job.actions || []).map((action) => (
+                          <span key={action} className="rounded-full bg-gray-100 px-2 py-1 text-[11px] font-semibold text-gray-600">
+                            {action.replaceAll('_', ' ')}
+                          </span>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => void handleRefreshJob(job.id)}
+                          disabled={refreshingJobId === job.id}
+                          className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-60"
+                        >
+                          <RefreshCw className={`h-3 w-3 ${refreshingJobId === job.id ? 'animate-spin' : ''}`} />
+                          Refresh
+                        </button>
+                      </div>
+                      {Array.isArray(job.action_results) && job.action_results.length > 0 && (
+                        <div className="mt-3 space-y-1 rounded-md bg-gray-50 px-3 py-2">
+                          {job.action_results.map((result, index) => (
+                            <div key={`${String(result.action || 'action')}-${index}`} className="flex items-start justify-between gap-3 text-xs">
+                              <span className="font-semibold text-gray-700">
+                                {String(result.action || 'action').replaceAll('_', ' ')}
+                              </span>
+                              <span className={String(result.status) === 'succeeded' ? 'text-green-700' : 'text-red-700'}>
+                                {String(result.status || 'unknown')}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       {job.error_message && <p className="mt-2 text-xs text-red-600">{job.error_message}</p>}
                     </div>
                   ))

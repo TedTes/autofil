@@ -907,6 +907,7 @@ export async function sendToIntegration(payload: {
   submissionId: string
   target?: Record<string, unknown>
   actions?: string[]
+  force?: boolean
 }): Promise<IntegrationJob> {
   try {
     const response = await api.post('/integrations/send', {
@@ -914,6 +915,7 @@ export async function sendToIntegration(payload: {
       submission_id: payload.submissionId,
       target: payload.target,
       actions: payload.actions,
+      force: payload.force,
     })
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to send integration payload')

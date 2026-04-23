@@ -181,6 +181,7 @@ def send():
             connection_id=str(connection_id),
             target=payload.get("target") if isinstance(payload.get("target"), dict) else {},
             actions=payload.get("actions") if isinstance(payload.get("actions"), list) else None,
+            force=bool(payload.get("force")),
         )
         return jsonify({"success": True, "data": job}), 200
     except ValueError as exc:

@@ -70,6 +70,23 @@ class RetryFakeDb(SendFakeDb):
         return super().select_rows(table, **kwargs)
 
 
+class DuplicateFakeDb(SendFakeDb):
+    def select_rows(self, table, **kwargs):
+        filters = kwargs.get("filters") or {}
+        if table == "integration_jobs" and filters.get("submission_id") == "sub-1":
+            return [
+                {
+                    "id": "job-existing",
+                    "status": "succeeded",
+                    "submission_id": "sub-1",
+                    "destination_id": "dest-1",
+                    "target": {},
+                    "actions": ["submit_structured_data"],
+                }
+            ]
+        return super().select_rows(table, **kwargs)
+
+
 class StubPayloadService:
     def build_payload(self, submission_id):
         return {
@@ -455,6 +472,22 @@ def test_send_creates_provider_job_for_webhook_connection():
     assert inserted_job["request_payload"]["insured"]["name"] == "Redwood Custom Builders LLC"
     assert job["status"] == "succeeded"
     assert job["action_results"][0]["status"] == "succeeded"
+
+
+def test_send_blocks_duplicate_successful_job():
+    db = DuplicateFakeDb()
+    service = IntegrationService(db=db, current_user_id="user-1")
+
+    try:
+        service.send(
+            "sub-1",
+            "dest-1",
+            payload_service=StubPayloadService(),
+        )
+    except ValueError as exc:
+        assert "Duplicate integration send blocked" in str(exc)
+    else:
+        raise AssertionError("Expected duplicate send to be blocked")
 
 
 def test_send_requires_target_for_targeted_ams_provider():

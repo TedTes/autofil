@@ -274,6 +274,7 @@ class IntegrationService:
         target: Optional[Dict[str, Any]] = None,
         actions: Optional[List[str]] = None,
         payload_service: Optional[IntegrationPayloadService] = None,
+        force: bool = False,
     ) -> Dict[str, Any]:
         connection = self.get_destination(connection_id)
         if not connection:
@@ -294,6 +295,15 @@ class IntegrationService:
         payload_builder = payload_service or IntegrationPayloadService()
         request_payload = payload_builder.build_payload(submission_id)
         requested_actions = [action["action"] for action in action_previews]
+        if not force:
+            duplicate = self._find_duplicate_send(
+                submission_id=submission_id,
+                connection_id=connection_id,
+                target=target or {},
+                actions=requested_actions,
+            )
+            if duplicate:
+                raise ValueError(f"Duplicate integration send blocked by job {duplicate.get('id')}")
         idempotency_key = f"{submission_id}:{connection_id}:{uuid.uuid4()}"
         job = self._create_job(
             submission_id=submission_id,
@@ -314,6 +324,36 @@ class IntegrationService:
             actions=requested_actions,
             idempotency_key=idempotency_key,
         )
+
+    def _find_duplicate_send(
+        self,
+        *,
+        submission_id: str,
+        connection_id: str,
+        target: Dict[str, Any],
+        actions: List[str],
+    ) -> Optional[Dict[str, Any]]:
+        filters = {
+            "submission_id": submission_id,
+            "destination_id": connection_id,
+        }
+        if self.current_user_id:
+            filters["owner_user_id"] = self.current_user_id
+        rows = self.db.select_rows(
+            self.JOBS_TABLE,
+            filters=filters,
+            order="created_at.desc",
+            limit=25,
+        )
+        normalized_actions = sorted(str(action) for action in actions)
+        for row in rows:
+            if row.get("status") not in {"running", "succeeded", "partially_succeeded"}:
+                continue
+            row_target = row.get("target") if isinstance(row.get("target"), dict) else {}
+            row_actions = row.get("actions") if isinstance(row.get("actions"), list) else []
+            if row_target == target and sorted(str(action) for action in row_actions) == normalized_actions:
+                return row
+        return None
 
     def retry_job(self, job_id: str) -> Dict[str, Any]:
         previous_job = self.get_job(job_id)

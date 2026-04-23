@@ -119,6 +119,14 @@ export type UpdateIntegrationDestinationRequest =
 export type UpdateIntegrationConnectionRequest =
   Partial<CreateIntegrationConnectionRequest>
 
+export interface IntegrationConnectionTestResult {
+  ok: boolean
+  status: IntegrationDestination['connection_status']
+  message: string
+  provider: string
+  connection: IntegrationConnection
+}
+
 export interface IntegrationJob {
   id: string
   owner_user_id?: string

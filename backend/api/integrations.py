@@ -104,6 +104,18 @@ def update_connection(connection_id: str):
         return internal_server_error(logger, "Failed to update integration connection", exc)
 
 
+@integration_bp.route("/connections/<connection_id>/test", methods=["POST"])
+@require_auth
+def test_connection(connection_id: str):
+    try:
+        result = _integration_service().test_connection(connection_id)
+        return jsonify({"success": True, "data": result}), 200
+    except ValueError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return internal_server_error(logger, "Failed to test integration connection", exc)
+
+
 @integration_bp.route("/destinations/<destination_id>", methods=["DELETE"])
 @require_auth
 def delete_destination(destination_id: str):

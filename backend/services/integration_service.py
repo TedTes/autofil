@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 
 import requests
 
+from integrations.adapters import get_adapter
 from integrations.providers import get_provider, list_providers
 from services.integration_payload_service import IntegrationPayloadService
 from services.supabase_db_service import SupabaseDatabaseService
@@ -89,6 +90,36 @@ class IntegrationService:
             filters["owner_user_id"] = self.current_user_id
         rows = self.db.update_rows(self.DESTINATIONS_TABLE, updates, filters=filters)
         return bool(rows)
+
+    def test_connection(self, connection_id: str) -> Dict[str, Any]:
+        connection = self.get_destination(connection_id)
+        if not connection:
+            raise ValueError("Integration connection not found")
+        if not connection.get("enabled", True):
+            raise ValueError("Integration connection is disabled")
+
+        provider_id = connection.get("provider") or connection.get("type") or "webhook"
+        adapter = get_adapter(str(provider_id))
+        config = self._connection_test_config(connection)
+        result = adapter.validate_connection(config)
+
+        ok = bool(result.get("ok"))
+        status = "valid" if ok else "invalid"
+        message = str(result.get("message") or "")
+        updates = {
+            "connection_status": status,
+            "last_tested_at": datetime.utcnow().isoformat(),
+            "last_error": None if ok else message[:500],
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+        updated = self._update_destination(connection_id, updates)
+        return {
+            "ok": ok,
+            "status": status,
+            "message": message,
+            "provider": provider_id,
+            "connection": updated,
+        }
 
     def list_jobs(self, submission_id: str) -> List[Dict[str, Any]]:
         filters = {"submission_id": submission_id}
@@ -312,6 +343,27 @@ class IntegrationService:
         if not rows:
             raise RuntimeError("Failed to update integration job")
         return rows[0]
+
+    def _update_destination(self, destination_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        filters = {"id": destination_id}
+        if self.current_user_id:
+            filters["owner_user_id"] = self.current_user_id
+        rows = self.db.update_rows(self.DESTINATIONS_TABLE, payload, filters=filters)
+        if not rows:
+            raise RuntimeError("Failed to update integration connection")
+        return rows[0]
+
+    def _connection_test_config(self, connection: Dict[str, Any]) -> Dict[str, Any]:
+        config = {}
+        if isinstance(connection.get("config"), dict):
+            config.update(connection["config"])
+        if isinstance(connection.get("auth_config"), dict):
+            config.update(connection["auth_config"])
+        if connection.get("url"):
+            config["url"] = connection.get("url")
+        if connection.get("secret_ref"):
+            config["secret_ref"] = connection.get("secret_ref")
+        return config
 
     def _post_webhook(
         self,

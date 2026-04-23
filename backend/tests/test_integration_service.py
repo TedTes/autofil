@@ -31,9 +31,11 @@ class SendFakeDb(FakeDb):
             "name": "Webhook",
             "type": "webhook",
             "url": "https://example.test/hook",
+            "provider": "webhook",
             "auth_type": "none",
             "enabled": True,
             "config": {},
+            "auth_config": {},
         }
 
     def select_rows(self, table, **kwargs):
@@ -171,6 +173,42 @@ def test_delete_destination_soft_disables_row():
     assert table == "integration_destinations"
     assert payload["enabled"] is False
     assert filters == {"id": "dest-1", "owner_user_id": "user-1"}
+
+
+def test_test_webhook_connection_marks_valid():
+    db = SendFakeDb()
+    service = IntegrationService(db=db, current_user_id="user-1")
+
+    result = service.test_connection("dest-1")
+
+    assert result["ok"] is True
+    assert result["status"] == "valid"
+    assert result["provider"] == "webhook"
+    assert result["connection"]["connection_status"] == "valid"
+    table, payload, filters = db.updated[0]
+    assert table == "integration_destinations"
+    assert payload["last_error"] is None
+    assert filters == {"id": "dest-1", "owner_user_id": "user-1"}
+
+
+def test_test_planned_ams_connection_marks_invalid_until_adapter_exists():
+    db = SendFakeDb()
+    db.destination = {
+        **db.destination,
+        "type": "ams",
+        "provider": "applied_epic",
+        "url": None,
+        "auth_config": {"baseUrl": "https://epic.example.test"},
+    }
+    service = IntegrationService(db=db, current_user_id="user-1")
+
+    result = service.test_connection("dest-1")
+
+    assert result["ok"] is False
+    assert result["status"] == "invalid"
+    assert result["provider"] == "applied_epic"
+    assert "not implemented yet" in result["message"]
+    assert result["connection"]["connection_status"] == "invalid"
 
 
 def test_send_submission_creates_and_completes_job():

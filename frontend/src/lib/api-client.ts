@@ -27,6 +27,7 @@ import type {
   IntegrationConnection,
   CreateIntegrationConnectionRequest,
   UpdateIntegrationConnectionRequest,
+  IntegrationConnectionTestResult,
   IntegrationDestination,
   CreateIntegrationDestinationRequest,
   UpdateIntegrationDestinationRequest,
@@ -838,6 +839,20 @@ export async function updateIntegrationConnection(
       throw new Error(response.data.error || 'Failed to update integration connection')
     }
     return response.data.data as IntegrationConnection
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
+export async function testIntegrationConnection(
+  connectionId: string
+): Promise<IntegrationConnectionTestResult> {
+  try {
+    const response = await api.post(`/integrations/connections/${connectionId}/test`)
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to test integration connection')
+    }
+    return response.data.data as IntegrationConnectionTestResult
   } catch (error) {
     handleApiError(error)
   }

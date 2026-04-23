@@ -2,17 +2,24 @@
 
 import { useEffect, useState } from 'react'
 import {
+  AlertCircle,
   Bell,
   Building2,
   Check,
+  CheckCircle2,
+  Clock3,
   Database,
   KeyRound,
+  PlugZap,
+  RefreshCw,
   Save,
   ShieldCheck,
   SlidersHorizontal,
   User,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { getIntegrationConnections, getIntegrationProviders } from '@/lib/api-client'
+import type { IntegrationConnection, IntegrationProvider } from '@/types'
 
 type ReviewThreshold = 'strict' | 'balanced' | 'relaxed'
 
@@ -202,10 +209,7 @@ export function SettingsView() {
             title="Integrations"
             description="Connection points for automation and downstream systems."
           />
-          <div className="space-y-3 p-6">
-            <IntegrationRow label="Webhook output" status="Available" tone="blue" />
-            <IntegrationRow label="AMS sync" status="Not connected" tone="gray" />
-          </div>
+          <IntegrationSettingsPanel />
         </section>
 
         <section className="rounded-2xl border border-gray-200 bg-white shadow-sm">
@@ -311,27 +315,157 @@ function ToggleRow({
   )
 }
 
-function IntegrationRow({
-  label,
-  status,
-  tone,
-}: {
-  label: string
-  status: string
-  tone: 'green' | 'blue' | 'gray'
-}) {
-  const toneClass = {
-    green: 'bg-green-50 text-green-700 ring-green-100',
-    blue: 'bg-blue-50 text-blue-700 ring-blue-100',
-    gray: 'bg-gray-50 text-gray-600 ring-gray-100',
-  }[tone]
+function IntegrationSettingsPanel() {
+  const [providers, setProviders] = useState<IntegrationProvider[]>([])
+  const [connections, setConnections] = useState<IntegrationConnection[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const loadIntegrations = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const [providerRows, connectionRows] = await Promise.all([
+        getIntegrationProviders(),
+        getIntegrationConnections(),
+      ])
+      setProviders(providerRows)
+      setConnections(connectionRows)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load integrations')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadIntegrations()
+  }, [])
+
+  const connectedCount = connections.filter((connection) => connection.enabled).length
+  const amsProviderCount = providers.filter((provider) => provider.category === 'ams').length
+  const availableProviderCount = providers.filter((provider) => provider.status === 'available').length
 
   return (
-    <div className="flex items-center justify-between rounded-xl border border-gray-100 px-4 py-3">
-      <span className="text-sm font-semibold text-gray-800">{label}</span>
-      <span className={`rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${toneClass}`}>
-        {status}
-      </span>
+    <div className="space-y-5 p-6">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <MetricPill icon={PlugZap} label="Connections" value={String(connectedCount)} />
+        <MetricPill icon={Database} label="AMS providers" value={String(amsProviderCount)} />
+        <MetricPill icon={CheckCircle2} label="Available now" value={String(availableProviderCount)} />
+      </div>
+
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-gray-800">Provider registry</p>
+        <button
+          type="button"
+          onClick={loadIntegrations}
+          disabled={loading}
+          className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-bold text-gray-700 transition hover:border-blue-200 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+          Refresh
+        </button>
+      </div>
+
+      {error && (
+        <div className="flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-700">
+          <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="space-y-2">
+          {[0, 1, 2].map((item) => (
+            <div key={item} className="h-14 animate-pulse rounded-xl bg-gray-100" />
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {providers.map((provider) => {
+            const providerConnections = connections.filter(
+              (connection) => connection.provider === provider.provider && connection.enabled
+            )
+            return (
+              <ProviderRow
+                key={provider.provider}
+                provider={provider}
+                connectionCount={providerConnections.length}
+              />
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MetricPill({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ComponentType<{ className?: string }>
+  label: string
+  value: string
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
+      <Icon className="h-4 w-4 text-gray-500" />
+      <div>
+        <p className="text-xs font-semibold text-gray-500">{label}</p>
+        <p className="text-sm font-black text-gray-950">{value}</p>
+      </div>
+    </div>
+  )
+}
+
+function ProviderRow({
+  provider,
+  connectionCount,
+}: {
+  provider: IntegrationProvider
+  connectionCount: number
+}) {
+  const statusMeta = provider.status === 'available'
+    ? {
+        icon: CheckCircle2,
+        label: 'Available',
+        className: 'bg-green-50 text-green-700 ring-green-100',
+      }
+    : provider.status === 'planned'
+      ? {
+          icon: Clock3,
+          label: 'Planned',
+          className: 'bg-amber-50 text-amber-700 ring-amber-100',
+        }
+      : {
+          icon: AlertCircle,
+          label: 'Disabled',
+          className: 'bg-gray-50 text-gray-600 ring-gray-100',
+        }
+  const StatusIcon = statusMeta.icon
+
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 px-4 py-3">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="truncate text-sm font-bold text-gray-900">{provider.displayName}</span>
+          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-bold uppercase text-gray-500">
+            {provider.category}
+          </span>
+        </div>
+        <p className="mt-1 line-clamp-2 text-xs leading-5 text-gray-500">{provider.description}</p>
+      </div>
+      <div className="flex flex-shrink-0 flex-col items-end gap-2">
+        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${statusMeta.className}`}>
+          <StatusIcon className="h-3.5 w-3.5" />
+          {statusMeta.label}
+        </span>
+        <span className="text-xs font-semibold text-gray-500">
+          {connectionCount === 1 ? '1 connection' : `${connectionCount} connections`}
+        </span>
+      </div>
     </div>
   )
 }

@@ -22,6 +22,7 @@ import {
   createIntegrationConnection,
   getIntegrationConnections,
   getIntegrationProviders,
+  testIntegrationConnection,
 } from '@/lib/api-client'
 import type { CreateIntegrationConnectionRequest, IntegrationConnection, IntegrationProvider } from '@/types'
 
@@ -326,6 +327,7 @@ function IntegrationSettingsPanel() {
   const [connectionName, setConnectionName] = useState('')
   const [scopeKey, setScopeKey] = useState('workspace')
   const [credentialValues, setCredentialValues] = useState<Record<string, string>>({})
+  const [testingConnectionId, setTestingConnectionId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -415,6 +417,25 @@ function IntegrationSettingsPanel() {
     }
   }
 
+  const handleTestConnection = async (connectionId: string) => {
+    setTestingConnectionId(connectionId)
+    setFormMessage(null)
+    setError(null)
+    try {
+      const result = await testIntegrationConnection(connectionId)
+      setConnections((current) =>
+        current.map((connection) =>
+          connection.id === connectionId ? result.connection : connection
+        )
+      )
+      setFormMessage(result.message)
+    } catch (err) {
+      setFormMessage(err instanceof Error ? err.message : 'Failed to test connection')
+    } finally {
+      setTestingConnectionId(null)
+    }
+  }
+
   return (
     <div className="space-y-5 p-6">
       <div className="grid gap-3 sm:grid-cols-3">
@@ -463,6 +484,32 @@ function IntegrationSettingsPanel() {
               />
             )
           })}
+        </div>
+      )}
+
+      {!loading && (
+        <div className="border-t border-gray-100 pt-5">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-gray-800">Saved connections</p>
+            <span className="text-xs font-semibold text-gray-500">{connectedCount} active</span>
+          </div>
+          {connections.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-gray-200 p-4 text-sm text-gray-500">
+              No integration connections have been saved yet.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {connections.map((connection) => (
+                <ConnectionStatusRow
+                  key={connection.id}
+                  connection={connection}
+                  provider={providers.find((provider) => provider.provider === connection.provider)}
+                  testing={testingConnectionId === connection.id}
+                  onTest={() => handleTestConnection(connection.id)}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -549,6 +596,95 @@ function IntegrationSettingsPanel() {
       )}
     </div>
   )
+}
+
+function ConnectionStatusRow({
+  connection,
+  provider,
+  testing,
+  onTest,
+}: {
+  connection: IntegrationConnection
+  provider?: IntegrationProvider
+  testing: boolean
+  onTest: () => void
+}) {
+  const statusMeta = getConnectionStatusMeta(connection.connection_status, connection.enabled)
+  const StatusIcon = statusMeta.icon
+
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="truncate text-sm font-bold text-gray-900">{connection.name}</span>
+          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-bold uppercase text-gray-500">
+            {provider?.displayName || connection.provider}
+          </span>
+        </div>
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+          <span>{connection.type.toUpperCase()}</span>
+          {connection.last_tested_at && (
+            <span>Last tested {new Date(connection.last_tested_at).toLocaleDateString()}</span>
+          )}
+          {connection.last_error && <span className="text-red-600">{connection.last_error}</span>}
+        </div>
+      </div>
+      <div className="flex flex-shrink-0 items-center gap-2">
+        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${statusMeta.className}`}>
+          <StatusIcon className="h-3.5 w-3.5" />
+          {statusMeta.label}
+        </span>
+        <button
+          type="button"
+          onClick={onTest}
+          disabled={testing || !connection.enabled}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 transition hover:border-blue-200 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${testing ? 'animate-spin' : ''}`} />
+          Test
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function getConnectionStatusMeta(
+  status: IntegrationConnection['connection_status'],
+  enabled: boolean
+) {
+  if (!enabled) {
+    return {
+      icon: AlertCircle,
+      label: 'Disabled',
+      className: 'bg-gray-50 text-gray-600 ring-gray-100',
+    }
+  }
+  if (status === 'valid') {
+    return {
+      icon: CheckCircle2,
+      label: 'Valid',
+      className: 'bg-green-50 text-green-700 ring-green-100',
+    }
+  }
+  if (status === 'invalid') {
+    return {
+      icon: AlertCircle,
+      label: 'Invalid',
+      className: 'bg-red-50 text-red-700 ring-red-100',
+    }
+  }
+  if (status === 'configured') {
+    return {
+      icon: PlugZap,
+      label: 'Configured',
+      className: 'bg-blue-50 text-blue-700 ring-blue-100',
+    }
+  }
+  return {
+    icon: Clock3,
+    label: 'Not configured',
+    className: 'bg-amber-50 text-amber-700 ring-amber-100',
+  }
 }
 
 function MetricPill({

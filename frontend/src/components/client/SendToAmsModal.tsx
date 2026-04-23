@@ -5,15 +5,23 @@ import {
   AlertCircle,
   Loader2,
   RefreshCw,
+  Search,
   Send,
+  UserCheck,
   X,
 } from 'lucide-react'
 import {
   getIntegrationConnections,
   getIntegrationJobs,
   getIntegrationProviders,
+  searchIntegrationClients,
 } from '@/lib/api-client'
-import type { IntegrationConnection, IntegrationJob, IntegrationProvider } from '@/types'
+import type {
+  IntegrationClientSearchResult,
+  IntegrationConnection,
+  IntegrationJob,
+  IntegrationProvider,
+} from '@/types'
 
 type SendToAmsModalProps = {
   isOpen: boolean
@@ -56,7 +64,11 @@ export default function SendToAmsModal({
   const [connections, setConnections] = useState<IntegrationConnection[]>([])
   const [jobs, setJobs] = useState<IntegrationJob[]>([])
   const [selectedConnectionId, setSelectedConnectionId] = useState('')
+  const [clientQuery, setClientQuery] = useState('')
+  const [clientResults, setClientResults] = useState<IntegrationClientSearchResult[]>([])
+  const [selectedTarget, setSelectedTarget] = useState<IntegrationClientSearchResult | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [isSearchingClients, setIsSearchingClients] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const amsConnections = useMemo(
@@ -96,6 +108,44 @@ export default function SendToAmsModal({
     () => amsConnections.find((connection) => connection.id === selectedConnectionId),
     [amsConnections, selectedConnectionId]
   )
+  const selectedProvider = useMemo(
+    () => providers.find((provider) => provider.provider === selectedConnection?.provider),
+    [providers, selectedConnection?.provider]
+  )
+  const requiresTargetClient = Boolean(selectedProvider?.capabilities.requiresTargetClient)
+
+  const handleConnectionSelect = (connectionId: string) => {
+    setSelectedConnectionId(connectionId)
+    setClientQuery('')
+    setClientResults([])
+    setSelectedTarget(null)
+    setError(null)
+  }
+
+  const handleClientSearch = async () => {
+    if (!selectedConnection) return
+    if (clientQuery.trim().length < 2) {
+      setError('Enter at least 2 characters to search AMS clients.')
+      return
+    }
+    setIsSearchingClients(true)
+    setError(null)
+    try {
+      const response = await searchIntegrationClients({
+        connectionId: selectedConnection.id,
+        query: clientQuery,
+        limit: 8,
+      })
+      setClientResults(response.results)
+      if (!response.ok && response.message) {
+        setError(response.message)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to search AMS clients')
+    } finally {
+      setIsSearchingClients(false)
+    }
+  }
 
   useEffect(() => {
     if (!isOpen) return
@@ -175,7 +225,7 @@ export default function SendToAmsModal({
                     name="ams-connection"
                     value={connection.id}
                     checked={selectedConnectionId === connection.id}
-                    onChange={() => setSelectedConnectionId(connection.id)}
+                    onChange={() => handleConnectionSelect(connection.id)}
                     className="mt-1 h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
                   <div className="flex items-center justify-between gap-3">
@@ -200,6 +250,78 @@ export default function SendToAmsModal({
               <p className="mt-1 text-xs text-blue-700">
                 {selectedConnection.name} will receive the reviewed canonical submission after target and preview steps.
               </p>
+            </div>
+          )}
+
+          {selectedConnection && (
+            <div className="mt-5 rounded-lg border border-gray-200 bg-white p-4">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">Target client</h3>
+                  <p className="mt-1 text-xs text-gray-500">
+                    {requiresTargetClient
+                      ? 'This provider requires an existing AMS client before send.'
+                      : 'Optional for providers that can create or infer a client.'}
+                  </p>
+                </div>
+                {selectedTarget && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-1 text-xs font-semibold text-green-700 ring-1 ring-green-100">
+                    <UserCheck className="h-3.5 w-3.5" />
+                    Selected
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  value={clientQuery}
+                  onChange={(event) => setClientQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      void handleClientSearch()
+                    }
+                  }}
+                  placeholder="Search by insured or account name"
+                  className="min-w-0 flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleClientSearch()}
+                  disabled={isSearchingClients || !selectedConnection}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-500"
+                >
+                  {isSearchingClients ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                  Search
+                </button>
+              </div>
+
+              {selectedTarget && (
+                <div className="mt-3 rounded-md border border-green-100 bg-green-50 px-3 py-2">
+                  <p className="text-sm font-semibold text-green-950">{selectedTarget.display || selectedTarget.name}</p>
+                  <p className="mt-1 text-xs text-green-700">AMS client ID: {selectedTarget.id}</p>
+                </div>
+              )}
+
+              {clientResults.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  {clientResults.map((client) => (
+                    <button
+                      key={client.id}
+                      type="button"
+                      onClick={() => setSelectedTarget(client)}
+                      className={`w-full rounded-md border px-3 py-2 text-left transition-colors ${
+                        selectedTarget?.id === client.id
+                          ? 'border-green-200 bg-green-50'
+                          : 'border-gray-200 bg-white hover:bg-gray-50'
+                      }`}
+                    >
+                      <p className="text-sm font-semibold text-gray-900">{client.display || client.name}</p>
+                      <p className="mt-1 text-xs text-gray-500">{client.id}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -245,7 +367,7 @@ export default function SendToAmsModal({
           </button>
           <button
             type="button"
-            disabled={!selectedConnection}
+            disabled={!selectedConnection || (requiresTargetClient && !selectedTarget)}
             className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-500"
           >
             <Send className="h-4 w-4" />

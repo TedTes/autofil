@@ -35,6 +35,44 @@ export interface IntegrationPayload {
   raw_sections: unknown[]
 }
 
+export type IntegrationProviderStatus = 'available' | 'planned' | 'disabled'
+
+export type IntegrationCapabilityValue = boolean | 'limited'
+
+export interface IntegrationAuthField {
+  name: string
+  label: string
+  type: 'text' | 'password' | 'url'
+  required: boolean
+  helpText?: string
+}
+
+export interface IntegrationProvider {
+  provider: string
+  displayName: string
+  category: 'ams' | 'generic'
+  status: IntegrationProviderStatus
+  authType: string
+  description: string
+  authConfig: {
+    type: string
+    fields: IntegrationAuthField[]
+  }
+  capabilities: {
+    supportsClientSearch: IntegrationCapabilityValue
+    supportsClientCreate: IntegrationCapabilityValue
+    supportsPolicyCreate: IntegrationCapabilityValue
+    supportsDocumentAttach: IntegrationCapabilityValue
+    supportsActivities: IntegrationCapabilityValue
+    supportsStructuredDataSubmit: IntegrationCapabilityValue
+    supportsWebhooks: IntegrationCapabilityValue
+    requiresTargetClient: boolean
+    requiresPartnerAccess: boolean
+    requiresAgencySdkLicense: boolean
+  }
+  supportedActions: string[]
+}
+
 export interface IntegrationDestination {
   id: string
   owner_user_id?: string

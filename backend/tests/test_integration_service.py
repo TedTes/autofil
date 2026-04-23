@@ -92,6 +92,20 @@ def test_list_destinations_filters_by_owner_and_client():
     }
 
 
+def test_list_providers_exposes_ams_capabilities():
+    service = IntegrationService(db=FakeDb(), current_user_id="user-1")
+
+    providers = service.list_providers()
+    applied_epic = next(
+        provider for provider in providers if provider["provider"] == "applied_epic"
+    )
+
+    assert applied_epic["category"] == "ams"
+    assert applied_epic["authConfig"]["type"] == "sdk_credentials"
+    assert applied_epic["capabilities"]["supportsDocumentAttach"] is True
+    assert applied_epic["capabilities"]["requiresAgencySdkLicense"] is True
+
+
 def test_update_destination_rejects_invalid_url():
     service = IntegrationService(db=FakeDb(), current_user_id="user-1")
 

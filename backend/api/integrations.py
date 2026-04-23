@@ -16,6 +16,16 @@ def _integration_service() -> IntegrationService:
     return IntegrationService(current_user_id=get_current_user_id())
 
 
+@integration_bp.route("/providers", methods=["GET"])
+@require_auth
+def list_providers():
+    try:
+        providers = _integration_service().list_providers()
+        return jsonify({"success": True, "data": providers}), 200
+    except Exception as exc:
+        return internal_server_error(logger, "Failed to list integration providers", exc)
+
+
 @integration_bp.route("/destinations", methods=["GET"])
 @require_auth
 def list_destinations():

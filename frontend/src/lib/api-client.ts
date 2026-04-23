@@ -23,6 +23,7 @@ import type {
   MultipleFillResults,
   FieldCatalog,
   IntegrationPayload,
+  IntegrationProvider,
   IntegrationDestination,
   CreateIntegrationDestinationRequest,
   UpdateIntegrationDestinationRequest,
@@ -732,6 +733,18 @@ export async function getIntegrationPayload(submissionId: string): Promise<Integ
       throw new Error(response.data.error || 'Failed to load integration payload')
     }
     return response.data.data as IntegrationPayload
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
+export async function getIntegrationProviders(): Promise<IntegrationProvider[]> {
+  try {
+    const response = await api.get('/integrations/providers')
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to load integration providers')
+    }
+    return response.data.data as IntegrationProvider[]
   } catch (error) {
     handleApiError(error)
   }

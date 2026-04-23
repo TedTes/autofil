@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 
 import requests
 
+from integrations.providers import get_provider, list_providers
 from services.integration_payload_service import IntegrationPayloadService
 from services.supabase_db_service import SupabaseDatabaseService
 
@@ -40,6 +41,12 @@ class IntegrationService:
             filters=filters,
             order="created_at.desc",
         )
+
+    def list_providers(self) -> List[Dict[str, Any]]:
+        return list_providers()
+
+    def get_provider(self, provider_id: str) -> Optional[Dict[str, Any]]:
+        return get_provider(provider_id)
 
     def get_destination(self, destination_id: str) -> Optional[Dict[str, Any]]:
         filters = {"id": destination_id}

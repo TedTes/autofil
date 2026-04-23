@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
+import os
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
+
+import requests
 
 from integrations.providers import get_provider
 
@@ -125,9 +131,64 @@ class WebhookAdapter(IntegrationAdapter):
         actions: Optional[List[str]] = None,
         idempotency_key: Optional[str] = None,
     ) -> Dict[str, Any]:
-        void_values = (payload, config, target, actions, idempotency_key)
+        void_values = (target, actions)
         del void_values
-        raise NotImplementedError("Webhook sends are handled by IntegrationService")
+        url = str(config.get("url") or "").strip()
+        timeout = int(config.get("timeout_seconds") or 20)
+        body = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        headers = {
+            "Content-Type": "application/json",
+            "X-Autofil-Idempotency-Key": idempotency_key or "",
+        }
+
+        secret = self._secret(config)
+        auth_type = str(config.get("auth_type") or "none").lower()
+        if auth_type == "bearer" and secret:
+            headers["Authorization"] = f"Bearer {secret}"
+        elif auth_type == "hmac" and secret:
+            signature = hmac.new(
+                secret.encode("utf-8"),
+                body.encode("utf-8"),
+                hashlib.sha256,
+            ).hexdigest()
+            headers["X-Autofil-Signature"] = f"sha256={signature}"
+
+        response = requests.post(
+            url,
+            data=body,
+            headers=headers,
+            timeout=max(1, min(timeout, 60)),
+        )
+        ok = 200 <= response.status_code < 300
+        return {
+            "ok": ok,
+            "status": "succeeded" if ok else "failed",
+            "message": None if ok else response.text[:500],
+            "response_status": response.status_code,
+            "response_body": self._response_body(response),
+            "action_results": [
+                {
+                    "action": "submit_structured_data",
+                    "status": "succeeded" if ok else "failed",
+                    "message": None if ok else response.text[:500],
+                }
+            ],
+        }
+
+    def _secret(self, config: Dict[str, Any]) -> Optional[str]:
+        secret_ref = config.get("secret_ref")
+        if not secret_ref:
+            return None
+        return os.getenv(str(secret_ref))
+
+    def _response_body(self, response: requests.Response) -> Dict[str, Any]:
+        try:
+            parsed = response.json()
+            if isinstance(parsed, dict):
+                return parsed
+            return {"data": parsed}
+        except Exception:
+            return {"text": response.text[:1000]}
 
 
 def get_adapter(provider_id: str) -> IntegrationAdapter:

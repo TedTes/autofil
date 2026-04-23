@@ -1,3 +1,4 @@
+import services.integration_service as integration_service_module
 from services.integration_service import IntegrationService
 
 
@@ -70,6 +71,26 @@ class StubResponse:
 
     def json(self):
         return {"ok": True}
+
+
+class StubAdapter:
+    def validate_connection(self, config):
+        return {"ok": True, "message": "ok"}
+
+    def send_submission(self, payload, *, config, target=None, actions=None, idempotency_key=None):
+        return {
+            "ok": True,
+            "status": "succeeded",
+            "response_status": 200,
+            "response_body": {"ok": True},
+            "action_results": [
+                {
+                    "action": "submit_structured_data",
+                    "status": "succeeded",
+                    "message": None,
+                }
+            ],
+        }
 
 
 def test_create_destination_normalizes_defaults_and_owner_scope():
@@ -341,13 +362,17 @@ def test_send_submission_creates_and_completes_job():
 def test_send_creates_provider_job_for_webhook_connection():
     db = SendFakeDb()
     service = IntegrationService(db=db, current_user_id="user-1")
-    service._post_webhook = lambda destination, payload, key: StubResponse()
+    original_get_adapter = integration_service_module.get_adapter
+    integration_service_module.get_adapter = lambda provider_id: StubAdapter()
 
-    job = service.send(
-        "sub-1",
-        "dest-1",
-        payload_service=StubPayloadService(),
-    )
+    try:
+        job = service.send(
+            "sub-1",
+            "dest-1",
+            payload_service=StubPayloadService(),
+        )
+    finally:
+        integration_service_module.get_adapter = original_get_adapter
 
     inserted_table, inserted_job = db.rows[0]
     assert inserted_table == "integration_jobs"

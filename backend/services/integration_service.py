@@ -272,13 +272,6 @@ class IntegrationService:
         if not job:
             raise RuntimeError("Failed to create integration job")
 
-        if provider_id == "webhook":
-            return self._send_webhook_job(
-                job,
-                connection,
-                request_payload,
-                idempotency_key,
-            )
         return self._send_adapter_job(
             job,
             connection,
@@ -522,6 +515,8 @@ class IntegrationService:
             config["url"] = connection.get("url")
         if connection.get("secret_ref"):
             config["secret_ref"] = connection.get("secret_ref")
+        if connection.get("auth_type"):
+            config["auth_type"] = connection.get("auth_type")
         return config
 
     def _normalize_client_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
@@ -709,6 +704,7 @@ class IntegrationService:
                 {
                     "status": status,
                     "attempt_count": int(job.get("attempt_count") or 0) + 1,
+                    "response_status": result.get("response_status"),
                     "response_body": result if isinstance(result, dict) else {},
                     "action_results": action_results,
                     "error_message": None if ok else str(result.get("message") or "")[:500],

@@ -166,16 +166,22 @@ class IntegrationService:
             "client_id",
             "name",
             "type",
+            "provider",
             "url",
             "auth_type",
             "secret_ref",
             "config",
+            "auth_config",
+            "capabilities",
+            "connection_status",
+            "last_tested_at",
+            "last_error",
             "enabled",
         }
         normalized = {key: payload[key] for key in allowed if key in payload}
 
         if not partial:
-            for key in ("client_id", "name", "url"):
+            for key in ("client_id", "name"):
                 if not str(normalized.get(key) or "").strip():
                     raise ValueError(f"{key} is required")
 
@@ -183,14 +189,28 @@ class IntegrationService:
             normalized["name"] = str(normalized["name"]).strip()
         if "client_id" in normalized:
             normalized["client_id"] = str(normalized["client_id"]).strip()
+        if "provider" in normalized:
+            normalized["provider"] = str(normalized["provider"] or "webhook").strip().lower()
+        elif not partial:
+            normalized["provider"] = "webhook"
+
+        provider_id = str(normalized.get("provider") or "webhook").strip().lower()
+        provider = get_provider(provider_id)
+        if provider_id and provider_id != "webhook" and not provider:
+            raise ValueError("provider is not supported")
+
         if "type" in normalized:
             normalized["type"] = str(normalized["type"] or "webhook").strip().lower()
         elif not partial:
-            normalized["type"] = "webhook"
+            normalized["type"] = "webhook" if provider_id == "webhook" else "ams"
         if "auth_type" in normalized:
             normalized["auth_type"] = str(normalized["auth_type"] or "none").strip().lower()
         elif not partial:
-            normalized["auth_type"] = "none"
+            normalized["auth_type"] = (
+                "none"
+                if provider_id == "webhook"
+                else str((provider or {}).get("authType") or "none").lower()
+            )
         if "enabled" in normalized:
             normalized["enabled"] = bool(normalized["enabled"])
         elif not partial:
@@ -199,13 +219,52 @@ class IntegrationService:
             raise ValueError("config must be an object")
         elif not partial and "config" not in normalized:
             normalized["config"] = {}
+        if "auth_config" in normalized and not isinstance(normalized["auth_config"], dict):
+            raise ValueError("auth_config must be an object")
+        elif not partial and "auth_config" not in normalized:
+            normalized["auth_config"] = {}
+        if "capabilities" in normalized and not isinstance(normalized["capabilities"], dict):
+            raise ValueError("capabilities must be an object")
+        elif not partial and "capabilities" not in normalized:
+            normalized["capabilities"] = dict((provider or {}).get("capabilities") or {})
+        if "connection_status" in normalized:
+            normalized["connection_status"] = str(
+                normalized["connection_status"] or "not_configured"
+            ).strip().lower()
+        elif not partial:
+            normalized["connection_status"] = "configured" if provider_id == "webhook" else "not_configured"
 
-        if normalized.get("type") not in {None, "webhook"}:
-            raise ValueError("Only webhook destinations are supported")
-        if normalized.get("auth_type") not in {None, "none", "bearer", "hmac"}:
-            raise ValueError("auth_type must be one of none, bearer, hmac")
+        if normalized.get("type") not in {None, "webhook", "ams"}:
+            raise ValueError("type must be one of webhook, ams")
+        if normalized.get("auth_type") not in {
+            None,
+            "none",
+            "bearer",
+            "hmac",
+            "webhook",
+            "api_credentials",
+            "sdk_credentials",
+            "wsapi",
+            "partner_api",
+            "api_partner",
+        }:
+            raise ValueError("auth_type is not supported")
+        if normalized.get("connection_status") not in {
+            None,
+            "not_configured",
+            "configured",
+            "valid",
+            "invalid",
+        }:
+            raise ValueError("connection_status is not supported")
+        if normalized.get("type") == "webhook" and not partial:
+            if not str(normalized.get("url") or "").strip():
+                raise ValueError("url is required for webhook destinations")
+        if normalized.get("type") == "ams" and provider_id == "webhook":
+            raise ValueError("AMS destinations require a non-webhook provider")
         if "url" in normalized:
-            normalized["url"] = self._validate_url(str(normalized["url"]).strip())
+            url = str(normalized["url"] or "").strip()
+            normalized["url"] = self._validate_url(url) if url else None
 
         return normalized
 
@@ -232,10 +291,14 @@ class IntegrationService:
                 "destination_id": destination.get("id"),
                 "destination_name": destination.get("name"),
                 "destination_type": destination.get("type") or "webhook",
+                "provider": destination.get("provider") or destination.get("type") or "webhook",
                 "status": "running",
                 "attempt_count": 0,
                 "idempotency_key": idempotency_key,
+                "target": {},
+                "actions": ["submit_structured_data"],
                 "request_payload": request_payload,
+                "action_results": [],
                 "created_at": now,
                 "updated_at": now,
             },

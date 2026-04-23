@@ -78,11 +78,17 @@ export interface IntegrationDestination {
   owner_user_id?: string
   client_id: string
   name: string
-  type: 'webhook'
-  url: string
-  auth_type: 'none' | 'bearer' | 'hmac'
+  type: 'webhook' | 'ams'
+  provider: string
+  url?: string | null
+  auth_type: string
   secret_ref?: string | null
   config: Record<string, unknown>
+  auth_config: Record<string, unknown>
+  capabilities: Partial<IntegrationProvider['capabilities']>
+  connection_status: 'not_configured' | 'configured' | 'valid' | 'invalid'
+  last_tested_at?: string | null
+  last_error?: string | null
   enabled: boolean
   created_at?: string
   updated_at?: string
@@ -91,11 +97,15 @@ export interface IntegrationDestination {
 export interface CreateIntegrationDestinationRequest {
   client_id: string
   name: string
-  type?: 'webhook'
-  url: string
-  auth_type?: 'none' | 'bearer' | 'hmac'
+  type?: 'webhook' | 'ams'
+  provider?: string
+  url?: string
+  auth_type?: string
   secret_ref?: string
   config?: Record<string, unknown>
+  auth_config?: Record<string, unknown>
+  capabilities?: Partial<IntegrationProvider['capabilities']>
+  connection_status?: IntegrationDestination['connection_status']
   enabled?: boolean
 }
 
@@ -108,11 +118,15 @@ export interface IntegrationJob {
   submission_id: string
   destination_id?: string | null
   destination_name?: string
-  destination_type: 'webhook'
-  status: 'pending' | 'running' | 'succeeded' | 'failed'
+  destination_type: 'webhook' | 'ams'
+  provider: string
+  status: 'pending' | 'running' | 'succeeded' | 'partially_succeeded' | 'failed'
   attempt_count: number
   idempotency_key: string
+  target?: Record<string, unknown>
+  actions?: string[]
   request_payload?: Record<string, unknown>
+  action_results?: Record<string, unknown>[]
   response_status?: number
   response_body?: Record<string, unknown>
   error_message?: string

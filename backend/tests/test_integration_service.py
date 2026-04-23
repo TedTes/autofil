@@ -75,9 +75,34 @@ def test_create_destination_normalizes_defaults_and_owner_scope():
     assert destination["owner_user_id"] == "user-1"
     assert destination["name"] == "Test Webhook"
     assert destination["type"] == "webhook"
+    assert destination["provider"] == "webhook"
     assert destination["auth_type"] == "none"
     assert destination["enabled"] is True
     assert destination["config"] == {}
+    assert destination["auth_config"] == {}
+    assert destination["connection_status"] == "configured"
+
+
+def test_create_ams_destination_uses_provider_metadata():
+    db = FakeDb()
+    service = IntegrationService(db=db, current_user_id="user-1")
+
+    destination = service.create_destination(
+        {
+            "client_id": "client-1",
+            "name": "Applied Epic",
+            "provider": "applied_epic",
+            "auth_config": {"baseUrl": "https://epic.example.test"},
+        }
+    )
+
+    assert destination["type"] == "ams"
+    assert destination["provider"] == "applied_epic"
+    assert "url" not in destination or destination["url"] is None
+    assert destination["auth_type"] == "sdk_credentials"
+    assert destination["connection_status"] == "not_configured"
+    assert destination["capabilities"]["supportsDocumentAttach"] is True
+    assert destination["capabilities"]["requiresAgencySdkLicense"] is True
 
 
 def test_list_destinations_filters_by_owner_and_client():
@@ -143,6 +168,10 @@ def test_send_submission_creates_and_completes_job():
     inserted_table, inserted_job = db.rows[0]
     assert inserted_table == "integration_jobs"
     assert inserted_job["status"] == "running"
+    assert inserted_job["provider"] == "webhook"
+    assert inserted_job["target"] == {}
+    assert inserted_job["actions"] == ["submit_structured_data"]
+    assert inserted_job["action_results"] == []
     assert inserted_job["request_payload"]["submission"]["submission_id"] == "sub-1"
     assert job["status"] == "succeeded"
     assert job["response_status"] == 200

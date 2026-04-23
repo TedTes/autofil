@@ -1,4 +1,6 @@
 import services.integration_service as integration_service_module
+import integrations.adapters as adapters_module
+from integrations.adapters import WebhookAdapter
 from services.integration_service import IntegrationService
 
 
@@ -108,6 +110,10 @@ class StubResponse:
 
     def json(self):
         return {"ok": True}
+
+
+class AdapterStubResponse(StubResponse):
+    pass
 
 
 class StubAdapter:
@@ -248,6 +254,41 @@ def test_list_providers_exposes_ams_capabilities():
     assert applied_epic["authConfig"]["type"] == "sdk_credentials"
     assert applied_epic["capabilities"]["supportsDocumentAttach"] is True
     assert applied_epic["capabilities"]["requiresAgencySdkLicense"] is True
+
+
+def test_webhook_adapter_validates_and_sends_payload():
+    posted = {}
+
+    def fake_post(url, data, headers, timeout):
+        posted.update(
+            {
+                "url": url,
+                "data": data,
+                "headers": headers,
+                "timeout": timeout,
+            }
+        )
+        return AdapterStubResponse()
+
+    original_post = adapters_module.requests.post
+    adapters_module.requests.post = fake_post
+
+    try:
+        adapter = WebhookAdapter()
+        validation = adapter.validate_connection({"url": "https://example.test/hook"})
+        result = adapter.send_submission(
+            {"submission": {"submission_id": "sub-1"}},
+            config={"url": "https://example.test/hook", "auth_type": "none"},
+            idempotency_key="idem-1",
+        )
+    finally:
+        adapters_module.requests.post = original_post
+
+    assert validation["ok"] is True
+    assert result["ok"] is True
+    assert result["response_status"] == 200
+    assert posted["url"] == "https://example.test/hook"
+    assert posted["headers"]["X-Autofil-Idempotency-Key"] == "idem-1"
 
 
 def test_update_destination_rejects_invalid_url():

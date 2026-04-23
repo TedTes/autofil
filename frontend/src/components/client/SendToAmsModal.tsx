@@ -55,6 +55,7 @@ export default function SendToAmsModal({
   const [providers, setProviders] = useState<IntegrationProvider[]>([])
   const [connections, setConnections] = useState<IntegrationConnection[]>([])
   const [jobs, setJobs] = useState<IntegrationJob[]>([])
+  const [selectedConnectionId, setSelectedConnectionId] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -76,12 +77,25 @@ export default function SendToAmsModal({
       setProviders(providerRows)
       setConnections(connectionRows)
       setJobs(jobRows)
+      const activeAmsConnections = connectionRows.filter(
+        (connection) => connection.enabled !== false && connection.type === 'ams'
+      )
+      setSelectedConnectionId((current) => {
+        if (current && activeAmsConnections.some((connection) => connection.id === current)) {
+          return current
+        }
+        return activeAmsConnections[0]?.id || ''
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load AMS send data')
     } finally {
       setIsLoading(false)
     }
   }, [clientId, submissionId])
+  const selectedConnection = useMemo(
+    () => amsConnections.find((connection) => connection.id === selectedConnectionId),
+    [amsConnections, selectedConnectionId]
+  )
 
   useEffect(() => {
     if (!isOpen) return
@@ -148,18 +162,44 @@ export default function SendToAmsModal({
           ) : (
             <div className="space-y-2">
               {amsConnections.map((connection) => (
-                <div key={connection.id} className="rounded-lg border border-gray-200 bg-white px-4 py-3">
+                <label
+                  key={connection.id}
+                  className={`flex cursor-pointer items-start gap-3 rounded-lg border px-4 py-3 transition-colors ${
+                    selectedConnectionId === connection.id
+                      ? 'border-blue-300 bg-blue-50'
+                      : 'border-gray-200 bg-white hover:bg-gray-50'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="ams-connection"
+                    value={connection.id}
+                    checked={selectedConnectionId === connection.id}
+                    onChange={() => setSelectedConnectionId(connection.id)}
+                    className="mt-1 h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-gray-900">{connection.name}</p>
-                      <p className="mt-1 text-xs text-gray-500">{connection.provider}</p>
+                      <p className="mt-1 text-xs text-gray-500">
+                        {providers.find((provider) => provider.provider === connection.provider)?.displayName || connection.provider}
+                      </p>
                     </div>
                     <span className="rounded-full border border-gray-200 bg-gray-50 px-2 py-1 text-xs font-semibold text-gray-600">
                       {connection.connection_status.replace('_', ' ')}
                     </span>
                   </div>
-                </div>
+                </label>
               ))}
+            </div>
+          )}
+
+          {selectedConnection && (
+            <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
+              <p className="text-sm font-semibold text-blue-950">Selected destination</p>
+              <p className="mt-1 text-xs text-blue-700">
+                {selectedConnection.name} will receive the reviewed canonical submission after target and preview steps.
+              </p>
             </div>
           )}
 
@@ -205,11 +245,11 @@ export default function SendToAmsModal({
           </button>
           <button
             type="button"
-            disabled
-            className="inline-flex items-center gap-2 rounded-md bg-gray-200 px-4 py-2 text-sm font-semibold text-gray-500"
+            disabled={!selectedConnection}
+            className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-500"
           >
             <Send className="h-4 w-4" />
-            Select Destination
+            Continue
           </button>
         </div>
       </div>

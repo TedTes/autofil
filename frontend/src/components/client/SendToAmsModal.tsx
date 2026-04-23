@@ -16,6 +16,7 @@ import {
   getIntegrationProviders,
   previewIntegrationSend,
   searchIntegrationClients,
+  sendToIntegration,
 } from '@/lib/api-client'
 import type {
   IntegrationClientSearchResult,
@@ -73,7 +74,9 @@ export default function SendToAmsModal({
   const [isLoading, setIsLoading] = useState(false)
   const [isSearchingClients, setIsSearchingClients] = useState(false)
   const [isPreviewing, setIsPreviewing] = useState(false)
+  const [isSending, setIsSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
 
   const amsConnections = useMemo(
     () => connections.filter((connection) => connection.enabled !== false && connection.type === 'ams'),
@@ -125,6 +128,7 @@ export default function SendToAmsModal({
     setSelectedTarget(null)
     setSendPreview(null)
     setError(null)
+    setMessage(null)
   }
 
   const handleClientSearch = async () => {
@@ -160,6 +164,7 @@ export default function SendToAmsModal({
     }
     setIsPreviewing(true)
     setError(null)
+    setMessage(null)
     try {
       const preview = await previewIntegrationSend({
         connectionId: selectedConnection.id,
@@ -176,6 +181,40 @@ export default function SendToAmsModal({
       setError(err instanceof Error ? err.message : 'Failed to preview AMS send')
     } finally {
       setIsPreviewing(false)
+    }
+  }
+
+  const handleConfirmSend = async () => {
+    if (!selectedConnection || !sendPreview) return
+    if (!sendPreview.ok) {
+      setError('Resolve preview warnings before sending.')
+      return
+    }
+    setIsSending(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const job = await sendToIntegration({
+        connectionId: selectedConnection.id,
+        submissionId,
+        target: selectedTarget
+          ? {
+              clientId: selectedTarget.id,
+              clientName: selectedTarget.display || selectedTarget.name,
+            }
+          : undefined,
+        actions: sendPreview.actions.map((action) => action.action),
+      })
+      setJobs((current) => [job, ...current.filter((item) => item.id !== job.id)])
+      setMessage(
+        job.status === 'succeeded'
+          ? 'Submission sent to AMS.'
+          : 'AMS send job finished with issues. Review the job result below.'
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send to AMS')
+    } finally {
+      setIsSending(false)
     }
   }
 
@@ -211,6 +250,12 @@ export default function SendToAmsModal({
             <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
               <AlertCircle className="mt-0.5 h-4 w-4" />
               <span>{error}</span>
+            </div>
+          )}
+          {message && (
+            <div className="mb-4 flex items-start gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+              <UserCheck className="mt-0.5 h-4 w-4" />
+              <span>{message}</span>
             </div>
           )}
 
@@ -453,12 +498,18 @@ export default function SendToAmsModal({
           </button>
           <button
             type="button"
-            onClick={() => void handlePreviewSend()}
-            disabled={!selectedConnection || isPreviewing || (requiresTargetClient && !selectedTarget)}
+            onClick={sendPreview?.ok ? () => void handleConfirmSend() : () => void handlePreviewSend()}
+            disabled={
+              !selectedConnection ||
+              isPreviewing ||
+              isSending ||
+              (requiresTargetClient && !selectedTarget) ||
+              Boolean(sendPreview && !sendPreview.ok)
+            }
             className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-500"
           >
-            {isPreviewing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            {isPreviewing ? 'Previewing...' : 'Preview Send'}
+            {isPreviewing || isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            {isSending ? 'Sending...' : sendPreview?.ok ? 'Confirm Send' : isPreviewing ? 'Previewing...' : 'Preview Send'}
           </button>
         </div>
       </div>

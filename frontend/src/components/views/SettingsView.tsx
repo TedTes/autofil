@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   AlertCircle,
   Bell,
@@ -18,8 +18,12 @@ import {
   User,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { getIntegrationConnections, getIntegrationProviders } from '@/lib/api-client'
-import type { IntegrationConnection, IntegrationProvider } from '@/types'
+import {
+  createIntegrationConnection,
+  getIntegrationConnections,
+  getIntegrationProviders,
+} from '@/lib/api-client'
+import type { CreateIntegrationConnectionRequest, IntegrationConnection, IntegrationProvider } from '@/types'
 
 type ReviewThreshold = 'strict' | 'balanced' | 'relaxed'
 
@@ -318,10 +322,16 @@ function ToggleRow({
 function IntegrationSettingsPanel() {
   const [providers, setProviders] = useState<IntegrationProvider[]>([])
   const [connections, setConnections] = useState<IntegrationConnection[]>([])
+  const [selectedProviderId, setSelectedProviderId] = useState('webhook')
+  const [connectionName, setConnectionName] = useState('')
+  const [scopeKey, setScopeKey] = useState('workspace')
+  const [credentialValues, setCredentialValues] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [formMessage, setFormMessage] = useState<string | null>(null)
 
-  const loadIntegrations = async () => {
+  const loadIntegrations = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -331,20 +341,79 @@ function IntegrationSettingsPanel() {
       ])
       setProviders(providerRows)
       setConnections(connectionRows)
+      if (!providerRows.some((provider) => provider.provider === selectedProviderId)) {
+        setSelectedProviderId(providerRows[0]?.provider || 'webhook')
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load integrations')
     } finally {
       setLoading(false)
     }
-  }
+  }, [selectedProviderId])
 
   useEffect(() => {
     loadIntegrations()
-  }, [])
+  }, [loadIntegrations])
 
   const connectedCount = connections.filter((connection) => connection.enabled).length
   const amsProviderCount = providers.filter((provider) => provider.category === 'ams').length
   const availableProviderCount = providers.filter((provider) => provider.status === 'available').length
+  const selectedProvider = providers.find((provider) => provider.provider === selectedProviderId)
+  const authFields = selectedProvider?.authConfig.fields || []
+
+  const updateCredential = (name: string, value: string) => {
+    setCredentialValues((current) => ({ ...current, [name]: value }))
+    setFormMessage(null)
+  }
+
+  const handleProviderChange = (providerId: string) => {
+    const provider = providers.find((item) => item.provider === providerId)
+    setSelectedProviderId(providerId)
+    setConnectionName(provider?.displayName ? `${provider.displayName} connection` : '')
+    setCredentialValues({})
+    setFormMessage(null)
+  }
+
+  const handleCreateConnection = async () => {
+    if (!selectedProvider) return
+    setSaving(true)
+    setFormMessage(null)
+    setError(null)
+    try {
+      const missingField = authFields.find(
+        (field) => field.required && !String(credentialValues[field.name] || '').trim()
+      )
+      if (missingField) {
+        throw new Error(`${missingField.label} is required`)
+      }
+      const authConfig = authFields.reduce<Record<string, string>>((values, field) => {
+        const value = String(credentialValues[field.name] || '').trim()
+        if (value) values[field.name] = value
+        return values
+      }, {})
+      const payload: CreateIntegrationConnectionRequest = {
+        client_id: scopeKey.trim() || 'workspace',
+        name: connectionName.trim() || `${selectedProvider.displayName} connection`,
+        type: selectedProvider.category === 'generic' ? 'webhook' : 'ams',
+        provider: selectedProvider.provider,
+        auth_type: selectedProvider.authType,
+        auth_config: authConfig,
+        capabilities: selectedProvider.capabilities,
+        connection_status: selectedProvider.provider === 'webhook' ? 'configured' : 'not_configured',
+      }
+      if (authConfig.url) payload.url = authConfig.url
+      if (authConfig.secretRef) payload.secret_ref = authConfig.secretRef
+
+      await createIntegrationConnection(payload)
+      setCredentialValues({})
+      setFormMessage('Connection saved. Test it before sending production submissions.')
+      await loadIntegrations()
+    } catch (err) {
+      setFormMessage(err instanceof Error ? err.message : 'Failed to save connection')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="space-y-5 p-6">
@@ -394,6 +463,88 @@ function IntegrationSettingsPanel() {
               />
             )
           })}
+        </div>
+      )}
+
+      {selectedProvider && (
+        <div className="border-t border-gray-100 pt-5">
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-gray-800">Add connection</p>
+              <p className="mt-1 text-xs leading-5 text-gray-500">
+                Fields are generated from the selected provider configuration.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-3">
+            <label className="block">
+              <span className="text-xs font-bold uppercase text-gray-500">Provider</span>
+              <select
+                value={selectedProviderId}
+                onChange={(event) => handleProviderChange(event.target.value)}
+                className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-semibold text-gray-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+              >
+                {providers.map((provider) => (
+                  <option key={provider.provider} value={provider.provider}>
+                    {provider.displayName}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block">
+                <span className="text-xs font-bold uppercase text-gray-500">Connection name</span>
+                <input
+                  value={connectionName}
+                  onChange={(event) => setConnectionName(event.target.value)}
+                  placeholder={`${selectedProvider.displayName} connection`}
+                  className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-bold uppercase text-gray-500">Scope key</span>
+                <input
+                  value={scopeKey}
+                  onChange={(event) => setScopeKey(event.target.value)}
+                  className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                />
+              </label>
+            </div>
+
+            {authFields.map((field) => (
+              <label key={field.name} className="block">
+                <span className="text-xs font-bold uppercase text-gray-500">
+                  {field.label}
+                  {field.required ? ' *' : ''}
+                </span>
+                <input
+                  type={field.type === 'password' ? 'password' : field.type === 'url' ? 'url' : 'text'}
+                  value={credentialValues[field.name] || ''}
+                  onChange={(event) => updateCredential(field.name, event.target.value)}
+                  className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                />
+                {field.helpText && <span className="mt-1 block text-xs text-gray-500">{field.helpText}</span>}
+              </label>
+            ))}
+
+            {formMessage && (
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 text-sm font-semibold text-gray-700">
+                {formMessage}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={handleCreateConnection}
+              disabled={saving}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <PlugZap className="h-4 w-4" />}
+              Save Connection
+            </button>
+          </div>
         </div>
       )}
     </div>

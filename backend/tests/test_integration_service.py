@@ -372,6 +372,82 @@ def test_auth_strategy_registry_returns_unsupported_placeholder_for_unknown_stra
     auth_module.AUTH_STRATEGIES.update(original)
 
 
+def test_api_key_auth_strategy_supports_header_and_query_delivery():
+    header_strategy = auth_module.get_auth_strategy("api_key")
+    header_auth = header_strategy.prepare(
+        provider_id="qqcatalyst",
+        auth_config={"apiKey": "abc123"},
+        runtime_auth_config={"delivery": "header", "name": "X-Partner-Key"},
+    )
+    query_auth = header_strategy.prepare(
+        provider_id="qqcatalyst",
+        auth_config={"apiKey": "abc123"},
+        runtime_auth_config={"delivery": "query", "name": "api_key"},
+    )
+
+    assert header_auth.headers == {"X-Partner-Key": "abc123"}
+    assert query_auth.query_params == {"api_key": "abc123"}
+
+
+def test_basic_auth_strategy_prepares_basic_header_and_tuple():
+    strategy = auth_module.get_auth_strategy("basic_auth")
+
+    prepared = strategy.prepare(
+        provider_id="nowcerts",
+        auth_config={"username": "agent", "password": "secret"},
+    )
+
+    assert prepared.basic_auth == ("agent", "secret")
+    assert prepared.headers["Authorization"].startswith("Basic ")
+
+
+def test_oauth2_client_credentials_strategy_prepares_token_metadata():
+    strategy = auth_module.get_auth_strategy("oauth2_client_credentials")
+
+    prepared = strategy.prepare(
+        provider_id="applied_epic",
+        auth_config={
+            "clientId": "client-1",
+            "clientSecret": "secret-1",
+            "baseUrl": "https://epic.example.test/oauth/token",
+        },
+        runtime_auth_config={"scopes": ["submissions.write"], "audience": "epic-api"},
+    )
+
+    assert prepared.metadata["grantType"] == "client_credentials"
+    assert prepared.metadata["tokenUrl"] == "https://epic.example.test/oauth/token"
+    assert prepared.metadata["scopes"] == ["submissions.write"]
+    assert prepared.metadata["audience"] == "epic-api"
+
+
+def test_session_login_strategy_prepares_login_metadata():
+    strategy = auth_module.get_auth_strategy("session_login")
+
+    prepared = strategy.prepare(
+        provider_id="ams360",
+        auth_config={"loginId": "agent", "password": "secret"},
+        runtime_auth_config={"loginPath": "/session/login"},
+    )
+
+    assert prepared.metadata["providerId"] == "ams360"
+    assert prepared.metadata["loginPath"] == "/session/login"
+    assert prepared.metadata["username"] == "agent"
+
+
+def test_custom_auth_strategy_preserves_runtime_and_config_values():
+    strategy = auth_module.get_auth_strategy("custom")
+
+    prepared = strategy.prepare(
+        provider_id="custom_ams",
+        auth_config={"token": "secret"},
+        runtime_auth_config={"mode": "custom"},
+    )
+
+    assert prepared.metadata["providerId"] == "custom_ams"
+    assert prepared.metadata["authConfig"] == {"token": "secret"}
+    assert prepared.metadata["runtimeAuthConfig"] == {"mode": "custom"}
+
+
 def test_webhook_adapter_validates_and_sends_payload():
     posted = {}
 

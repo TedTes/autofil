@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic'
 import { useClientSubmissions,useTemplateLibrary } from '@/hooks'
 import { fillPdf, downloadPDF, updateSubmissionData} from '@/lib/api-client'
 import UploadOrMergedDataPanel from "@/components/client/UploadOrMergedDataPanel"
-import IntegrationDestinationsModal from '@/components/client/IntegrationDestinationsModal'
+import SendToAmsModal from '@/components/client/SendToAmsModal'
 import type { ClientSubmissionPackage,UploadedRow, MergedData, ClientDetailActions  } from '@/types'
 import { CreateSubmissionModal,DeleteConfirmationModal } from '@/components'
 import { useLandingUpload } from '@/contexts/LandingUploadContext'
@@ -1292,7 +1292,7 @@ const [isCreating, setIsCreating] = useState(false)
   inputIds={selectedInputsByPackage[activePackageId || ''] || []}
 />
 
-<IntegrationDestinationsModal
+<SendToAmsModal
   isOpen={isIntegrationModalOpen}
   onClose={() => setIsIntegrationModalOpen(false)}
   clientId={clientId}

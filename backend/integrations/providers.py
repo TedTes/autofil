@@ -28,6 +28,127 @@ def _field(
     return field
 
 
+def _runtime_operation(
+    operation: str,
+    *,
+    enabled: bool = True,
+    endpoint_ref: Optional[str] = None,
+    request_mapping_ref: Optional[str] = None,
+    response_mapping_ref: Optional[str] = None,
+) -> Dict[str, Any]:
+    config: Dict[str, Any] = {
+        "operation": operation,
+        "enabled": enabled,
+    }
+    if endpoint_ref:
+        config["endpointRef"] = endpoint_ref
+    if request_mapping_ref:
+        config["requestMappingRef"] = request_mapping_ref
+    if response_mapping_ref:
+        config["responseMappingRef"] = response_mapping_ref
+    return config
+
+
+def _runtime_config_schema(
+    auth_strategy: str,
+    *,
+    supports_client_search: bool = False,
+    requires_target_client: bool = False,
+    supports_submit: bool = False,
+    supports_document_attach: bool = False,
+    supports_activity_create: bool = False,
+) -> Dict[str, Any]:
+    operations = [
+        _runtime_operation(
+            "test_connection",
+            endpoint_ref="testConnection",
+            response_mapping_ref="testConnection",
+        ),
+    ]
+    if supports_client_search:
+        operations.append(
+            _runtime_operation(
+                "search_clients",
+                endpoint_ref="searchClients",
+                request_mapping_ref="searchClients",
+                response_mapping_ref="searchClients",
+            )
+        )
+    if requires_target_client:
+        operations.append(
+            _runtime_operation(
+                "resolve_target_client",
+                endpoint_ref="resolveTargetClient",
+                request_mapping_ref="resolveTargetClient",
+                response_mapping_ref="resolveTargetClient",
+            )
+        )
+    if supports_submit:
+        operations.append(
+            _runtime_operation(
+                "submit_structured_data",
+                endpoint_ref="submitStructuredData",
+                request_mapping_ref="submitStructuredData",
+                response_mapping_ref="submitStructuredData",
+            )
+        )
+    if supports_document_attach:
+        operations.append(
+            _runtime_operation(
+                "attach_documents",
+                endpoint_ref="attachDocuments",
+                request_mapping_ref="attachDocuments",
+                response_mapping_ref="attachDocuments",
+            )
+        )
+    if supports_activity_create:
+        operations.append(
+            _runtime_operation(
+                "create_activity",
+                endpoint_ref="createActivity",
+                request_mapping_ref="createActivity",
+                response_mapping_ref="createActivity",
+            )
+        )
+
+    return {
+        "version": "1.0",
+        "auth": {
+            "strategy": auth_strategy,
+            "configKey": "auth",
+        },
+        "baseUrl": {
+            "configKey": "baseUrl",
+            "required": auth_strategy != "webhook",
+        },
+        "endpoints": {
+            "configKey": "endpoints",
+            "allowOverrides": True,
+        },
+        "requestMappings": {
+            "configKey": "requestMappings",
+            "allowOverrides": True,
+        },
+        "responseMappings": {
+            "configKey": "responseMappings",
+            "allowOverrides": True,
+        },
+        "errorHandling": {
+            "configKey": "errorHandling",
+            "allowOverrides": True,
+        },
+        "retryPolicy": {
+            "configKey": "retryPolicy",
+            "allowOverrides": True,
+        },
+        "operations": operations,
+        "validation": {
+            "configKey": "validation",
+            "requiresTestTenant": auth_strategy != "webhook",
+        },
+    }
+
+
 INTEGRATION_PROVIDERS: List[Dict[str, Any]] = [
     {
         "provider": "webhook",
@@ -56,6 +177,10 @@ INTEGRATION_PROVIDERS: List[Dict[str, Any]] = [
             "requiresAgencySdkLicense": False,
         },
         "supportedActions": ["submit_structured_data"],
+        "runtimeConfig": _runtime_config_schema(
+            "webhook",
+            supports_submit=True,
+        ),
     },
     {
         "provider": "nowcerts",
@@ -91,6 +216,13 @@ INTEGRATION_PROVIDERS: List[Dict[str, Any]] = [
             "create_activity",
             "submit_structured_data",
         ],
+        "runtimeConfig": _runtime_config_schema(
+            "basic_auth",
+            supports_client_search=True,
+            supports_submit=True,
+            supports_document_attach=True,
+            supports_activity_create=True,
+        ),
     },
     {
         "provider": "applied_epic",
@@ -126,6 +258,14 @@ INTEGRATION_PROVIDERS: List[Dict[str, Any]] = [
             "create_activity",
             "submit_structured_data",
         ],
+        "runtimeConfig": _runtime_config_schema(
+            "oauth2_client_credentials",
+            supports_client_search=True,
+            requires_target_client=True,
+            supports_submit=True,
+            supports_document_attach=True,
+            supports_activity_create=True,
+        ),
     },
     {
         "provider": "ams360",
@@ -161,6 +301,14 @@ INTEGRATION_PROVIDERS: List[Dict[str, Any]] = [
             "create_activity",
             "submit_structured_data",
         ],
+        "runtimeConfig": _runtime_config_schema(
+            "basic_auth",
+            supports_client_search=True,
+            requires_target_client=True,
+            supports_submit=True,
+            supports_document_attach=True,
+            supports_activity_create=True,
+        ),
     },
     {
         "provider": "hawksoft",
@@ -195,6 +343,14 @@ INTEGRATION_PROVIDERS: List[Dict[str, Any]] = [
             "create_activity",
             "submit_structured_data",
         ],
+        "runtimeConfig": _runtime_config_schema(
+            "oauth2_client_credentials",
+            supports_client_search=True,
+            requires_target_client=True,
+            supports_submit=True,
+            supports_document_attach=True,
+            supports_activity_create=True,
+        ),
     },
     {
         "provider": "qqcatalyst",
@@ -230,6 +386,13 @@ INTEGRATION_PROVIDERS: List[Dict[str, Any]] = [
             "create_activity",
             "submit_structured_data",
         ],
+        "runtimeConfig": _runtime_config_schema(
+            "api_key",
+            supports_client_search=True,
+            supports_submit=True,
+            supports_document_attach=True,
+            supports_activity_create=True,
+        ),
     },
 ]
 

@@ -47,6 +47,51 @@ export interface IntegrationAuthField {
   helpText?: string
 }
 
+export interface IntegrationRuntimeOperationConfig {
+  operation: string
+  enabled: boolean
+  endpointRef?: string
+  requestMappingRef?: string
+  responseMappingRef?: string
+}
+
+export interface IntegrationRuntimeConfig {
+  version: string
+  auth: {
+    strategy: 'webhook' | 'api_key' | 'basic_auth' | 'oauth2_client_credentials' | 'custom'
+    configKey: string
+  }
+  baseUrl: {
+    configKey: string
+    required: boolean
+  }
+  endpoints: {
+    configKey: string
+    allowOverrides: boolean
+  }
+  requestMappings: {
+    configKey: string
+    allowOverrides: boolean
+  }
+  responseMappings: {
+    configKey: string
+    allowOverrides: boolean
+  }
+  errorHandling: {
+    configKey: string
+    allowOverrides: boolean
+  }
+  retryPolicy: {
+    configKey: string
+    allowOverrides: boolean
+  }
+  operations: IntegrationRuntimeOperationConfig[]
+  validation: {
+    configKey: string
+    requiresTestTenant: boolean
+  }
+}
+
 export interface IntegrationProvider {
   provider: string
   displayName: string
@@ -71,6 +116,7 @@ export interface IntegrationProvider {
     requiresAgencySdkLicense: boolean
   }
   supportedActions: string[]
+  runtimeConfig: IntegrationRuntimeConfig
 }
 
 export interface IntegrationDestination {

@@ -254,6 +254,19 @@ def test_list_providers_exposes_ams_capabilities():
     assert applied_epic["authConfig"]["type"] == "sdk_credentials"
     assert applied_epic["capabilities"]["supportsDocumentAttach"] is True
     assert applied_epic["capabilities"]["requiresAgencySdkLicense"] is True
+    assert applied_epic["runtimeConfig"]["auth"]["strategy"] == "oauth2_client_credentials"
+    assert applied_epic["runtimeConfig"]["baseUrl"]["configKey"] == "baseUrl"
+    assert applied_epic["runtimeConfig"]["validation"]["requiresTestTenant"] is True
+    assert {
+        operation["operation"] for operation in applied_epic["runtimeConfig"]["operations"]
+    } == {
+        "test_connection",
+        "search_clients",
+        "resolve_target_client",
+        "submit_structured_data",
+        "attach_documents",
+        "create_activity",
+    }
 
 
 def test_webhook_adapter_validates_and_sends_payload():

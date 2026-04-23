@@ -223,6 +223,18 @@ def list_submission_jobs(submission_id: str):
         return internal_server_error(logger, "Failed to list integration jobs", exc)
 
 
+@integration_bp.route("/send-jobs/<job_id>", methods=["GET"])
+@require_auth
+def get_send_job(job_id: str):
+    try:
+        job = _integration_service().get_job(job_id)
+        if not job:
+            return jsonify({"success": False, "error": "Integration send job not found"}), 404
+        return jsonify({"success": True, "data": job}), 200
+    except Exception as exc:
+        return internal_server_error(logger, "Failed to get integration send job", exc)
+
+
 @integration_bp.route("/submissions/<submission_id>/send", methods=["POST"])
 @require_auth
 def send_submission(submission_id: str):

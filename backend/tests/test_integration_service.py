@@ -148,6 +148,16 @@ def test_list_destinations_filters_by_owner_and_client():
     }
 
 
+def test_get_job_filters_by_owner_and_job_id():
+    db = FakeDb()
+    service = IntegrationService(db=db, current_user_id="user-1")
+
+    job = service.get_job("job-1")
+
+    assert job["table"] == "integration_jobs"
+    assert job["filters"] == {"id": "job-1", "owner_user_id": "user-1"}
+
+
 def test_list_providers_exposes_ams_capabilities():
     service = IntegrationService(db=FakeDb(), current_user_id="user-1")
 

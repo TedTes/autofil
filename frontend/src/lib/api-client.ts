@@ -958,6 +958,18 @@ export async function getIntegrationJobs(submissionId: string): Promise<Integrat
   }
 }
 
+export async function getIntegrationSendJob(jobId: string): Promise<IntegrationJob> {
+  try {
+    const response = await api.get(`/integrations/send-jobs/${jobId}`)
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to load integration send job')
+    }
+    return response.data.data as IntegrationJob
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
 export async function sendSubmissionToIntegration(
   submissionId: string,
   destinationId: string

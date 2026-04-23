@@ -225,6 +225,13 @@ class IntegrationService:
             order="created_at.desc",
         )
 
+    def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
+        filters = {"id": job_id}
+        if self.current_user_id:
+            filters["owner_user_id"] = self.current_user_id
+        rows = self.db.select_rows(self.JOBS_TABLE, filters=filters, limit=1)
+        return rows[0] if rows else None
+
     def send(
         self,
         submission_id: str,

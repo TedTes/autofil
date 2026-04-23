@@ -264,6 +264,18 @@ def test_search_clients_requires_query():
         raise AssertionError("Expected short query to fail")
 
 
+def test_search_clients_respects_provider_capability():
+    db = SendFakeDb()
+    service = IntegrationService(db=db, current_user_id="user-1")
+
+    result = service.search_clients("dest-1", "Redwood")
+
+    assert result["ok"] is False
+    assert result["provider"] == "webhook"
+    assert result["results"] == []
+    assert "does not support client search" in result["message"]
+
+
 def test_search_clients_returns_stable_not_implemented_response():
     db = SendFakeDb()
     db.destination = {

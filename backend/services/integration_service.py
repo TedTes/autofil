@@ -150,6 +150,16 @@ class IntegrationService:
         safe_limit = max(1, min(int(limit or 10), 25))
 
         provider_id = str(connection.get("provider") or connection.get("type") or "webhook")
+        provider = get_provider(provider_id) or {}
+        capabilities = self._connection_capabilities(connection, provider)
+        if not self._capability_enabled(capabilities.get("supportsClientSearch")):
+            return {
+                "ok": False,
+                "provider": provider_id,
+                "query": cleaned_query,
+                "results": [],
+                "message": f"{provider_id} does not support client search",
+            }
         adapter = get_adapter(provider_id)
         config = self._connection_test_config(connection)
         try:

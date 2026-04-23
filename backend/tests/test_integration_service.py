@@ -336,6 +336,24 @@ def test_preview_send_warns_when_provider_requires_target_client():
     assert "requires a selected target client" in preview["warnings"][0]
 
 
+def test_adapter_payload_maps_canonical_data_for_ams():
+    service = IntegrationService(db=FakeDb(), current_user_id="user-1")
+
+    adapter_payload = service._adapter_payload(
+        provider_id="applied_epic",
+        canonical_payload=StubPayloadService().build_payload("sub-1"),
+        target={"clientId": "epic-client-1"},
+        actions=["attach_documents"],
+    )
+
+    assert adapter_payload["schema_version"] == "autofil.ams_adapter_input.v1"
+    assert adapter_payload["provider"] == "applied_epic"
+    assert adapter_payload["canonical"]["submission"]["submission_id"] == "sub-1"
+    assert adapter_payload["mapped"]["client"]["name"] == "Redwood Custom Builders LLC"
+    assert adapter_payload["mapped"]["policy"]["policy_number"] == "GL-TEST-2026-001"
+    assert adapter_payload["mapped"]["documents"][0]["name"] == "accord.pdf"
+
+
 def test_send_submission_creates_and_completes_job():
     db = SendFakeDb()
     service = IntegrationService(db=db, current_user_id="user-1")

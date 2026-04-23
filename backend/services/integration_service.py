@@ -679,9 +679,15 @@ class IntegrationService:
         provider_id = str(connection.get("provider") or connection.get("type") or "webhook")
         adapter = get_adapter(provider_id)
         config = self._connection_test_config(connection)
+        adapter_payload = self._adapter_payload(
+            provider_id=provider_id,
+            canonical_payload=request_payload,
+            target=target,
+            actions=actions,
+        )
         try:
             result = adapter.send_submission(
-                request_payload,
+                adapter_payload,
                 config=config,
                 target=target,
                 actions=actions,
@@ -748,6 +754,58 @@ class IntegrationService:
                     "updated_at": datetime.utcnow().isoformat(),
                 },
             )
+
+    def _adapter_payload(
+        self,
+        *,
+        provider_id: str,
+        canonical_payload: Dict[str, Any],
+        target: Dict[str, Any],
+        actions: List[str],
+    ) -> Dict[str, Any]:
+        if provider_id == "webhook":
+            return canonical_payload
+        return {
+            "schema_version": "autofil.ams_adapter_input.v1",
+            "provider": provider_id,
+            "target": target,
+            "actions": actions,
+            "canonical": canonical_payload,
+            "mapped": self._map_canonical_for_ams(canonical_payload),
+        }
+
+    def _map_canonical_for_ams(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        submission = payload.get("submission") if isinstance(payload.get("submission"), dict) else {}
+        insured = payload.get("insured") if isinstance(payload.get("insured"), dict) else {}
+        policy = payload.get("policy") if isinstance(payload.get("policy"), dict) else {}
+        coverages = payload.get("coverages") if isinstance(payload.get("coverages"), dict) else {}
+        source_files = payload.get("source_files") if isinstance(payload.get("source_files"), list) else []
+        confidence = payload.get("confidence") if isinstance(payload.get("confidence"), dict) else {}
+        return {
+            "client": {
+                "name": insured.get("name") or insured.get("named_insured") or submission.get("client_name"),
+                "source_client_id": submission.get("client_id"),
+            },
+            "policy": {
+                "policy_number": policy.get("policy_number"),
+                "effective_date": policy.get("effective_date"),
+                "expiration_date": policy.get("expiration_date"),
+                "line_of_business": policy.get("line_of_business"),
+            },
+            "coverages": coverages,
+            "documents": [
+                {
+                    "name": source_file.get("name") or source_file.get("filename"),
+                    "type": source_file.get("type") or source_file.get("mime_type"),
+                }
+                for source_file in source_files
+                if isinstance(source_file, dict)
+            ],
+            "quality": {
+                "field_count": int(confidence.get("field_count") or 0),
+                "overall_confidence": confidence.get("overall"),
+            },
+        }
 
     def _post_webhook(
         self,

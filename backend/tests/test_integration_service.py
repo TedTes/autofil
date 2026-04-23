@@ -343,7 +343,7 @@ def test_adapter_payload_maps_canonical_data_for_ams():
         provider_id="applied_epic",
         canonical_payload=StubPayloadService().build_payload("sub-1"),
         target={"clientId": "epic-client-1"},
-        actions=["attach_documents"],
+        actions=["attach_documents", "create_activity"],
     )
 
     assert adapter_payload["schema_version"] == "autofil.ams_adapter_input.v1"
@@ -354,6 +354,8 @@ def test_adapter_payload_maps_canonical_data_for_ams():
     assert adapter_payload["mapped"]["documents"][0]["name"] == "accord.pdf"
     assert adapter_payload["mapped"]["documents"][0]["attachment_kind"] == "source_document"
     assert adapter_payload["action_payloads"]["attach_documents"]["documents"][0]["name"] == "accord.pdf"
+    assert "Redwood Custom Builders LLC" in adapter_payload["action_payloads"]["create_activity"]["subject"]
+    assert "Mapped fields: 42" in adapter_payload["action_payloads"]["create_activity"]["body"]
 
 
 def test_send_submission_creates_and_completes_job():

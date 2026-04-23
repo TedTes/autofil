@@ -807,7 +807,34 @@ class IntegrationService:
             action_payloads["attach_documents"] = {
                 "documents": self._documents_for_attachment(payload),
             }
+        if "create_activity" in actions:
+            action_payloads["create_activity"] = self._activity_payload(payload)
         return action_payloads
+
+    def _activity_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        submission = payload.get("submission") if isinstance(payload.get("submission"), dict) else {}
+        insured = payload.get("insured") if isinstance(payload.get("insured"), dict) else {}
+        policy = payload.get("policy") if isinstance(payload.get("policy"), dict) else {}
+        confidence = payload.get("confidence") if isinstance(payload.get("confidence"), dict) else {}
+        insured_name = insured.get("name") or insured.get("named_insured") or submission.get("client_name")
+        policy_number = policy.get("policy_number") or policy.get("gl_policy_number")
+        note_parts = [
+            "AutoFil submission prepared for AMS sync.",
+            f"Submission: {submission.get('name') or submission.get('submission_id') or 'Unknown'}",
+        ]
+        if insured_name:
+            note_parts.append(f"Insured: {insured_name}")
+        if policy_number:
+            note_parts.append(f"Policy: {policy_number}")
+        field_count = confidence.get("field_count")
+        if field_count is not None:
+            note_parts.append(f"Mapped fields: {field_count}")
+        return {
+            "subject": f"AutoFil submission: {insured_name or 'Reviewed submission'}",
+            "body": "\n".join(note_parts),
+            "category": "autofil_submission",
+            "source_submission_id": submission.get("submission_id"),
+        }
 
     def _documents_for_attachment(self, payload: Dict[str, Any]) -> List[Dict[str, Any]]:
         source_files = payload.get("source_files") if isinstance(payload.get("source_files"), list) else []

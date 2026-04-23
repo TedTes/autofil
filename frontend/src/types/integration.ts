@@ -55,11 +55,23 @@ export interface IntegrationRuntimeOperationConfig {
   responseMappingRef?: string
 }
 
+export interface IntegrationRuntimeAuthField {
+  name: string
+  label: string
+  type: 'text' | 'password' | 'url'
+  required: boolean
+  helpText?: string
+  storageTarget: 'auth_config' | 'config' | 'url' | 'secret_ref'
+  secret: boolean
+}
+
 export interface IntegrationRuntimeConfig {
   version: string
   auth: {
     strategy: 'webhook' | 'api_key' | 'basic_auth' | 'oauth2_client_credentials' | 'custom'
     configKey: string
+    fields: IntegrationRuntimeAuthField[]
+    supportsConnectionTest: boolean
   }
   baseUrl: {
     configKey: string

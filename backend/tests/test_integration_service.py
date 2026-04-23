@@ -256,8 +256,43 @@ def test_list_providers_exposes_ams_capabilities():
     assert applied_epic["capabilities"]["supportsDocumentAttach"] is True
     assert applied_epic["capabilities"]["requiresAgencySdkLicense"] is True
     assert applied_epic["runtimeConfig"]["auth"]["strategy"] == "oauth2_client_credentials"
+    assert applied_epic["runtimeConfig"]["auth"]["supportsConnectionTest"] is True
     assert applied_epic["runtimeConfig"]["baseUrl"]["configKey"] == "baseUrl"
     assert applied_epic["runtimeConfig"]["validation"]["requiresTestTenant"] is True
+    assert applied_epic["runtimeConfig"]["auth"]["fields"] == [
+        {
+            "name": "baseUrl",
+            "label": "SDK Service URL",
+            "type": "url",
+            "required": True,
+            "storageTarget": "auth_config",
+            "secret": False,
+        },
+        {
+            "name": "clientId",
+            "label": "Client ID",
+            "type": "text",
+            "required": True,
+            "storageTarget": "auth_config",
+            "secret": False,
+        },
+        {
+            "name": "clientSecret",
+            "label": "Client Secret",
+            "type": "password",
+            "required": True,
+            "storageTarget": "auth_config",
+            "secret": True,
+        },
+        {
+            "name": "databaseName",
+            "label": "Epic Database",
+            "type": "text",
+            "required": True,
+            "storageTarget": "auth_config",
+            "secret": False,
+        },
+    ]
     assert {
         operation["operation"] for operation in applied_epic["runtimeConfig"]["operations"]
     } == {

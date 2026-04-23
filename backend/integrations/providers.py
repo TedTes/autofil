@@ -28,6 +28,40 @@ def _field(
     return field
 
 
+def _runtime_auth_field(
+    name: str,
+    label: str,
+    field_type: str = AUTH_FIELD_TEXT,
+    *,
+    required: bool = True,
+    storage_target: str = "auth_config",
+    secret: bool = False,
+    help_text: Optional[str] = None,
+) -> Dict[str, Any]:
+    field = _field(
+        name,
+        label,
+        field_type,
+        required=required,
+        help_text=help_text,
+    )
+    field["storageTarget"] = storage_target
+    field["secret"] = secret or field_type == AUTH_FIELD_PASSWORD
+    return field
+
+
+def _runtime_auth_schema(
+    auth_strategy: str,
+    fields: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    return {
+        "strategy": auth_strategy,
+        "configKey": "auth",
+        "fields": fields,
+        "supportsConnectionTest": True,
+    }
+
+
 def _runtime_operation(
     operation: str,
     *,
@@ -51,6 +85,7 @@ def _runtime_operation(
 
 def _runtime_config_schema(
     auth_strategy: str,
+    auth_fields: List[Dict[str, Any]],
     *,
     supports_client_search: bool = False,
     requires_target_client: bool = False,
@@ -113,10 +148,7 @@ def _runtime_config_schema(
 
     return {
         "version": "1.0",
-        "auth": {
-            "strategy": auth_strategy,
-            "configKey": "auth",
-        },
+        "auth": _runtime_auth_schema(auth_strategy, auth_fields),
         "baseUrl": {
             "configKey": "baseUrl",
             "required": auth_strategy != "webhook",
@@ -366,10 +398,25 @@ INTEGRATION_PROVIDER_STATIC: List[Dict[str, Any]] = [
 INTEGRATION_PROVIDER_RUNTIME_CONFIGS: Dict[str, Dict[str, Any]] = {
     "webhook": _runtime_config_schema(
         "webhook",
+        [
+            _runtime_auth_field("url", "Webhook URL", AUTH_FIELD_URL, storage_target="url"),
+            _runtime_auth_field(
+                "secretRef",
+                "Secret Environment Variable",
+                required=False,
+                storage_target="secret_ref",
+            ),
+        ],
         supports_submit=True,
     ),
     "nowcerts": _runtime_config_schema(
         "basic_auth",
+        [
+            _runtime_auth_field("baseUrl", "API Base URL", AUTH_FIELD_URL, required=False),
+            _runtime_auth_field("username", "Username"),
+            _runtime_auth_field("password", "Password", AUTH_FIELD_PASSWORD, secret=True),
+            _runtime_auth_field("agencyId", "Agency ID", required=False),
+        ],
         supports_client_search=True,
         supports_submit=True,
         supports_document_attach=True,
@@ -377,6 +424,12 @@ INTEGRATION_PROVIDER_RUNTIME_CONFIGS: Dict[str, Dict[str, Any]] = {
     ),
     "applied_epic": _runtime_config_schema(
         "oauth2_client_credentials",
+        [
+            _runtime_auth_field("baseUrl", "SDK Service URL", AUTH_FIELD_URL),
+            _runtime_auth_field("clientId", "Client ID"),
+            _runtime_auth_field("clientSecret", "Client Secret", AUTH_FIELD_PASSWORD, secret=True),
+            _runtime_auth_field("databaseName", "Epic Database"),
+        ],
         supports_client_search=True,
         requires_target_client=True,
         supports_submit=True,
@@ -385,6 +438,12 @@ INTEGRATION_PROVIDER_RUNTIME_CONFIGS: Dict[str, Dict[str, Any]] = {
     ),
     "ams360": _runtime_config_schema(
         "basic_auth",
+        [
+            _runtime_auth_field("baseUrl", "Web Service URL", AUTH_FIELD_URL, required=False),
+            _runtime_auth_field("agencyNumber", "Agency Number"),
+            _runtime_auth_field("loginId", "WSAPI Login ID"),
+            _runtime_auth_field("password", "WSAPI Password", AUTH_FIELD_PASSWORD, secret=True),
+        ],
         supports_client_search=True,
         requires_target_client=True,
         supports_submit=True,
@@ -393,6 +452,11 @@ INTEGRATION_PROVIDER_RUNTIME_CONFIGS: Dict[str, Dict[str, Any]] = {
     ),
     "hawksoft": _runtime_config_schema(
         "oauth2_client_credentials",
+        [
+            _runtime_auth_field("baseUrl", "API Base URL", AUTH_FIELD_URL, required=False),
+            _runtime_auth_field("clientId", "Client ID"),
+            _runtime_auth_field("clientSecret", "Client Secret", AUTH_FIELD_PASSWORD, secret=True),
+        ],
         supports_client_search=True,
         requires_target_client=True,
         supports_submit=True,
@@ -401,6 +465,12 @@ INTEGRATION_PROVIDER_RUNTIME_CONFIGS: Dict[str, Dict[str, Any]] = {
     ),
     "qqcatalyst": _runtime_config_schema(
         "api_key",
+        [
+            _runtime_auth_field("baseUrl", "API Base URL", AUTH_FIELD_URL, required=False),
+            _runtime_auth_field("username", "Username"),
+            _runtime_auth_field("password", "Password", AUTH_FIELD_PASSWORD, secret=True),
+            _runtime_auth_field("apiKey", "API Key", AUTH_FIELD_PASSWORD, secret=True),
+        ],
         supports_client_search=True,
         supports_submit=True,
         supports_document_attach=True,

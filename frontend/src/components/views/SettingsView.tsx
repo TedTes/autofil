@@ -362,6 +362,7 @@ function IntegrationSettingsPanel() {
   const availableProviderCount = providers.filter((provider) => provider.status === 'available').length
   const selectedProvider = providers.find((provider) => provider.provider === selectedProviderId)
   const authFields = selectedProvider?.authConfig.fields || []
+  const selectedProviderIsAmsReady = Boolean(selectedProvider?.provider.endsWith('_ams_ready'))
 
   const updateCredential = (name: string, value: string) => {
     setCredentialValues((current) => ({ ...current, [name]: value }))
@@ -519,7 +520,9 @@ function IntegrationSettingsPanel() {
             <div>
               <p className="text-sm font-semibold text-gray-800">Add connection</p>
               <p className="mt-1 text-xs leading-5 text-gray-500">
-                Fields are generated from the selected provider configuration.
+                {selectedProviderIsAmsReady
+                  ? 'AMS-ready webhook presets send realistic AMS workflow payloads to Zapier, Make, n8n, or a custom endpoint. They are not native AMS API connections.'
+                  : 'Fields are generated from the selected provider configuration.'}
               </p>
             </div>
           </div>
@@ -534,7 +537,7 @@ function IntegrationSettingsPanel() {
               >
                 {providers.map((provider) => (
                   <option key={provider.provider} value={provider.provider}>
-                    {provider.displayName}
+                    {provider.displayName}{provider.provider.endsWith('_ams_ready') ? ' (validation)' : ''}
                   </option>
                 ))}
               </select>
@@ -546,7 +549,11 @@ function IntegrationSettingsPanel() {
                 <input
                   value={connectionName}
                   onChange={(event) => setConnectionName(event.target.value)}
-                  placeholder={`${selectedProvider.displayName} connection`}
+                  placeholder={
+                    selectedProviderIsAmsReady
+                      ? `${selectedProvider.displayName} workflow`
+                      : `${selectedProvider.displayName} connection`
+                  }
                   className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                 />
               </label>
@@ -555,10 +562,19 @@ function IntegrationSettingsPanel() {
                 <input
                   value={scopeKey}
                   onChange={(event) => setScopeKey(event.target.value)}
+                  placeholder="workspace or client id"
                   className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                 />
               </label>
             </div>
+
+            {selectedProviderIsAmsReady && (
+              <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-800">
+                Configure this with a webhook URL from Zapier, Make, n8n, or your own endpoint.
+                AutoFil will send an AMS-ready JSON package that includes mapped fields,
+                document attachment intent, and activity-note intent.
+              </div>
+            )}
 
             {authFields.map((field) => (
               <label key={field.name} className="block">
@@ -714,6 +730,7 @@ function ProviderRow({
   provider: IntegrationProvider
   connectionCount: number
 }) {
+  const isAmsReadyWebhook = provider.provider.endsWith('_ams_ready')
   const statusMeta = provider.status === 'available'
     ? {
         icon: CheckCircle2,
@@ -741,6 +758,11 @@ function ProviderRow({
           <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-bold uppercase text-gray-500">
             {provider.category}
           </span>
+          {isAmsReadyWebhook && (
+            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-bold uppercase text-blue-700 ring-1 ring-blue-100">
+              AMS-ready webhook
+            </span>
+          )}
         </div>
         <p className="mt-1 line-clamp-2 text-xs leading-5 text-gray-500">{provider.description}</p>
       </div>

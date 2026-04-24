@@ -195,6 +195,14 @@ export interface IntegrationConnectionTestResult {
   connection: IntegrationConnection
 }
 
+export interface IntegrationConnectionTestSendResult extends IntegrationConnectionTestResult {
+  response_status?: number
+  response_body?: Record<string, unknown>
+  action_results: Record<string, unknown>[]
+  idempotency_key: string
+  payload: Record<string, unknown>
+}
+
 export interface IntegrationClientSearchResult {
   id: string
   name: string

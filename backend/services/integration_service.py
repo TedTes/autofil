@@ -131,6 +131,56 @@ class IntegrationService:
             "connection": updated,
         }
 
+    def send_test_event(self, connection_id: str) -> Dict[str, Any]:
+        connection = self.get_destination(connection_id)
+        if not connection:
+            raise ValueError("Integration connection not found")
+        if not connection.get("enabled", True):
+            raise ValueError("Integration connection is disabled")
+
+        provider_id = str(connection.get("provider") or connection.get("type") or "webhook")
+        if not self._supports_webhook_test_send(connection, provider_id):
+            raise ValueError("Test send is only available for webhook-backed integration connections")
+
+        adapter = get_adapter(provider_id)
+        config = self._connection_test_config(connection)
+        payload = self._test_event_payload(connection, provider_id)
+        idempotency_key = f"test:{connection_id}:{uuid.uuid4()}"
+        result = adapter.send_submission(
+            payload,
+            config=config,
+            target={},
+            actions=["test_connection"],
+            idempotency_key=idempotency_key,
+        )
+
+        ok = bool(result.get("ok"))
+        status = "valid" if ok else "invalid"
+        message = (
+            "Test event delivered to webhook."
+            if ok
+            else str(result.get("message") or "Test event delivery failed.")
+        )
+        updates = {
+            "connection_status": status,
+            "last_tested_at": datetime.utcnow().isoformat(),
+            "last_error": None if ok else message[:500],
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+        updated = self._update_destination(connection_id, updates)
+        return {
+            "ok": ok,
+            "status": status,
+            "message": message,
+            "provider": provider_id,
+            "connection": updated,
+            "response_status": result.get("response_status"),
+            "response_body": result.get("response_body") if isinstance(result.get("response_body"), dict) else {},
+            "action_results": result.get("action_results") if isinstance(result.get("action_results"), list) else [],
+            "idempotency_key": idempotency_key,
+            "payload": payload,
+        }
+
     def search_clients(
         self,
         connection_id: str,
@@ -728,6 +778,51 @@ class IntegrationService:
 
     def _target_client_id(self, target: Dict[str, Any]) -> Optional[Any]:
         return target.get("clientId") or target.get("client_id")
+
+    def _supports_webhook_test_send(self, connection: Dict[str, Any], provider_id: str) -> bool:
+        normalized_provider = str(provider_id or "").strip().lower()
+        if normalized_provider == "webhook" or normalized_provider.endswith("_ams_ready"):
+            return bool(connection.get("url"))
+        return connection.get("type") == "webhook" and bool(connection.get("url"))
+
+    def _test_event_payload(self, connection: Dict[str, Any], provider_id: str) -> Dict[str, Any]:
+        provider = get_provider(provider_id) or {}
+        now = f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z"
+        native_provider = provider_id.removesuffix("_ams_ready")
+        is_ams_ready_webhook = provider_id.endswith("_ams_ready")
+        return {
+            "schema_version": "autofil.integration_test.v1",
+            "event": "autofil.integration.test",
+            "generated_at": now,
+            "mode": "ams_ready_webhook" if is_ams_ready_webhook else "webhook",
+            "provider": provider_id,
+            "native_provider": native_provider if is_ams_ready_webhook else provider_id,
+            "connection": {
+                "id": connection.get("id"),
+                "name": connection.get("name"),
+                "scope_key": connection.get("client_id"),
+                "display_name": provider.get("displayName") or connection.get("provider"),
+            },
+            "message": "AutoFil test event. No AMS record should be created from this payload.",
+            "sample_actions": [
+                "submit_structured_data",
+                "attach_documents",
+                "create_activity",
+            ],
+            "sample_payload": {
+                "insured": {
+                    "name": "Acme Demo Manufacturing LLC",
+                },
+                "policy": {
+                    "line_of_business": "Commercial Package",
+                    "effective_date": "2026-01-01",
+                },
+                "mapped_fields": {
+                    "field_count": 42,
+                    "overall_confidence": 0.94,
+                },
+            },
+        }
 
     def _send_webhook_job(
         self,

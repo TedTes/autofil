@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -76,7 +77,9 @@ class SubmissionFillCoordinator:
         temp_output_dir = tempfile.mkdtemp(prefix=f"filled_{submission_id}_")
         try:
             ext = normalized_ext
-            filename = f"{submission_id}_filled{ext}"
+            output_id = str(uuid.uuid4())
+            safe_template_id = self._safe_filename_part(resolved_template_id)
+            filename = f"{submission_id}_{safe_template_id}_{output_id[:8]}{ext}"
             output_path = os.path.join(temp_output_dir, filename)
 
             fill_report = filler.fill(
@@ -88,6 +91,7 @@ class SubmissionFillCoordinator:
                 self._low_confidence_warnings(canonical_data, template_config)
             )
             output_entry: Dict[str, Any] = {
+                "output_id": output_id,
                 "template_id": resolved_template_id,
                 "generated_at": datetime.utcnow().isoformat(),
             }
@@ -144,6 +148,16 @@ class SubmissionFillCoordinator:
             ".csv": "text/csv",
             ".json": "application/json",
         }.get(ext.lower(), "application/octet-stream")
+
+    @staticmethod
+    def _safe_filename_part(value: str) -> str:
+        cleaned = "".join(
+            char.lower() if char.isalnum() else "_"
+            for char in str(value or "output")
+        ).strip("_")
+        while "__" in cleaned:
+            cleaned = cleaned.replace("__", "_")
+        return cleaned or "output"
 
     @staticmethod
     def _low_confidence_warnings(

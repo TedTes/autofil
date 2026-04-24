@@ -449,18 +449,20 @@ function LegacyProcessingDemo() {
             <div className="relative h-[420px]">
               <svg className="absolute inset-0 h-full w-full" viewBox="0 0 1040 420" aria-hidden="true">
                 {[
-                  'M118 210 C180 210 180 120 245 120',
-                  'M118 210 C180 210 180 300 245 300',
-                  'M355 120 C415 120 415 160 475 160',
-                  'M355 300 C415 300 415 260 475 260',
-                  'M555 210 C615 210 615 120 690 120',
-                  'M555 210 C615 210 615 210 690 210',
-                  'M555 210 C615 210 615 300 690 300',
-                  'M800 120 C850 120 850 80 900 80',
-                  'M800 120 C850 120 850 120 900 120',
-                  'M800 210 C850 210 850 210 900 210',
-                  'M800 300 C850 300 850 300 900 300',
-                  'M800 300 C850 300 850 340 900 340',
+                  'M118 210 C170 210 170 120 220 120',
+                  'M118 210 C170 210 170 210 220 210',
+                  'M118 210 C170 210 170 300 220 300',
+                  'M330 120 C370 120 370 165 410 165',
+                  'M330 210 C370 210 370 210 410 210',
+                  'M330 300 C370 300 370 255 410 255',
+                  'M535 190 C575 150 590 120 635 120',
+                  'M535 230 C575 230 590 210 635 210',
+                  'M745 120 C770 120 765 180 790 180',
+                  'M745 210 C770 210 765 240 790 240',
+                  'M900 210 C910 170 910 98 910 58',
+                  'M900 210 C910 194 910 152 910 136',
+                  'M900 210 C910 226 910 256 910 292',
+                  'M900 210 C910 260 910 326 910 370',
                 ].map((path) => (
                   <motion.path
                     key={path}
@@ -477,57 +479,36 @@ function LegacyProcessingDemo() {
               </svg>
 
               <FlowNode className="left-[20px] top-[180px] bg-slate-950 text-white" label="Submission" sublabel={`${documents.length} files`} />
-              <FlowNode className="left-[245px] top-[92px] bg-blue-100 text-blue-900" label="ACORD PDFs" sublabel="extracted" />
-              <FlowNode className="left-[245px] top-[272px] bg-blue-100 text-blue-900" label="CSV Schedules" sublabel="SOV, P&L, losses" />
+              <FileFlowNode className="left-[220px] top-[82px]" label="ACORD PDFs" sublabel="125, 126, 140" />
+              <FileFlowNode className="left-[220px] top-[172px]" label="Schedules" sublabel="SOV, P&L" />
+              <FileFlowNode className="left-[220px] top-[262px]" label="Loss Runs" sublabel="CSV, XLSX" />
 
-              <div className="absolute left-[455px] top-[145px] z-10 w-[120px] rounded-lg border border-blue-200 bg-white p-3 text-center shadow-sm">
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-blue-600 text-white">
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 2.2, repeat: Infinity, ease: 'linear' }}
-                  >
-                    <Cog className="h-7 w-7" />
-                  </motion.div>
-                  <motion.div
-                    className="-ml-2 mt-4"
-                    animate={{ rotate: -360 }}
-                    transition={{ duration: 1.65, repeat: Infinity, ease: 'linear' }}
-                  >
-                    <Cog className="h-4 w-4" />
-                  </motion.div>
-                </div>
-                <p className="mt-2 text-sm font-semibold text-slate-950">AutoFil Engine</p>
-                <p className="mt-1 text-[11px] text-slate-500">extract, normalize, merge</p>
-                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                  <motion.div
-                    className="h-full rounded-full bg-blue-600"
-                    animate={{ width: `${Math.round(sceneProgress * 100)}%` }}
-                    transition={{ duration: 0.25 }}
-                  />
-                </div>
-              </div>
+              <ProcessingFlowNode className="left-[405px] top-[145px]" label="Extracting..." sublabel="read, map, structure" progress={sceneProgress} />
 
-              <FlowNode className="left-[690px] top-[92px] bg-indigo-100 text-indigo-950" label="Reviewed Data" sublabel="Primary values" />
-              <FlowNode className="left-[690px] top-[182px] bg-indigo-100 text-indigo-950" label="Source Links" sublabel="PDF pages" />
-              <FlowNode className="left-[690px] top-[272px] bg-indigo-100 text-indigo-950" label="Rules Check" sublabel="confidence" />
+              <FlowNode className="left-[635px] top-[92px] bg-indigo-100 text-indigo-950" label="Validation" sublabel="rules, confidence" />
+              <HumanReviewNode className="left-[635px] top-[182px]" />
+              <ProcessingFlowNode className="left-[790px] top-[165px]" label="Filling..." sublabel="forms + payloads" progress={sceneProgress} compact />
 
-              <FlowNode className="left-[900px] top-[56px] bg-emerald-100 text-emerald-950" label="ACORD 126" sublabel="filled PDF" compact />
-              <FlowNode className="left-[900px] top-[100px] bg-emerald-100 text-emerald-950" label="ACORD 140" sublabel="property" compact />
-              <FlowNode className="left-[900px] top-[190px] bg-emerald-100 text-emerald-950" label="AMS Send" sublabel="Applied Epic" compact />
-              <FlowNode className="left-[900px] top-[280px] bg-emerald-100 text-emerald-950" label="Download" sublabel="package" compact />
-              <FlowNode className="left-[900px] top-[324px] bg-emerald-100 text-emerald-950" label="Audit Trail" sublabel="sources" compact />
+              <AmsNode className="left-[910px] top-[30px]" label="Applied Epic" icon={Building2} logoSrc="https://int.appliedsystems.com/globalassets/all-images/applied-favicon.ico" />
+              <AmsNode className="left-[910px] top-[108px]" label="AMS360" icon={Send} logoSrc="https://www.vertafore.com/themes/custom/vertafore/images/favicons/favicon-32x32.png" />
+              <AmsNode className="left-[910px] top-[264px]" label="HawkSoft" icon={Building2} logoSrc="https://www.hawksoft.com/img/hawksoft_icon_borderless.png" />
+              <AmsNode className="left-[910px] top-[342px]" label="PDF/CSV" icon={Download} />
 
               {[
-                { x: ['128px', '190px', '245px'], y: ['210px', '150px', '120px'], delay: 0 },
-                { x: ['128px', '190px', '245px'], y: ['210px', '270px', '300px'], delay: 1.15 },
-                { x: ['355px', '415px', '455px'], y: ['120px', '150px', '160px'], delay: 2.3 },
-                { x: ['355px', '415px', '455px'], y: ['300px', '270px', '260px'], delay: 3.45 },
-                { x: ['575px', '625px', '690px'], y: ['210px', '150px', '120px'], delay: 0.65 },
-                { x: ['575px', '625px', '690px'], y: ['210px', '210px', '210px'], delay: 1.8 },
-                { x: ['575px', '625px', '690px'], y: ['210px', '270px', '300px'], delay: 2.95 },
-                { x: ['800px', '850px', '900px'], y: ['120px', '80px', '80px'], delay: 1.1 },
-                { x: ['800px', '850px', '900px'], y: ['210px', '210px', '210px'], delay: 2.25 },
-                { x: ['800px', '850px', '900px'], y: ['300px', '320px', '340px'], delay: 3.4 },
+                { x: ['128px', '174px', '220px'], y: ['210px', '150px', '120px'], delay: 0 },
+                { x: ['128px', '174px', '220px'], y: ['210px', '210px', '210px'], delay: 0.8 },
+                { x: ['128px', '174px', '220px'], y: ['210px', '270px', '300px'], delay: 1.6 },
+                { x: ['330px', '370px', '410px'], y: ['120px', '150px', '165px'], delay: 2.4 },
+                { x: ['330px', '370px', '410px'], y: ['210px', '210px', '210px'], delay: 3.2 },
+                { x: ['330px', '370px', '410px'], y: ['300px', '270px', '255px'], delay: 4 },
+                { x: ['535px', '585px', '635px'], y: ['190px', '145px', '120px'], delay: 0.65 },
+                { x: ['535px', '585px', '635px'], y: ['230px', '225px', '210px'], delay: 1.45 },
+                { x: ['745px', '768px', '790px'], y: ['120px', '150px', '180px'], delay: 2.25 },
+                { x: ['745px', '768px', '790px'], y: ['210px', '225px', '240px'], delay: 3.05 },
+                { x: ['900px', '905px', '910px'], y: ['210px', '134px', '58px'], delay: 0.95 },
+                { x: ['900px', '905px', '910px'], y: ['210px', '173px', '136px'], delay: 1.75 },
+                { x: ['900px', '905px', '910px'], y: ['210px', '251px', '292px'], delay: 2.55 },
+                { x: ['900px', '905px', '910px'], y: ['210px', '290px', '370px'], delay: 3.35 },
               ].map((packet) => (
                 <motion.div
                   key={`${packet.delay}`}
@@ -571,6 +552,143 @@ function FlowNode({
     >
       <p className="truncate text-xs font-bold">{label}</p>
       <p className="mt-1 truncate text-[10px] opacity-75">{sublabel}</p>
+    </motion.div>
+  )
+}
+
+function FileFlowNode({
+  label,
+  sublabel,
+  className,
+}: {
+  label: string
+  sublabel: string
+  className: string
+}) {
+  return (
+    <motion.div
+      className={`absolute z-10 w-[110px] rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-blue-900 shadow-sm ${className}`}
+      whileHover={{ scale: 1.04 }}
+      animate={{ y: [0, -2, 0] }}
+      transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+    >
+      <div className="mb-1 flex justify-center -space-x-1">
+        {[0, 1, 2].map((index) => (
+          <span
+            key={index}
+            className="flex h-5 w-4 items-center justify-center rounded border border-blue-200 bg-white shadow-sm"
+          >
+            <FileText className="h-3 w-3 text-blue-600" />
+          </span>
+        ))}
+      </div>
+      <p className="truncate text-center text-xs font-bold">{label}</p>
+      <p className="mt-1 truncate text-center text-[10px] opacity-75">{sublabel}</p>
+    </motion.div>
+  )
+}
+
+function ProcessingFlowNode({
+  label,
+  sublabel,
+  className,
+  progress,
+  compact = false,
+}: {
+  label: string
+  sublabel: string
+  className: string
+  progress: number
+  compact?: boolean
+}) {
+  return (
+    <motion.div
+      className={`absolute z-10 text-center ${compact ? 'w-[110px]' : 'w-[130px]'} ${className}`}
+      whileHover={{ scale: 1.04 }}
+      animate={{ y: [0, -2, 0] }}
+      transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+    >
+      <div className={`relative mx-auto flex items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/25 ${compact ? 'h-16 w-16' : 'h-20 w-20'}`}>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 2.1, repeat: Infinity, ease: 'linear' }}
+          >
+            <Cog className={compact ? 'h-10 w-10' : 'h-12 w-12'} />
+          </motion.div>
+          <motion.div
+            className={`absolute ${compact ? 'right-3 top-3' : 'right-4 top-4'}`}
+            animate={{ rotate: -360 }}
+            transition={{ duration: 1.55, repeat: Infinity, ease: 'linear' }}
+          >
+            <Cog className={compact ? 'h-5 w-5' : 'h-6 w-6'} />
+          </motion.div>
+        </div>
+      </div>
+      <p className="mt-2 truncate text-sm font-semibold text-slate-950">{label}</p>
+      <p className="mt-1 truncate text-[11px] text-slate-500">{sublabel}</p>
+      <div className="mx-auto mt-3 h-1.5 w-24 overflow-hidden rounded-full bg-slate-200">
+        <motion.div
+          className="h-full rounded-full bg-blue-600"
+          animate={{ width: `${Math.round(progress * 100)}%` }}
+          transition={{ duration: 0.25 }}
+        />
+      </div>
+    </motion.div>
+  )
+}
+
+function HumanReviewNode({ className }: { className: string }) {
+  return (
+    <motion.div
+      className={`absolute z-10 w-[110px] rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-center text-indigo-950 shadow-sm ${className}`}
+      whileHover={{ scale: 1.04 }}
+      animate={{ y: [0, -2, 0] }}
+      transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+    >
+      <div className="mx-auto mb-1 flex h-7 w-7 items-center justify-center rounded-full bg-indigo-600 text-white">
+        <Users className="h-4 w-4" />
+      </div>
+      <p className="truncate text-xs font-bold">Human Review</p>
+      <p className="mt-1 truncate text-[10px] opacity-75">broker approves</p>
+    </motion.div>
+  )
+}
+
+function AmsNode({
+  label,
+  icon: Icon,
+  logoSrc,
+  className,
+}: {
+  label: string
+  icon: ComponentType<{ className?: string }>
+  logoSrc?: string
+  className: string
+}) {
+  return (
+    <motion.div
+      className={`absolute z-10 flex w-[122px] items-center gap-2 rounded-lg bg-emerald-100 px-2 py-2 text-emerald-950 shadow-sm ${className}`}
+      whileHover={{ scale: 1.04 }}
+      animate={{ y: [0, -2, 0] }}
+      transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+    >
+      <span className="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-emerald-600 text-white">
+        <Icon className="h-4 w-4" />
+        {logoSrc ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={logoSrc}
+            alt=""
+            className="absolute inset-0 h-full w-full bg-white object-contain p-1"
+            loading="lazy"
+            onError={(event) => {
+              event.currentTarget.style.display = 'none'
+            }}
+          />
+        ) : null}
+      </span>
+      <span className="min-w-0 text-xs font-bold leading-tight">{label}</span>
     </motion.div>
   )
 }

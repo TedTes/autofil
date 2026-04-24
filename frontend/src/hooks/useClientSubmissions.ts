@@ -12,7 +12,7 @@ import {
   getSubmissionPackage,
   updateSubmissionInputInclusion,
   updateSubmissionInputsInclusion,
-  uploadPdf,
+  uploadMultiplePdfs,
 } from '@/lib/api-client'
 import { calculateTemplateReadiness } from '@/lib/merged-data'
 import useToast from '@/hooks/useToast' 
@@ -606,34 +606,40 @@ useEffect(() => {
 
     const currentPackage = resolvedPackages.find(pkg => pkg.submission_id === targetSubmissionId)
     const packageName = options?.packageName || currentPackage?.name || 'selected package'
-    let successCount = 0
-    let failureCount = 0
-    for (const file of files) {
-      const tempId = `tmp-${clientId}-${Date.now()}-${tempIdRef.current++}`
+    const tempIds = files.map(() => `tmp-${clientId}-${Date.now()}-${tempIdRef.current++}`)
+    files.forEach((file, index) => {
       const uploadedAt = new Date().toISOString()
 
       addRow({
-        submissionId: tempId,
-      filename: file.name,
-      uploadedAt,
-      fileType: getFileType(file.name),
-      fileSize: file.size,
-      status: 'uploading',
-      uploadPercent: 0,
-      extractionStatus: 'pending',
-      extractionProgress: 0,
+        submissionId: tempIds[index],
+        filename: file.name,
+        uploadedAt,
+        fileType: getFileType(file.name),
+        fileSize: file.size,
+        status: 'uploading',
+        uploadPercent: 0,
+        extractionStatus: 'pending',
+        extractionProgress: 0,
       })
+    })
 
-      try {
-        const result = await uploadPdf(
-          file,
-          (progress) => {
-            setStatusText(`Uploading ${file.name} (${progress}%)`)
-            updateRow(tempId, { uploadPercent: progress,status: 'uploading' })
-          },
-          { clientId, submissionId: targetSubmissionId }
-        )
+    let successCount = 0
+    let failureCount = 0
+    try {
+      const results = await uploadMultiplePdfs(
+        files,
+        (fileIndex, progress) => {
+          const file = files[fileIndex]
+          setStatusText(`Uploading ${file.name} (${progress}%)`)
+          updateRow(tempIds[fileIndex], { uploadPercent: progress, status: 'uploading' })
+        },
+        { clientId, submissionId: targetSubmissionId }
+      )
 
+      const succeededIndexes = new Set<number>()
+      results.forEach((result, index) => {
+        const rowIndex = typeof result.upload_index === 'number' ? result.upload_index : index
+        succeededIndexes.add(rowIndex)
         const extractionPayload = result?.data as Record<string, unknown> | undefined
         const payloadConfidence =
           typeof extractionPayload?.['confidence'] === 'number'
@@ -642,7 +648,7 @@ useEffect(() => {
 
         setUploadedRows(prev =>
           prev.map(row =>
-            row.submissionId === tempId
+            row.submissionId === tempIds[rowIndex]
               ? {
                   ...row,
                   submissionId: result.submission_id,
@@ -656,24 +662,37 @@ useEffect(() => {
               : row
           )
         )
+      })
 
-        successCount += 1
-
-        if (!result) {
-          setMessage(`Uploaded ${file.name} (awaiting extraction)`)
-        } else {
-          setMessage(`Extracted ${file.name}`)
+      successCount = results.length
+      failureCount = Math.max(0, files.length - successCount)
+      if (failureCount > 0) {
+        for (let index = 0; index < files.length; index += 1) {
+          if (succeededIndexes.has(index)) continue
+          updateRow(tempIds[index], {
+            status: 'error',
+            extractionStatus: 'error',
+            extractionError: 'Upload failed',
+          })
         }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Upload failed'
-        failureCount += 1
+      }
+
+      if (successCount === 1) {
+        setMessage(`Extracted ${results[0]?.filename || files[0].name}`)
+      } else if (successCount > 1) {
+        setMessage(`Extracted ${successCount} files`)
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Upload failed'
+      failureCount = files.length
+      tempIds.forEach((tempId) => {
         updateRow(tempId, {
           status: 'error',
           extractionStatus: 'error',
           extractionError: msg,
         })
-        setWorkflowError(msg)
-      }
+      })
+      setWorkflowError(msg)
     }
 
     setIsUploading(false)

@@ -213,15 +213,55 @@ export async function uploadMultiplePdfs(
     submissionId?: string
   }
 ): Promise<SubmissionResponse[]> {
-  const results: SubmissionResponse[] = []
-  for (let i = 0; i < files.length; i++) {
-    const result = await uploadPdf(files[i], (progress) =>
-      onProgress?.(i, progress),
-      options
-    )
-    results.push(result)
+  if (files.length === 0) return []
+  if (files.length === 1) {
+    return [await uploadPdf(files[0], (progress) => onProgress?.(0, progress), options)]
   }
-  return results
+
+  const formData = new FormData()
+  const uploadFiles = await Promise.all(
+    files.map(async (file) => new File([await file.arrayBuffer()], file.name, {
+      type: file.type || 'application/octet-stream',
+      lastModified: file.lastModified,
+    }))
+  )
+  uploadFiles.forEach((file) => formData.append('files[]', file))
+  if (options?.clientId) {
+    formData.append('client_id', options.clientId)
+  }
+  if (options?.submissionId) {
+    formData.append('submission_id', options.submissionId)
+  }
+
+  const response = await api.post('/submissions/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    onUploadProgress: (progressEvent) => {
+      if (onProgress && progressEvent.total) {
+        const progress = Math.round(
+          (progressEvent.loaded * 100) / progressEvent.total
+        )
+        files.forEach((_, fileIndex) => onProgress(fileIndex, progress))
+      }
+    },
+  })
+
+  if (!response.data.success) {
+    throw new Error(response.data.error || 'Upload failed')
+  }
+
+  const payload = response.data.data ?? {}
+  const uploadedFiles = Array.isArray(payload.files) ? payload.files : []
+  return uploadedFiles.map((item: Partial<SubmissionResponse>, index: number) => ({
+    upload_index: item.upload_index ?? index,
+    submission_id: item.submission_id || '',
+    confidence: item.confidence ?? 0,
+    warnings: item.warnings ?? [],
+    data: item.data ?? {},
+    filename: item.filename || files[index]?.name || '',
+    status: item.status || 'extracted',
+    uploaded_at: item.uploaded_at || new Date().toISOString(),
+    field_confidence: item.field_confidence ?? {},
+  }))
 }
 
 /**

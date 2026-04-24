@@ -58,9 +58,6 @@ def upload_pdf():
         if not files:
             return jsonify({"error": "No files provided"}), 400
 
-        if submission_id and len(files) > 1:
-            return jsonify({"error": "Cannot upload multiple files to the same submission package at once"}), 400
-
         success_count, errors = 0, []
         successful_results = []
 
@@ -81,6 +78,22 @@ def upload_pdf():
                     submission_id=submission_id,
                 )
                 if result:
+                    result_submission_id = result.get("submission_id")
+                    submission = (
+                        submission_service.get_submission(result_submission_id)
+                        if result_submission_id
+                        else None
+                    )
+                    result = {
+                        "upload_index": idx,
+                        "submission_id": result_submission_id,
+                        "data": result.get("data") or (submission or {}).get("data") or {},
+                        "filename": (submission or {}).get("filename") or file.filename,
+                        "status": (submission or {}).get("status") or "extracted",
+                        "uploaded_at": (submission or {}).get("uploaded_at"),
+                        "confidence": (submission or {}).get("confidence"),
+                        "warnings": (submission or {}).get("warnings", []),
+                    }
                     success_count += 1
                     successful_results.append(result)
             except Exception as e:
@@ -98,22 +111,18 @@ def upload_pdf():
 
             if len(files) == 1 and successful_results:
                 result = successful_results[0]
-                submission_id = result.get("submission_id")
-                submission = submission_service.get_submission(submission_id) if submission_id else None
-                payload = {
-                    "submission_id": submission_id,
-                    "data": result.get("data") or (submission or {}).get("data") or {},
-                    "filename": (submission or {}).get("filename") or files[0].filename,
-                    "status": (submission or {}).get("status") or "extracted",
-                    "uploaded_at": (submission or {}).get("uploaded_at"),
-                    "confidence": (submission or {}).get("confidence"),
-                    "warnings": (submission or {}).get("warnings", []),
-                }
                 return jsonify({
                     "success": True,
-                    "data": payload,
+                    "data": result,
                     "message": message,
                 }), 200
+
+            package = None
+            if submission_id:
+                try:
+                    package = submission_service.get_submission_package(submission_id)
+                except Exception:
+                    package = None
 
             return jsonify({
                 "success": True,
@@ -123,6 +132,7 @@ def upload_pdf():
                     "total_files": len(files),
                     "successful_uploads": success_count,
                     "failed_uploads": len(errors),
+                    "package": package,
                 },
                 "message": message,
             }), 200

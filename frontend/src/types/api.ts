@@ -21,6 +21,7 @@ export interface ApiResponse<T=unknown> {
     field_hints?: Record<string, string>
     extraction_issues?: Record<string, unknown>,
     document_type?:string
+    upload_index?: number
   }
   
   export interface FillResponse {

@@ -60,7 +60,6 @@ function jobStatusClass(status: IntegrationJob['status']): string {
 export default function SendToAmsModal({
   isOpen,
   onClose,
-  clientId,
   submissionId,
   submissionName,
 }: SendToAmsModalProps) {
@@ -92,7 +91,7 @@ export default function SendToAmsModal({
     try {
       const [providerRows, connectionRows, jobRows] = await Promise.all([
         getIntegrationProviders(),
-        getIntegrationConnections({ clientId }),
+        getIntegrationConnections(),
         getIntegrationJobs(submissionId),
       ])
       setProviders(providerRows)
@@ -112,7 +111,7 @@ export default function SendToAmsModal({
     } finally {
       setIsLoading(false)
     }
-  }, [clientId, submissionId])
+  }, [submissionId])
   const selectedConnection = useMemo(
     () => amsConnections.find((connection) => connection.id === selectedConnectionId),
     [amsConnections, selectedConnectionId]

@@ -46,7 +46,31 @@ import { supabase } from './supabase'
 
 
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+function resolveApiBaseUrl(): string {
+  const configuredUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+
+  if (typeof window === 'undefined') {
+    return configuredUrl
+  }
+
+  try {
+    const apiUrl = new URL(configuredUrl)
+    const appHost = window.location.hostname
+    const isLocalApiHost = apiUrl.hostname === 'localhost' || apiUrl.hostname === '127.0.0.1'
+    const isLocalAppHost = appHost === 'localhost' || appHost === '127.0.0.1'
+
+    if (isLocalApiHost && !isLocalAppHost) {
+      apiUrl.hostname = appHost
+      return apiUrl.toString().replace(/\/$/, '')
+    }
+  } catch {
+    return configuredUrl
+  }
+
+  return configuredUrl
+}
+
+const API_BASE_URL = resolveApiBaseUrl()
 
 const api = axios.create({
   baseURL: `${API_BASE_URL}/api`,

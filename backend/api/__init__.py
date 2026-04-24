@@ -3,7 +3,6 @@ API initialization and configuration.
 """
 
 import logging
-
 from flask import Flask
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -14,6 +13,28 @@ _init_logger = logging.getLogger(__name__)
 # Ensure backend/.env is loaded so services see Supabase credentials, etc.
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(BASE_DIR, '.env'), override=False)
+
+
+def _get_cors_origins():
+    cors_origins_env = os.environ.get("CORS_ORIGINS")
+    if cors_origins_env:
+        return [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
+
+    if os.environ.get("FLASK_ENV") != "development":
+        _init_logger.warning(
+            "CORS_ORIGINS is not set — falling back to local development origins. "
+            "Set CORS_ORIGINS in production."
+        )
+
+    local_ports = "3000|3001|3002|3003|3004|3005"
+    return [
+        rf"http://localhost:({local_ports})",
+        rf"http://127\.0\.0\.1:({local_ports})",
+        rf"http://192\.168\.\d{{1,3}}\.\d{{1,3}}:({local_ports})",
+        rf"http://10\.\d{{1,3}}\.\d{{1,3}}\.\d{{1,3}}:({local_ports})",
+        rf"http://172\.(1[6-9]|2\d|3[0-1])\.\d{{1,3}}\.\d{{1,3}}:({local_ports})",
+    ]
+
 
 def create_app():
     """
@@ -48,13 +69,9 @@ def create_app():
     app.register_blueprint(integration_bp, url_prefix='/api/integrations')
     
     # Enable CORS for frontend
-    cors_origins_env = os.environ.get("CORS_ORIGINS")
-    if not cors_origins_env and os.environ.get("FLASK_ENV") != "development":
-        _init_logger.warning("CORS_ORIGINS is not set — falling back to http://localhost:3000. Set CORS_ORIGINS in production.")
-    cors_origins = (cors_origins_env or "http://localhost:3000").split(",")
     CORS(app, resources={
         r"/api/*": {
-            "origins": cors_origins,
+            "origins": _get_cors_origins(),
             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
             "allow_headers": ["Content-Type", "Authorization"]
         }

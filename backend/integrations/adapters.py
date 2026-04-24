@@ -194,6 +194,11 @@ class WebhookAdapter(IntegrationAdapter):
 def get_adapter(provider_id: str) -> IntegrationAdapter:
     """Return an adapter instance for a provider id."""
     normalized = str(provider_id or "webhook").strip().lower()
-    if normalized == "webhook":
+    if normalized in {
+        "webhook",
+        "applied_epic_ams_ready",
+        "ams360_ams_ready",
+        "hawksoft_ams_ready",
+    }:
         return WebhookAdapter()
     return PlannedProviderAdapter(normalized)

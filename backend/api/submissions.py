@@ -365,6 +365,12 @@ def fill_pdf(submission_id):
         input_ids = payload.get("input_ids")
         template_ids = payload.get("templateIds") or payload.get("template_ids")
         template_id = payload.get("templateId") or payload.get("template_id")
+        custom_merged_data = payload.get("customMergedData")
+        if custom_merged_data is None:
+            custom_merged_data = payload.get("custom_merged_data")
+
+        if custom_merged_data is not None and not isinstance(custom_merged_data, dict):
+            return jsonify({"error": "customMergedData must be an object"}), 400
 
         if template_ids:
             if not isinstance(template_ids, list):
@@ -373,6 +379,7 @@ def fill_pdf(submission_id):
                 submission_id,
                 [str(tid) for tid in template_ids],
                 input_ids=input_ids,
+                custom_merged_data=custom_merged_data,
             )
             return jsonify({
                 "success": result["success"],
@@ -387,6 +394,7 @@ def fill_pdf(submission_id):
             submission_id,
             input_ids=input_ids,
             template_id=template_id,
+            custom_merged_data=custom_merged_data,
         )
         
         return jsonify({

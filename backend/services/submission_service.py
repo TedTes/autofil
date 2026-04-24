@@ -694,6 +694,7 @@ class SubmissionService:
         submission_id: str,
         input_ids: Optional[List[str]] = None,
         template_id: Optional[str] = None,
+        custom_merged_data: Optional[Dict[str, Any]] = None,
     ):
         """
         Fill PDF with data using the canonical extraction output.
@@ -709,6 +710,7 @@ class SubmissionService:
                 submission_id=submission_id,
                 input_ids=input_ids,
                 template_id=template_id,
+                custom_merged_data=custom_merged_data,
             )
         except Exception as e:
             logger.exception("fill_pdf failed for submission_id=%s", submission_id)
@@ -1976,6 +1978,7 @@ class SubmissionService:
         submission_id: str,
         template_ids: List[str],
         input_ids: Optional[List[str]] = None,
+        custom_merged_data: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         results = []
         generated = 0
@@ -1991,6 +1994,7 @@ class SubmissionService:
                     submission_id,
                     input_ids=input_ids,
                     template_id=template_id,
+                    custom_merged_data=custom_merged_data,
                 )
                 generated += 1
                 results.append({

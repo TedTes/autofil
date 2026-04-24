@@ -37,6 +37,7 @@ class SubmissionFillCoordinator:
         submission_id: str,
         input_ids: Optional[List[str]] = None,
         template_id: Optional[str] = None,
+        custom_merged_data: Optional[Dict[str, Any]] = None,
     ) -> Tuple[FillReport, Dict[str, Any]]:
         metadata = self.repository.get(submission_id)
         if not metadata:
@@ -48,7 +49,14 @@ class SubmissionFillCoordinator:
             if not inputs_meta:
                 raise ValueError("No matching input files selected")
 
-        canonical_data = self.merge_input_data(inputs_meta) or metadata.get("data")
+        if custom_merged_data is not None and not isinstance(custom_merged_data, dict):
+            raise ValueError("custom_merged_data must be a dictionary")
+
+        canonical_data = (
+            custom_merged_data
+            if custom_merged_data is not None
+            else self.merge_input_data(inputs_meta) or metadata.get("data")
+        )
         if not canonical_data:
             raise ValueError("Extracted data not found")
 

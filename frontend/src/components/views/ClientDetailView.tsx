@@ -3,7 +3,7 @@
 import React, { useRef, useState, useEffect,useCallback, useMemo } from 'react'
 import dynamic from 'next/dynamic'
 import { useClientSubmissions,useTemplateLibrary } from '@/hooks'
-import { fillPdf, downloadPDF, updateSubmissionData} from '@/lib/api-client'
+import { fillPdf, downloadPDF, markSubmissionReviewed, updateSubmissionData} from '@/lib/api-client'
 import UploadOrMergedDataPanel from "@/components/client/UploadOrMergedDataPanel"
 import SendToAmsModal from '@/components/client/SendToAmsModal'
 import type { ClientSubmissionPackage,UploadedRow, MergedData, ClientDetailActions  } from '@/types'
@@ -706,6 +706,7 @@ export function ClientDetailView({
 
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false)
   const [isIntegrationModalOpen, setIsIntegrationModalOpen] = useState(false)
+  const [isApprovingReview, setIsApprovingReview] = useState(false)
   const {
     loading,
     error,
@@ -930,6 +931,18 @@ const [isCreating, setIsCreating] = useState(false)
     input => input.extraction_status === 'extracted' || input.extraction_status === 'ready'
   ) || false
   const reviewDataReady = hasRenderableMergedData(mergedData)
+  const reviewApproved = Boolean(activePackage?.reviewed_at)
+
+  const handleApproveReview = useCallback(async () => {
+    if (!activePackageId) return
+    setIsApprovingReview(true)
+    try {
+      await markSubmissionReviewed(activePackageId)
+      await refreshClient()
+    } finally {
+      setIsApprovingReview(false)
+    }
+  }, [activePackageId, refreshClient])
 
   const workflowState = useMemo(() => {
     if (!activePackage) return null
@@ -1040,8 +1053,8 @@ const [isCreating, setIsCreating] = useState(false)
   useEffect(() => {
     if (!onActionsReady) return
     onActionsReady({
-      canGenerate: Boolean(availableTemplates.length > 0 && !isMergedDataLoading && reviewDataReady),
-      canSendIntegration: Boolean(activePackageId && !isMergedDataLoading && reviewDataReady),
+      canGenerate: Boolean(availableTemplates.length > 0 && !isMergedDataLoading && reviewDataReady && reviewApproved),
+      canSendIntegration: Boolean(activePackageId && !isMergedDataLoading && reviewDataReady && reviewApproved),
       selectedTemplateCount: selectedTemplateIds.length,
       isUploading,
       openNewSubmission: handleCreateSubmissionClick,
@@ -1056,6 +1069,7 @@ const [isCreating, setIsCreating] = useState(false)
     activePackageId,
     isMergedDataLoading,
     reviewDataReady,
+    reviewApproved,
     selectedTemplateIds.length,
     isUploading,
     handleCreateSubmissionClick,
@@ -1260,8 +1274,11 @@ const [isCreating, setIsCreating] = useState(false)
       onRemoveRow={removeRow}
       onViewFile={handleViewFile}
       onSaveMergedData={handleSaveMergedData}
+      onApproveReview={handleApproveReview}
+      isReviewApproved={reviewApproved}
+      isApprovingReview={isApprovingReview}
       onOpenIntegrations={() => setIsIntegrationModalOpen(true)}
-      canSendToIntegration={Boolean(activePackageId && reviewDataReady && !isMergedDataLoading)}
+      canSendToIntegration={Boolean(activePackageId && reviewDataReady && reviewApproved && !isMergedDataLoading)}
       FileUploadDropZoneComponent={FileUploadDropZone}
     />
     {outputState.packageId === activePackageId && (outputState.message || outputState.error) && (

@@ -1754,6 +1754,28 @@ export async function updateSubmissionData(
   }
 }
 
+export async function markSubmissionReviewed(
+  submissionId: string
+): Promise<{
+  submission_id: string
+  reviewed_at: string
+  reviewed_by?: string | null
+  package?: ClientSubmissionPackage
+}> {
+  try {
+    const response = await api.post(`/submissions/${submissionId}/review`, {})
+
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to approve review')
+    }
+
+    return response.data.data
+  } catch (error) {
+    console.error('Approve review error:', error)
+    throw error
+  }
+}
+
 /**
  * Bulk export submissions as ZIP file
  * Server creates a ZIP of all filled PDFs

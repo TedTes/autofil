@@ -56,6 +56,8 @@ export interface Submission {
       expected_fields?: string[]
     }
     status: string
+    reviewed_at?: string | null
+    reviewed_by?: string | null
     uploaded_at: string
     updated_at: string
     file_count: number

@@ -163,6 +163,9 @@ class SubmissionExtractionCoordinator:
             metadata["updated_at"] = timestamp
             metadata["folder_id"] = folder_id
             metadata["client_id"] = client_id
+            if is_existing_submission:
+                metadata.pop("reviewed_at", None)
+                metadata.pop("reviewed_by", None)
             if not metadata.get("client_name") and client_name:
                 metadata["client_name"] = client_name
             metadata["filename"] = metadata.get("filename") or filename

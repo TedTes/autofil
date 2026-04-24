@@ -539,6 +539,8 @@ class SubmissionService:
             'template_type': metadata.get('template_type'),
             'template_metadata': metadata.get('template_metadata'),
             'status': metadata.get('status', 'uploaded'),
+            'reviewed_at': metadata.get('reviewed_at'),
+            'reviewed_by': metadata.get('reviewed_by'),
             'uploaded_at': uploaded_at,
             'updated_at': updated_at,
             'file_count': metadata.get('file_count') or len(inputs),
@@ -640,6 +642,8 @@ class SubmissionService:
         metadata['current_version_id'] = version_id
         metadata['last_edited_at'] = datetime.utcnow().isoformat()
         metadata['last_edited_by'] = user
+        metadata.pop('reviewed_at', None)
+        metadata.pop('reviewed_by', None)
         if changed_fields:
             self._record_field_corrections(metadata, changed_fields)
 
@@ -843,6 +847,8 @@ class SubmissionService:
 
         target["included_in_merge"] = bool(included)
         metadata["updated_at"] = datetime.utcnow().isoformat()
+        metadata.pop("reviewed_at", None)
+        metadata.pop("reviewed_by", None)
         merged_data = self._merge_input_data(inputs)
         metadata["data"] = merged_data
 
@@ -886,6 +892,8 @@ class SubmissionService:
             raise ValueError(f"Input file not found: {', '.join(sorted(missing_ids))}")
 
         metadata["updated_at"] = datetime.utcnow().isoformat()
+        metadata.pop("reviewed_at", None)
+        metadata.pop("reviewed_by", None)
         merged_data = self._merge_input_data(inputs)
         metadata["data"] = merged_data
 
@@ -925,6 +933,8 @@ class SubmissionService:
 
         metadata["inputs"] = inputs
         metadata["file_count"] = len(inputs)
+        metadata.pop("reviewed_at", None)
+        metadata.pop("reviewed_by", None)
         if inputs:
             metadata["data"] = self._merge_input_data(inputs)
             metadata["status"] = metadata.get("status") or "extracted"
@@ -1302,6 +1312,28 @@ class SubmissionService:
         self._persist_submission_metadata(metadata)
 
         return {'submission_id': submission_id, 'status': status}
+
+    def mark_reviewed(self, submission_id: str, user: str = 'user') -> Dict[str, Any]:
+        metadata = self.get_submission_metadata(submission_id)
+        if not metadata:
+            raise ValueError("Submission not found")
+        if not metadata.get("data"):
+            raise ValueError("Submission has no merged data to review")
+
+        timestamp = datetime.utcnow().isoformat()
+        metadata["reviewed_at"] = timestamp
+        metadata["reviewed_by"] = user
+        metadata["workflow_status"] = "reviewed"
+        if metadata.get("status") in {None, "created", "uploaded", "extracting", "extracted"}:
+            metadata["status"] = "ready"
+        metadata["updated_at"] = timestamp
+        self._persist_submission_metadata(metadata)
+        return {
+            "submission_id": submission_id,
+            "reviewed_at": timestamp,
+            "reviewed_by": user,
+            "package": self.get_submission_package(submission_id),
+        }
 
     def _resolve_client_name(
         self,

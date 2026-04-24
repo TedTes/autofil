@@ -123,8 +123,9 @@ class IntegrationPayloadService:
 
     def _review_status(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
         return {
-            "reviewed": bool(metadata.get("reviewed_at") or metadata.get("last_edited_at")),
+            "reviewed": bool(metadata.get("reviewed_at")),
             "reviewed_at": metadata.get("reviewed_at"),
+            "reviewed_by": metadata.get("reviewed_by"),
             "last_edited_at": metadata.get("last_edited_at"),
             "last_edited_by": metadata.get("last_edited_by"),
         }

@@ -9,6 +9,7 @@ import {
   X,
   Info,
   Send,
+  ShieldCheck,
 } from 'lucide-react'
 import type { MergedData, SemanticField, SemanticSection } from '@/types'
 
@@ -19,6 +20,9 @@ interface MergedDataViewProps {
   onOpenSource?: (target: SourceOpenTarget) => void
   onOpenIntegrations?: () => void
   canSendToIntegration?: boolean
+  onApproveReview?: () => Promise<void> | void
+  isReviewApproved?: boolean
+  isApprovingReview?: boolean
 }
 
 export default function MergedDataView({
@@ -28,6 +32,9 @@ export default function MergedDataView({
   onOpenSource,
   onOpenIntegrations,
   canSendToIntegration = false,
+  onApproveReview,
+  isReviewApproved = false,
+  isApprovingReview = false,
 }: MergedDataViewProps) {
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
   const [isEditing, setIsEditing] = useState(false)
@@ -132,6 +139,17 @@ export default function MergedDataView({
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {!isEditing && onApproveReview && (
+              <button
+                type="button"
+                onClick={onApproveReview}
+                disabled={isApprovingReview || isReviewApproved}
+                className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <ShieldCheck className="w-4 h-4 mr-1.5" />
+                {isReviewApproved ? 'Approved' : isApprovingReview ? 'Approving...' : 'Approve'}
+              </button>
+            )}
             {!isEditing && onOpenIntegrations && (
               <button
                 type="button"

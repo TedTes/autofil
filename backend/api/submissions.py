@@ -796,6 +796,27 @@ def patch_submission_data(submission_id):
         return internal_server_error(logger, "Failed to patch submission data", e)
 
 
+@submission_bp.route("/<submission_id>/review", methods=["POST"])
+@require_auth
+def mark_submission_reviewed(submission_id):
+    """Mark a submission package's current merged data as reviewed."""
+    try:
+        payload = request.get_json(silent=True) or {}
+        result = _submission_service().mark_reviewed(
+            submission_id=submission_id,
+            user=payload.get("user", "user"),
+        )
+        return jsonify({
+            "success": True,
+            "data": result,
+            "message": "Submission review approved",
+        }), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        return internal_server_error(logger, "Failed to approve submission review", e)
+
+
 @submission_bp.route("/<submission_id>/status", methods=["PATCH"])
 @require_auth
 def update_submission_status(submission_id):

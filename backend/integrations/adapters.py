@@ -160,6 +160,11 @@ class WebhookAdapter(IntegrationAdapter):
             timeout=max(1, min(timeout, 60)),
         )
         ok = 200 <= response.status_code < 300
+        requested_actions = [
+            str(action)
+            for action in (actions or ["submit_structured_data"])
+            if str(action).strip()
+        ]
         return {
             "ok": ok,
             "status": "succeeded" if ok else "failed",
@@ -168,10 +173,11 @@ class WebhookAdapter(IntegrationAdapter):
             "response_body": self._response_body(response),
             "action_results": [
                 {
-                    "action": "submit_structured_data",
+                    "action": action,
                     "status": "succeeded" if ok else "failed",
                     "message": None if ok else response.text[:500],
                 }
+                for action in requested_actions
             ],
         }
 

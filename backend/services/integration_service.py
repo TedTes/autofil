@@ -891,14 +891,21 @@ class IntegrationService:
     ) -> Dict[str, Any]:
         if provider_id == "webhook":
             return canonical_payload
+        is_ams_ready_webhook = provider_id.endswith("_ams_ready")
+        native_provider = provider_id.removesuffix("_ams_ready") if is_ams_ready_webhook else provider_id
+        action_payloads = self._action_payloads(canonical_payload, actions)
         return {
             "schema_version": "autofil.ams_adapter_input.v1",
             "provider": provider_id,
+            "mode": "ams_ready_webhook" if is_ams_ready_webhook else "native_adapter",
+            "native_provider": native_provider,
             "target": target,
             "actions": actions,
             "canonical": canonical_payload,
             "mapped": self._map_canonical_for_ams(canonical_payload),
-            "action_payloads": self._action_payloads(canonical_payload, actions),
+            "action_payloads": action_payloads,
+            "documents": action_payloads.get("attach_documents", {}).get("documents", []),
+            "activity": action_payloads.get("create_activity"),
         }
 
     def _map_canonical_for_ams(self, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -929,6 +936,10 @@ class IntegrationService:
 
     def _action_payloads(self, payload: Dict[str, Any], actions: List[str]) -> Dict[str, Any]:
         action_payloads: Dict[str, Any] = {}
+        if "submit_structured_data" in actions:
+            action_payloads["submit_structured_data"] = {
+                "mapped": self._map_canonical_for_ams(payload),
+            }
         if "attach_documents" in actions:
             action_payloads["attach_documents"] = {
                 "documents": self._documents_for_attachment(payload),

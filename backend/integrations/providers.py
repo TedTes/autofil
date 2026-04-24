@@ -211,6 +211,48 @@ def _provider(
     return provider
 
 
+def _ams_ready_webhook_provider(
+    provider_id: str,
+    display_name: str,
+    native_provider: str,
+    description: str,
+) -> Dict[str, Any]:
+    return {
+        "provider": provider_id,
+        "displayName": display_name,
+        "category": "ams",
+        "status": "available",
+        "authType": "webhook",
+        "description": description,
+        "authConfig": {
+            "type": "webhook",
+            "fields": [
+                _field("url", "Automation Webhook URL", AUTH_FIELD_URL),
+                _field("secretRef", "Secret Environment Variable", required=False),
+            ],
+        },
+        "capabilities": {
+            "supportsClientSearch": False,
+            "supportsClientCreate": False,
+            "supportsPolicyCreate": False,
+            "supportsDocumentAttach": True,
+            "supportsActivities": True,
+            "supportsStructuredDataSubmit": True,
+            "supportsWebhooks": True,
+            "requiresTargetClient": False,
+            "requiresPartnerAccess": False,
+            "requiresAgencySdkLicense": False,
+        },
+        "supportedActions": [
+            "attach_documents",
+            "create_activity",
+            "submit_structured_data",
+        ],
+        "validationMode": "ams_ready_webhook",
+        "nativeProvider": native_provider,
+    }
+
+
 INTEGRATION_PROVIDER_STATIC: List[Dict[str, Any]] = [
     {
         "provider": "webhook",
@@ -310,6 +352,12 @@ INTEGRATION_PROVIDER_STATIC: List[Dict[str, Any]] = [
             "submit_structured_data",
         ],
     },
+    _ams_ready_webhook_provider(
+        "applied_epic_ams_ready",
+        "Applied Epic-ready Webhook",
+        "applied_epic",
+        "Validate Applied Epic demand by sending an AMS-ready package to Zapier, Make, n8n, or another webhook workflow. This is not a native Applied Epic API connection.",
+    ),
     {
         "provider": "ams360",
         "displayName": "Vertafore AMS360",
@@ -345,6 +393,12 @@ INTEGRATION_PROVIDER_STATIC: List[Dict[str, Any]] = [
             "submit_structured_data",
         ],
     },
+    _ams_ready_webhook_provider(
+        "ams360_ams_ready",
+        "AMS360-ready Webhook",
+        "ams360",
+        "Validate AMS360 demand by sending an AMS-ready package to Zapier, Make, n8n, or another webhook workflow. This is not a native AMS360 API connection.",
+    ),
     {
         "provider": "hawksoft",
         "displayName": "HawkSoft",
@@ -379,6 +433,12 @@ INTEGRATION_PROVIDER_STATIC: List[Dict[str, Any]] = [
             "submit_structured_data",
         ],
     },
+    _ams_ready_webhook_provider(
+        "hawksoft_ams_ready",
+        "HawkSoft-ready Webhook",
+        "hawksoft",
+        "Validate HawkSoft demand by sending an AMS-ready package to Zapier, Make, n8n, or another webhook workflow. This is not a native HawkSoft API connection.",
+    ),
     {
         "provider": "qqcatalyst",
         "displayName": "QQCatalyst",
@@ -540,6 +600,36 @@ INTEGRATION_PROVIDER_RUNTIME_CONFIGS: Dict[str, Dict[str, Any]] = {
         supports_activity_create=True,
     ),
 }
+
+AMS_READY_WEBHOOK_RUNTIME_CONFIG = _runtime_config_schema(
+    "webhook",
+    [
+        _runtime_auth_field("url", "Automation Webhook URL", AUTH_FIELD_URL, storage_target="url"),
+        _runtime_auth_field(
+            "secretRef",
+            "Secret Environment Variable",
+            required=False,
+            storage_target="secret_ref",
+        ),
+    ],
+    [
+        _runtime_endpoint("testConnection", method="HEAD", path="", source="url"),
+        _runtime_endpoint("submitStructuredData", method="POST", path="", source="url"),
+        _runtime_endpoint("attachDocuments", method="POST", path="", source="url"),
+        _runtime_endpoint("createActivity", method="POST", path="", source="url"),
+    ],
+    supports_submit=True,
+    supports_document_attach=True,
+    supports_activity_create=True,
+)
+
+INTEGRATION_PROVIDER_RUNTIME_CONFIGS.update(
+    {
+        "applied_epic_ams_ready": AMS_READY_WEBHOOK_RUNTIME_CONFIG,
+        "ams360_ams_ready": AMS_READY_WEBHOOK_RUNTIME_CONFIG,
+        "hawksoft_ams_ready": AMS_READY_WEBHOOK_RUNTIME_CONFIG,
+    }
+)
 
 
 def _hydrate_provider(provider: Dict[str, Any]) -> Dict[str, Any]:

@@ -194,6 +194,8 @@ class ClientService:
             'template_type': metadata.get('template_type'),
             'template_metadata': metadata.get('template_metadata'),
             'status': metadata.get('status', 'uploaded'),
+            'reviewed_at': metadata.get('reviewed_at'),
+            'reviewed_by': metadata.get('reviewed_by'),
             'uploaded_at': uploaded_at,
             'updated_at': updated_at,
             'file_count': metadata.get('file_count') or len(inputs),

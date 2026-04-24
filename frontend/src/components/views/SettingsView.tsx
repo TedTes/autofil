@@ -22,6 +22,7 @@ import {
   createIntegrationConnection,
   getIntegrationConnections,
   getIntegrationProviders,
+  sendIntegrationConnectionTestEvent,
   testIntegrationConnection,
 } from '@/lib/api-client'
 import type { CreateIntegrationConnectionRequest, IntegrationConnection, IntegrationProvider } from '@/types'
@@ -328,6 +329,7 @@ function IntegrationSettingsPanel() {
   const [scopeKey, setScopeKey] = useState('workspace')
   const [credentialValues, setCredentialValues] = useState<Record<string, string>>({})
   const [testingConnectionId, setTestingConnectionId] = useState<string | null>(null)
+  const [sendingTestConnectionId, setSendingTestConnectionId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -437,6 +439,29 @@ function IntegrationSettingsPanel() {
     }
   }
 
+  const handleSendTestEvent = async (connectionId: string) => {
+    setSendingTestConnectionId(connectionId)
+    setFormMessage(null)
+    setError(null)
+    try {
+      const result = await sendIntegrationConnectionTestEvent(connectionId)
+      setConnections((current) =>
+        current.map((connection) =>
+          connection.id === connectionId ? result.connection : connection
+        )
+      )
+      setFormMessage(
+        result.response_status
+          ? `${result.message} Response status: ${result.response_status}.`
+          : result.message
+      )
+    } catch (err) {
+      setFormMessage(err instanceof Error ? err.message : 'Failed to send test event')
+    } finally {
+      setSendingTestConnectionId(null)
+    }
+  }
+
   return (
     <div className="space-y-5 p-6">
       <div className="grid gap-3 sm:grid-cols-3">
@@ -506,7 +531,9 @@ function IntegrationSettingsPanel() {
                   connection={connection}
                   provider={providers.find((provider) => provider.provider === connection.provider)}
                   testing={testingConnectionId === connection.id}
+                  sendingTest={sendingTestConnectionId === connection.id}
                   onTest={() => handleTestConnection(connection.id)}
+                  onTestSend={() => handleSendTestEvent(connection.id)}
                 />
               ))}
             </div>
@@ -618,15 +645,20 @@ function ConnectionStatusRow({
   connection,
   provider,
   testing,
+  sendingTest,
   onTest,
+  onTestSend,
 }: {
   connection: IntegrationConnection
   provider?: IntegrationProvider
   testing: boolean
+  sendingTest: boolean
   onTest: () => void
+  onTestSend: () => void
 }) {
   const statusMeta = getConnectionStatusMeta(connection.connection_status, connection.enabled)
   const StatusIcon = statusMeta.icon
+  const supportsTestSend = connection.provider === 'webhook' || connection.provider.endsWith('_ams_ready')
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -653,12 +685,23 @@ function ConnectionStatusRow({
         <button
           type="button"
           onClick={onTest}
-          disabled={testing || !connection.enabled}
+          disabled={testing || sendingTest || !connection.enabled}
           className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 transition hover:border-blue-200 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${testing ? 'animate-spin' : ''}`} />
           Test
         </button>
+        {supportsTestSend && (
+          <button
+            type="button"
+            onClick={onTestSend}
+            disabled={testing || sendingTest || !connection.enabled}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-500"
+          >
+            <PlugZap className={`h-3.5 w-3.5 ${sendingTest ? 'animate-pulse' : ''}`} />
+            Send test
+          </button>
+        )}
       </div>
     </div>
   )

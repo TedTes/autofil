@@ -13,7 +13,7 @@ import {
   Layers3,
   Target,
   ShieldCheck,
-  History,
+  Plug,
   Building2,
 } from 'lucide-react'
 import AnimatedDemo from '@/components/landing/AnimatedDemo'
@@ -92,8 +92,8 @@ export default function LandingPage() {
     },
     {
       icon: Target,
-      title: 'Smart Data Extraction',
-      desc: 'AI-powered OCR and NLP extract fields with high accuracy across varied insurance documents.',
+      title: 'Extraction & Auto-Fill',
+      desc: 'AI-powered OCR and NLP extract fields from source documents and automatically fill carrier forms, ACORD applications, and custom templates.',
     },
     {
       icon: CheckCircle,
@@ -106,9 +106,9 @@ export default function LandingPage() {
       desc: 'Keep sensitive submissions controlled while standardizing review and export steps.',
     },
     {
-      icon: History,
-      title: 'Audit Trail',
-      desc: 'Track changes, preserve review history, and maintain a clear operational record.',
+      icon: Plug,
+      title: 'AMS Integration',
+      desc: 'Push reviewed submission data directly into Applied Epic, AMS360, EZLynx, Hawksoft, and other agency management systems — no re-keying.',
     },
   ]
 
@@ -118,10 +118,10 @@ export default function LandingPage() {
       title: 'For Brokers',
       accent: 'blue',
       items: [
-        'Prepare submissions faster',
-        'Reduce repetitive data entry',
-        'Handle renewals in minutes',
-        'Process multiple quotes in one workflow',
+        'Extract from source docs, auto-fill carrier forms in minutes',
+        'Push filled submissions to Applied Epic, AMS360, or EZLynx',
+        'Handle renewals without re-keying a single field',
+        'Process multiple carrier quotes in one workflow',
       ],
     },
     {
@@ -130,7 +130,7 @@ export default function LandingPage() {
       accent: 'slate',
       items: [
         'Standardize document workflows across teams',
-        'Keep client communication consistent',
+        'Sync submission data directly to your AMS — no re-keying',
         'Scale operations without adding manual steps',
         'Reduce E&O exposure from avoidable entry errors',
       ],
@@ -386,11 +386,11 @@ export default function LandingPage() {
               </div>
 
               <h2 className="mb-5 text-3xl font-bold leading-tight text-gray-900 sm:mb-6 sm:text-5xl lg:text-6xl">
-                Automate Insurance Document Submission Flow
+                Extract, Fill, and Submit Insurance Documents — Automatically
               </h2>
-              
+
               <p className="mx-auto mb-8 max-w-3xl text-base text-gray-600 sm:text-xl">
-                Upload client forms, policies, or templates — AutoFil extracts structured data and generates ready-to-send filled outputs in seconds.
+                Upload ACORD forms, loss runs, and supporting documents — AutoFil extracts the data, fills your carrier forms and output documents automatically, and pushes the completed submission directly to your AMS.
               </p>
 
               <div className="mb-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center sm:gap-4">
@@ -486,7 +486,7 @@ export default function LandingPage() {
                   </div>
                   <h4 className="text-xl font-bold mb-3 text-gray-900">Upload Documents</h4>
                   <p className="text-gray-600">
-                    Add ACORD forms, policies, schedules, and supporting files. AutoFil extracts fields from the full submission set.
+                    Add ACORD forms, loss runs, schedules, and supporting files. AutoFil reads every document and builds a unified submission data set.
                   </p>
                 </div>
               </div>
@@ -500,9 +500,9 @@ export default function LandingPage() {
                   <div className="w-16 h-16 mx-auto bg-blue-100 rounded-2xl flex items-center justify-center mb-6 mt-4">
                     <GitMerge className="w-8 h-8 text-blue-600" />
                   </div>
-                  <h4 className="text-xl font-bold mb-3 text-gray-900">Review Merged Data</h4>
+                  <h4 className="text-xl font-bold mb-3 text-gray-900">Review &amp; Fill</h4>
                   <p className="text-gray-600">
-                    AutoFil normalizes and merges the extracted values into one review set, with confidence and source visibility for each field.
+                    AutoFil merges extracted values into one review set. Confirm the fields, correct anything flagged, and watch it fill your output forms automatically.
                   </p>
                 </div>
               </div>
@@ -516,9 +516,9 @@ export default function LandingPage() {
                   <div className="w-16 h-16 mx-auto bg-blue-100 rounded-2xl flex items-center justify-center mb-6 mt-4">
                     <Send className="w-8 h-8 text-blue-600" />
                   </div>
-                  <h4 className="text-xl font-bold mb-3 text-gray-900">Generate And Send</h4>
+                  <h4 className="text-xl font-bold mb-3 text-gray-900">Package &amp; Send to AMS</h4>
                   <p className="text-gray-600">
-                    Generate filled outputs, assemble carrier-ready packages, or send the reviewed submission into your AMS workflow.
+                    Download filled PDFs and carrier packages, or push the completed submission directly into Applied Epic, AMS360, EZLynx, Hawksoft, or any connected system.
                   </p>
                 </div>
               </div>
@@ -563,7 +563,7 @@ export default function LandingPage() {
                 Built for Insurance Workflows
               </h3>
               <p className="mx-auto max-w-2xl text-base text-gray-600 sm:text-xl">
-                Trusted by brokers, underwriters, and agencies for document-heavy tasks
+                Designed around the real document-heavy work brokers and agencies do every day.
               </p>
             </div>
 
@@ -626,7 +626,7 @@ export default function LandingPage() {
               Your next submission<br className="hidden sm:block" /> is one upload away.
             </h3>
             <p className="mx-auto mb-10 max-w-xl text-base leading-relaxed text-gray-600 sm:text-lg">
-              Drop your documents. AutoFil extracts, merges, and generates a carrier-ready package — without spreadsheets, without copy-paste.
+              Drop your documents. AutoFil extracts the data, fills your forms, and assembles a carrier-ready package — without spreadsheets, without copy-paste.
             </p>
             <div className="flex flex-col justify-center gap-3 sm:flex-row sm:gap-4">
               <button

@@ -612,22 +612,30 @@ export default function LandingPage() {
         </section>
 
         {/* CTA */}
-        <section className="bg-gradient-to-r from-blue-600 to-blue-700 py-14 sm:py-20">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <h3 className="text-3xl sm:text-4xl font-bold text-white mb-4">
-              Ready to Save Hours Every Week?
+        <section className="relative overflow-hidden bg-gray-950 py-20 sm:py-28">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(37,99,235,0.22),transparent)]" />
+          <div className="relative max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-blue-800/60 bg-blue-950/60 px-4 py-1.5 text-sm font-medium text-blue-300">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-blue-400" />
+              </span>
+              Built for insurance teams
+            </div>
+            <h3 className="mb-5 text-3xl font-bold leading-tight text-white sm:text-5xl">
+              Your next submission<br className="hidden sm:block" /> is one upload away.
             </h3>
-            <p className="mb-8 text-base text-blue-100 sm:text-xl">
-              Join insurance professionals who have automated their document workflows with AutoFil.
+            <p className="mx-auto mb-10 max-w-xl text-base leading-relaxed text-gray-400 sm:text-lg">
+              Drop your documents. AutoFil extracts, merges, and generates a carrier-ready package — without spreadsheets, without copy-paste.
             </p>
             <div className="flex flex-col justify-center gap-3 sm:flex-row sm:gap-4">
               <button
                 onClick={() => handleGetStarted('start your free trial')}
                 disabled={isCtaPending('start your free trial')}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-6 py-3.5 text-base font-semibold text-blue-700 shadow-xl transition-all hover:bg-gray-50 disabled:cursor-wait disabled:bg-blue-50 sm:px-8 sm:py-4 sm:text-lg"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-7 py-4 text-base font-semibold text-white shadow-lg shadow-blue-900/40 transition-all hover:bg-blue-500 disabled:cursor-wait disabled:opacity-60 sm:text-lg"
               >
                 {isCtaPending('start your free trial') && <Loader2 className="h-5 w-5 animate-spin" />}
-                Start Free Trial
+                Start for free
                 {!isCtaPending('start your free trial') && <ArrowRight className="w-5 h-5" />}
               </button>
               <button
@@ -635,33 +643,33 @@ export default function LandingPage() {
                   const el = document.getElementById('demo-section')
                   if (el) el.scrollIntoView({ behavior: 'smooth' })
                 }}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border-2 border-blue-500 bg-blue-800 px-6 py-3.5 text-base font-semibold text-white transition-all hover:bg-blue-900 sm:px-8 sm:py-4 sm:text-lg"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-700 bg-gray-900 px-7 py-4 text-base font-semibold text-gray-200 transition-all hover:border-gray-600 hover:bg-gray-800 sm:text-lg"
               >
-                Watch Demo
+                See how it works
               </button>
             </div>
-            <p className="text-sm text-blue-200 mt-6">
-              No credit card required • 14-day free trial • Cancel anytime
-            </p>
           </div>
         </section>
       </main>
 
       {/* FOOTER */}
-      <footer className="bg-gray-50 border-t border-gray-200 py-12">
+      <footer className="border-t border-gray-800 bg-gray-950 py-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="flex flex-col items-center gap-6 md:flex-row md:justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-blue-600">
                 <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
               </div>
-              <span className="text-gray-600 font-medium">AutoFil</span>
+              <div>
+                <p className="text-sm font-semibold text-white">AutoFil</p>
+                <p className="text-xs text-gray-500">Insurance document automation</p>
+              </div>
             </div>
-            <div className="text-sm text-gray-500">
-              © {new Date().getFullYear()} AutoFil. Smart Form Automation for Insurance.
-            </div>
+            <p className="text-xs text-gray-600">
+              © {new Date().getFullYear()} AutoFil. All rights reserved.
+            </p>
           </div>
         </div>
       </footer>

@@ -409,9 +409,15 @@ function LegacyProcessingDemo() {
   }, [prefersReducedMotion])
 
   return (
-    <div className="mt-10 sm:mt-12">
-      <div className="px-2 py-4 sm:px-4 sm:py-6">
-        <div className="flex justify-center overflow-visible pb-2">
+    <div className="mt-20 sm:mt-24">
+      <div className="mb-6 px-4 text-center sm:mb-8 sm:px-0">
+        <h3 className="text-xl font-bold text-slate-900 sm:text-2xl">The AutoFil Pipeline</h3>
+        <p className="mx-auto mt-2 max-w-xl text-sm text-slate-500 sm:text-base">
+          From raw documents to a filled, carrier-ready submission — automated end to end.
+        </p>
+      </div>
+      <div className="px-2 sm:px-4">
+        <div className="flex justify-center overflow-visible">
           <div className="relative h-[140px] w-full max-w-[1040px] min-[420px]:h-[170px] sm:h-[255px] md:h-[315px] lg:h-[410px] xl:h-[468px]">
           <div className="absolute left-1/2 top-0 w-[1040px] origin-top -translate-x-1/2 scale-[0.29] p-6 min-[420px]:scale-[0.36] sm:scale-[0.54] md:scale-[0.66] lg:scale-[0.88] xl:scale-100">
             <div className="relative h-[420px]">

@@ -394,51 +394,19 @@ function getStageForStatus(
 
 function LegacyProcessingDemo() {
   const prefersReducedMotion = useReducedMotion()
-  const [currentScene, setCurrentScene] = useState<ProcessingScene>('upload')
-  const [sceneProgress, setSceneProgress] = useState(0)
-  const [documents, setDocuments] = useState<MockDocument[]>(MOCK_DOCUMENTS)
+  const [progress, setProgress] = useState(0)
 
   useEffect(() => {
     if (prefersReducedMotion) return
-
-    const scenes: ProcessingScene[] = ['upload', 'extract', 'review', 'process', 'export']
-    let currentIndex = scenes.indexOf(currentScene)
-    let startTime = Date.now()
-    let animationFrame = 0
-
-    const animate = () => {
-      const elapsed = Date.now() - startTime
-      const duration = PROCESSING_SCENE_DURATIONS[scenes[currentIndex]]
-      const progress = Math.min(elapsed / duration, 1)
-
-      setSceneProgress(progress)
-      setDocuments((prev) =>
-        updateProcessingDocuments(scenes[currentIndex], progress, prev)
-      )
-
-      if (progress >= 1) {
-        currentIndex = (currentIndex + 1) % scenes.length
-
-        if (currentIndex === 0) {
-          setCurrentScene('upload')
-          setSceneProgress(0)
-          setDocuments(
-            MOCK_DOCUMENTS.map((doc) => ({ ...doc, status: 'uploading', progress: 0 }))
-          )
-        } else {
-          setCurrentScene(scenes[currentIndex])
-          setSceneProgress(0)
-        }
-
-        startTime = Date.now()
-      }
-
-      animationFrame = window.requestAnimationFrame(animate)
+    let frame = 0
+    const start = Date.now()
+    const tick = () => {
+      setProgress(((Date.now() - start) % 5000) / 5000)
+      frame = window.requestAnimationFrame(tick)
     }
-
-    animationFrame = window.requestAnimationFrame(animate)
-    return () => window.cancelAnimationFrame(animationFrame)
-  }, [currentScene, prefersReducedMotion])
+    frame = window.requestAnimationFrame(tick)
+    return () => window.cancelAnimationFrame(frame)
+  }, [prefersReducedMotion])
 
   return (
     <div className="mt-10 sm:mt-12">
@@ -447,82 +415,15 @@ function LegacyProcessingDemo() {
           <div className="relative h-[140px] w-full max-w-[1040px] min-[420px]:h-[170px] sm:h-[255px] md:h-[315px] lg:h-[410px] xl:h-[468px]">
           <div className="absolute left-1/2 top-0 w-[1040px] origin-top -translate-x-1/2 scale-[0.29] p-6 min-[420px]:scale-[0.36] sm:scale-[0.54] md:scale-[0.66] lg:scale-[0.88] xl:scale-100">
             <div className="relative h-[420px]">
-              <svg className="absolute inset-0 h-full w-full" viewBox="0 0 1040 420" aria-hidden="true">
-                {[
-                  'M118 210 C170 210 170 120 220 120',
-                  'M118 210 C170 210 170 210 220 210',
-                  'M118 210 C170 210 170 300 220 300',
-                  'M330 120 C370 120 370 165 410 165',
-                  'M330 210 C370 210 370 210 410 210',
-                  'M330 300 C370 300 370 255 410 255',
-                  'M535 190 C575 150 590 120 635 120',
-                  'M535 230 C575 230 590 210 635 210',
-                  'M745 120 C770 120 765 180 790 180',
-                  'M745 210 C770 210 765 240 790 240',
-                  'M900 210 C910 170 910 98 910 58',
-                  'M900 210 C910 194 910 152 910 136',
-                  'M900 210 C910 226 910 256 910 292',
-                  'M900 210 C910 260 910 326 910 370',
-                ].map((path) => (
-                  <motion.path
-                    key={path}
-                    d={path}
-                    fill="none"
-                    stroke="#94a3b8"
-                    strokeWidth="1.5"
-                    strokeDasharray="5 8"
-                    strokeLinecap="round"
-                    animate={{ strokeDashoffset: [0, -26] }}
-                    transition={{ duration: 2.2, repeat: Infinity, ease: 'linear' }}
-                  />
-                ))}
-              </svg>
-
-              <FlowNode className="left-[20px] top-[180px] bg-slate-950 text-white" label="Submission" sublabel={`${documents.length} files`} />
-              <FileFlowNode className="left-[220px] top-[82px]" label="ACORD PDFs" sublabel="125, 126, 140" />
-              <FileFlowNode className="left-[220px] top-[172px]" label="Schedules" sublabel="SOV, P&L" />
-              <FileFlowNode className="left-[220px] top-[262px]" label="Loss Runs" sublabel="CSV, XLSX" />
-
-              <ProcessingFlowNode className="left-[405px] top-[145px]" label="Extracting..." sublabel="read, map, structure" progress={sceneProgress} />
-
-              <FlowNode className="left-[635px] top-[92px] bg-indigo-100 text-indigo-950" label="Validation" sublabel="rules, confidence" />
-              <HumanReviewNode className="left-[635px] top-[182px]" />
-              <ProcessingFlowNode className="left-[790px] top-[165px]" label="Filling..." sublabel="forms + payloads" progress={sceneProgress} compact />
-
-              <AmsNode className="left-[910px] top-[30px]" label="Applied Epic" icon={Building2} logoSrc="https://int.appliedsystems.com/globalassets/all-images/applied-favicon.ico" />
-              <AmsNode className="left-[910px] top-[108px]" label="AMS360" icon={Send} logoSrc="https://www.vertafore.com/themes/custom/vertafore/images/favicons/favicon-32x32.png" />
-              <AmsNode className="left-[910px] top-[264px]" label="HawkSoft" icon={Building2} logoSrc="https://www.hawksoft.com/img/hawksoft_icon_borderless.png" />
-              <AmsNode className="left-[910px] top-[342px]" label="PDF/CSV" icon={Download} />
-
-              {[
-                { x: ['128px', '174px', '220px'], y: ['210px', '150px', '120px'], delay: 0 },
-                { x: ['128px', '174px', '220px'], y: ['210px', '210px', '210px'], delay: 0.8 },
-                { x: ['128px', '174px', '220px'], y: ['210px', '270px', '300px'], delay: 1.6 },
-                { x: ['330px', '370px', '410px'], y: ['120px', '150px', '165px'], delay: 2.4 },
-                { x: ['330px', '370px', '410px'], y: ['210px', '210px', '210px'], delay: 3.2 },
-                { x: ['330px', '370px', '410px'], y: ['300px', '270px', '255px'], delay: 4 },
-                { x: ['535px', '585px', '635px'], y: ['190px', '145px', '120px'], delay: 0.65 },
-                { x: ['535px', '585px', '635px'], y: ['230px', '225px', '210px'], delay: 1.45 },
-                { x: ['745px', '768px', '790px'], y: ['120px', '150px', '180px'], delay: 2.25 },
-                { x: ['745px', '768px', '790px'], y: ['210px', '225px', '240px'], delay: 3.05 },
-                { x: ['900px', '905px', '910px'], y: ['210px', '134px', '58px'], delay: 0.95 },
-                { x: ['900px', '905px', '910px'], y: ['210px', '173px', '136px'], delay: 1.75 },
-                { x: ['900px', '905px', '910px'], y: ['210px', '251px', '292px'], delay: 2.55 },
-                { x: ['900px', '905px', '910px'], y: ['210px', '290px', '370px'], delay: 3.35 },
-              ].map((packet) => (
-                <motion.div
-                  key={`${packet.delay}`}
-                  className="absolute z-20 h-3 w-3 rounded-full bg-blue-600 shadow-lg shadow-blue-600/30"
-                  animate={{ left: packet.x, top: packet.y, opacity: [0, 1, 1, 1, 0] }}
-                  transition={{
-                    delay: packet.delay,
-                    duration: 2.2,
-                    repeat: Infinity,
-                    ease: 'easeInOut',
-                    times: [0, 0.04, 0.92, 0.985, 1],
-                  }}
-                />
-              ))}
+              <PipelineConnector left={165} color="#3b82f6" glow="rgba(59,130,246,0.45)" />
+              <PipelineConnector left={380} color="#6366f1" glow="rgba(99,102,241,0.45)" />
+              <PipelineConnector left={595} color="#8b5cf6" glow="rgba(139,92,246,0.45)" />
+              <PipelineConnector left={810} color="#10b981" glow="rgba(16,185,129,0.45)" />
+              <DocumentsStageCard />
+              <ExtractStageCard progress={progress} />
+              <ReviewStageCard />
+              <FillStageCard progress={(progress + 0.38) % 1} />
+              <SendStageCard />
             </div>
           </div>
           </div>
@@ -532,166 +433,241 @@ function LegacyProcessingDemo() {
   )
 }
 
-function FlowNode({
-  label,
-  sublabel,
-  className,
-  compact = false,
-}: {
-  label: string
-  sublabel: string
-  className: string
-  compact?: boolean
-}) {
+const STAGE_CARD = 'absolute top-[70px] h-[280px] w-[150px] rounded-2xl'
+
+function PipelineConnector({ left, color, glow }: { left: number; color: string; glow: string }) {
   return (
-    <motion.div
-      className={`absolute z-10 rounded-lg px-3 py-2 text-center shadow-sm ${compact ? 'w-[92px]' : 'w-[110px]'} ${className}`}
-      whileHover={{ scale: 1.04 }}
-      animate={{ y: [0, -2, 0] }}
-      transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
-    >
-      <p className="truncate text-xs font-bold">{label}</p>
-      <p className="mt-1 truncate text-[10px] opacity-75">{sublabel}</p>
-    </motion.div>
+    <div className="absolute top-[203px] h-[14px] w-[65px]" style={{ left }}>
+      <div
+        className="absolute top-1/2 w-full -translate-y-px border-t"
+        style={{ borderColor: color, opacity: 0.25 }}
+      />
+      {[0, 0.9, 1.8].map((delay) => (
+        <motion.div
+          key={delay}
+          className="absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full"
+          style={{ backgroundColor: color, boxShadow: `0 0 7px 2px ${glow}` }}
+          animate={{ x: [-10, 68], opacity: [0, 1, 1, 0] }}
+          transition={{ duration: 2.6, delay, repeat: Infinity, ease: 'easeInOut', times: [0, 0.08, 0.88, 1] }}
+        />
+      ))}
+    </div>
   )
 }
 
-function FileFlowNode({
-  label,
-  sublabel,
-  className,
-}: {
-  label: string
-  sublabel: string
-  className: string
-}) {
+function DocumentsStageCard() {
   return (
     <motion.div
-      className={`absolute z-10 w-[110px] rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-blue-900 shadow-sm ${className}`}
-      whileHover={{ scale: 1.04 }}
-      animate={{ y: [0, -2, 0] }}
-      transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+      className={`${STAGE_CARD} left-[15px] flex flex-col border border-blue-100 bg-blue-50 p-5`}
+      animate={{ y: [0, -3, 0] }}
+      transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
     >
-      <div className="mb-1 flex justify-center -space-x-1">
-        {[0, 1, 2].map((index) => (
-          <span
-            key={index}
-            className="flex h-5 w-4 items-center justify-center rounded border border-blue-200 bg-white shadow-sm"
+      <div className="mb-3 flex justify-center -space-x-2">
+        {[0, 1, 2].map((i) => (
+          <motion.div
+            key={i}
+            className="flex h-10 w-8 items-center justify-center rounded-md border border-blue-200 bg-white shadow-sm"
+            animate={{ y: [0, -3, 0] }}
+            transition={{ duration: 1.8 + i * 0.35, repeat: Infinity, ease: 'easeInOut', delay: i * 0.22 }}
           >
-            <FileText className="h-3 w-3 text-blue-600" />
-          </span>
+            <FileText className="h-5 w-5 text-blue-500" />
+          </motion.div>
         ))}
       </div>
-      <p className="truncate text-center text-xs font-bold">{label}</p>
-      <p className="mt-1 truncate text-center text-[10px] opacity-75">{sublabel}</p>
+      <p className="text-center text-[15px] font-bold text-blue-900">Documents</p>
+      <div className="my-3 h-px bg-blue-100" />
+      <div className="flex flex-1 flex-col justify-center space-y-2.5">
+        {[
+          ['ACORD PDFs', '125, 126, 140'],
+          ['Schedules', 'SOV, P&L'],
+          ['Loss Runs', 'CSV, XLSX'],
+        ].map(([label, sub]) => (
+          <div key={label} className="flex items-start gap-1.5">
+            <FileText className="mt-0.5 h-3 w-3 shrink-0 text-blue-400" />
+            <div>
+              <p className="text-[11.5px] font-semibold leading-tight text-blue-900">{label}</p>
+              <p className="text-[10px] leading-tight text-blue-500">{sub}</p>
+            </div>
+          </div>
+        ))}
+      </div>
     </motion.div>
   )
 }
 
-function ProcessingFlowNode({
-  label,
-  sublabel,
-  className,
-  progress,
-  compact = false,
-}: {
-  label: string
-  sublabel: string
-  className: string
-  progress: number
-  compact?: boolean
-}) {
+function ExtractStageCard({ progress }: { progress: number }) {
   return (
     <motion.div
-      className={`absolute z-10 text-center ${compact ? 'w-[110px]' : 'w-[130px]'} ${className}`}
-      whileHover={{ scale: 1.04 }}
-      animate={{ y: [0, -2, 0] }}
-      transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+      className={`${STAGE_CARD} left-[230px] flex flex-col items-center bg-blue-600 p-5 shadow-lg shadow-blue-600/20`}
+      animate={{ y: [0, -3, 0] }}
+      transition={{ duration: 2.9, repeat: Infinity, ease: 'easeInOut', delay: 0.4 }}
     >
-      <div className={`relative mx-auto flex items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/25 ${compact ? 'h-16 w-16' : 'h-20 w-20'}`}>
+      <div className="relative flex h-20 w-20 items-center justify-center">
+        <motion.div
+          className="absolute inset-0 rounded-xl border-2 border-blue-400/60"
+          animate={{ scale: [1, 1.22, 1], opacity: [0.7, 0, 0.7] }}
+          transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
+        />
+        <motion.div
+          className="absolute inset-0 rounded-xl border border-blue-300/30"
+          animate={{ scale: [1, 1.48, 1], opacity: [0.4, 0, 0.4] }}
+          transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut', delay: 0.35 }}
+        />
         <div className="absolute inset-0 flex items-center justify-center">
           <motion.div
             animate={{ rotate: 360 }}
             transition={{ duration: 2.1, repeat: Infinity, ease: 'linear' }}
           >
-            <Cog className={compact ? 'h-10 w-10' : 'h-12 w-12'} />
+            <Cog className="h-10 w-10 text-white" />
           </motion.div>
           <motion.div
-            className={`absolute ${compact ? 'right-3 top-3' : 'right-4 top-4'}`}
+            className="absolute right-1.5 top-1.5"
             animate={{ rotate: -360 }}
             transition={{ duration: 1.55, repeat: Infinity, ease: 'linear' }}
           >
-            <Cog className={compact ? 'h-5 w-5' : 'h-6 w-6'} />
+            <Cog className="h-5 w-5 text-blue-300" />
           </motion.div>
         </div>
       </div>
-      <p className="mt-2 truncate text-sm font-semibold text-slate-950">{label}</p>
-      <p className="mt-1 truncate text-[11px] text-slate-500">{sublabel}</p>
-      <div className="mx-auto mt-3 h-1.5 w-24 overflow-hidden rounded-full bg-slate-200">
-        <motion.div
-          className="h-full rounded-full bg-blue-600"
-          animate={{ width: `${Math.round(progress * 100)}%` }}
-          transition={{ duration: 0.25 }}
-        />
-      </div>
-    </motion.div>
-  )
-}
-
-function HumanReviewNode({ className }: { className: string }) {
-  return (
-    <motion.div
-      className={`absolute z-10 w-[110px] rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-center text-indigo-950 shadow-sm ${className}`}
-      whileHover={{ scale: 1.04 }}
-      animate={{ y: [0, -2, 0] }}
-      transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
-    >
-      <div className="mx-auto mb-1 flex h-7 w-7 items-center justify-center rounded-full bg-indigo-600 text-white">
-        <Users className="h-4 w-4" />
-      </div>
-      <p className="truncate text-xs font-bold">Human Review</p>
-      <p className="mt-1 truncate text-[10px] opacity-75">broker approves</p>
-    </motion.div>
-  )
-}
-
-function AmsNode({
-  label,
-  icon: Icon,
-  logoSrc,
-  className,
-}: {
-  label: string
-  icon: ComponentType<{ className?: string }>
-  logoSrc?: string
-  className: string
-}) {
-  return (
-    <motion.div
-      className={`absolute z-10 flex w-[122px] items-center gap-2 rounded-lg bg-emerald-100 px-2 py-2 text-emerald-950 shadow-sm ${className}`}
-      whileHover={{ scale: 1.04 }}
-      animate={{ y: [0, -2, 0] }}
-      transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
-    >
-      <span className="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-emerald-600 text-white">
-        <Icon className="h-4 w-4" />
-        {logoSrc ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={logoSrc}
-            alt=""
-            className="absolute inset-0 h-full w-full bg-white object-contain p-1"
-            loading="lazy"
-            onError={(event) => {
-              event.currentTarget.style.display = 'none'
-            }}
+      <p className="mt-3 text-[15px] font-bold text-white">Extract</p>
+      <p className="mt-1 text-center text-[11px] leading-tight text-blue-200">AI reads &amp; maps fields</p>
+      <div className="mt-auto w-full">
+        <div className="mb-1.5 flex items-center justify-between text-[10px] text-blue-300">
+          <span>Progress</span>
+          <span>{Math.round(progress * 100)}%</span>
+        </div>
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-blue-500/60">
+          <motion.div
+            className="h-full rounded-full bg-white"
+            animate={{ width: `${Math.round(progress * 100)}%` }}
+            transition={{ duration: 0.1 }}
           />
-        ) : null}
-      </span>
-      <span className="min-w-0 text-xs font-bold leading-tight">{label}</span>
+        </div>
+      </div>
     </motion.div>
   )
 }
+
+function ReviewStageCard() {
+  return (
+    <motion.div
+      className={`${STAGE_CARD} left-[445px] flex flex-col items-center border border-indigo-100 bg-indigo-50 p-5`}
+      animate={{ y: [0, -3, 0] }}
+      transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut', delay: 0.8 }}
+    >
+      <div className="relative flex h-20 w-20 items-center justify-center">
+        <motion.div
+          className="absolute inset-0 rounded-xl bg-indigo-200/50"
+          animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0, 0.5] }}
+          transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
+        />
+        <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-indigo-600 shadow-md shadow-indigo-600/25">
+          <Users className="h-8 w-8 text-white" />
+        </div>
+      </div>
+      <p className="mt-3 text-[15px] font-bold text-indigo-900">Review</p>
+      <p className="mt-1 text-center text-[11px] leading-tight text-indigo-500">Broker approves merged data</p>
+      <div className="mt-4 w-full rounded-lg border border-indigo-100 bg-white px-3 py-2 text-center">
+        <p className="text-[10px] font-semibold text-indigo-700">Human-in-the-loop</p>
+      </div>
+      <div className="mt-3 flex items-center gap-1.5">
+        <motion.div
+          className="h-2 w-2 rounded-full bg-emerald-500"
+          animate={{ opacity: [1, 0.3, 1], scale: [1, 0.85, 1] }}
+          transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+        />
+        <p className="text-[10px] text-indigo-600">Reviewing</p>
+      </div>
+    </motion.div>
+  )
+}
+
+function FillStageCard({ progress }: { progress: number }) {
+  return (
+    <motion.div
+      className={`${STAGE_CARD} left-[660px] flex flex-col items-center bg-blue-600 p-5 shadow-lg shadow-blue-600/20`}
+      animate={{ y: [0, -3, 0] }}
+      transition={{ duration: 2.7, repeat: Infinity, ease: 'easeInOut', delay: 1.1 }}
+    >
+      <div className="relative flex h-20 w-20 items-center justify-center">
+        <motion.div
+          className="absolute inset-0 rounded-xl border-2 border-blue-400/60"
+          animate={{ scale: [1, 1.22, 1], opacity: [0.7, 0, 0.7] }}
+          transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut', delay: 0.6 }}
+        />
+        <motion.div
+          className="absolute inset-0 rounded-xl border border-blue-300/30"
+          animate={{ scale: [1, 1.48, 1], opacity: [0.4, 0, 0.4] }}
+          transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut', delay: 0.95 }}
+        />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1.85, repeat: Infinity, ease: 'linear' }}
+          >
+            <Cog className="h-10 w-10 text-white" />
+          </motion.div>
+          <motion.div
+            className="absolute right-1.5 top-1.5"
+            animate={{ rotate: -360 }}
+            transition={{ duration: 1.3, repeat: Infinity, ease: 'linear' }}
+          >
+            <Cog className="h-5 w-5 text-blue-300" />
+          </motion.div>
+        </div>
+      </div>
+      <p className="mt-3 text-[15px] font-bold text-white">Fill</p>
+      <p className="mt-1 text-center text-[11px] leading-tight text-blue-200">Forms + payloads</p>
+      <div className="mt-auto w-full">
+        <div className="mb-1.5 flex items-center justify-between text-[10px] text-blue-300">
+          <span>Progress</span>
+          <span>{Math.round(progress * 100)}%</span>
+        </div>
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-blue-500/60">
+          <motion.div
+            className="h-full rounded-full bg-white"
+            animate={{ width: `${Math.round(progress * 100)}%` }}
+            transition={{ duration: 0.1 }}
+          />
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+function SendStageCard() {
+  const integrations: Array<{ label: string; icon: ComponentType<{ className?: string }> }> = [
+    { label: 'Applied Epic', icon: Building2 },
+    { label: 'AMS360',       icon: Send },
+    { label: 'HawkSoft',     icon: Building2 },
+    { label: 'PDF / CSV',    icon: Download },
+  ]
+  return (
+    <motion.div
+      className={`${STAGE_CARD} left-[875px] flex flex-col border border-emerald-100 bg-emerald-50 p-4`}
+      animate={{ y: [0, -3, 0] }}
+      transition={{ duration: 3.0, repeat: Infinity, ease: 'easeInOut', delay: 1.5 }}
+    >
+      <p className="mb-3 text-center text-[15px] font-bold text-emerald-900">Send</p>
+      <div className="flex flex-1 flex-col justify-center space-y-2">
+        {integrations.map(({ label, icon: Icon }, i) => (
+          <motion.div
+            key={label}
+            className="flex items-center gap-2 rounded-lg border border-emerald-100 bg-white px-2 py-1.5 shadow-sm"
+            animate={{ x: [0, 2, 0] }}
+            transition={{ duration: 2.4 + i * 0.25, repeat: Infinity, ease: 'easeInOut', delay: i * 0.45 }}
+          >
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-emerald-600 text-white">
+              <Icon className="h-3.5 w-3.5" />
+            </span>
+            <span className="text-[11px] font-semibold leading-tight text-emerald-900">{label}</span>
+          </motion.div>
+        ))}
+      </div>
+    </motion.div>
+  )
+}
+
 
 function AppFrame({ children }: { children: React.ReactNode }) {
   const frameShellRef = useRef<HTMLDivElement>(null)

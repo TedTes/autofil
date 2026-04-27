@@ -223,7 +223,7 @@ export default function LandingPage() {
   }, [getOrCreateLandingClient, hasFiles, router])
 
   useEffect(() => {
-    if (!previewFile || !previewKey || user) {
+    if (!previewFile || !previewKey) {
       return
     }
 
@@ -279,7 +279,6 @@ export default function LandingPage() {
     setIsPreviewLoading,
     setPreviewError,
     setPreviewResult,
-    user,
   ])
 
   useEffect(() => {
@@ -416,7 +415,7 @@ export default function LandingPage() {
               </div>
 
               <p className="text-sm text-gray-500">
-                No credit card required • Free trial • ACORD 125/126/140 supported
+              Start with ACORD 125, 126, 130, and 140 workflows. No credit card required.
               </p>
             </div>
 

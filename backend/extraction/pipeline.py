@@ -44,19 +44,22 @@ class ExtractionPipeline:
         min_classification_confidence: float = 0.5,
         enable_ocr_enrichment: bool = True,
         ocr_text_threshold: int = 50,
+        bypass_support_gate: bool = False,
     ):
         """
         Initialize extraction pipeline.
-        
+
         Args:
             use_classification: Whether to classify documents before extraction
             classification_strategy: Classification aggregation strategy
             min_classification_confidence: Minimum confidence threshold
+            bypass_support_gate: Skip the document-support check (useful for preview)
         """
         self.use_classification = use_classification
         self.classification_strategy = classification_strategy
         self.min_classification_confidence = min_classification_confidence
         self.enable_ocr_enrichment = enable_ocr_enrichment
+        self.bypass_support_gate = bypass_support_gate
         self.ocr_text_threshold = ocr_text_threshold
         self._ocr_parser = None
         
@@ -90,7 +93,7 @@ class ExtractionPipeline:
             document = self._apply_document_typing(document, override_document_type)
 
             support = assess_document_support(document)
-            if support['should_block_extraction']:
+            if not self.bypass_support_gate and support['should_block_extraction']:
                 return self._build_blocked_result(document, support)
 
             result = self._extract_data(document)

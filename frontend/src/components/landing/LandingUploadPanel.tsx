@@ -103,6 +103,8 @@ export default function LandingUploadPanel({
         const firstMeaningfulValue = values.find((entry: { value?: unknown }) => {
           const value = entry?.value
           if (value === null || value === undefined) return false
+          // Skip complex objects and arrays — they produce JSON blobs in the UI
+          if (typeof value === 'object') return false
           return String(value).trim().length > 0
         })
         if (!firstMeaningfulValue) continue
@@ -127,13 +129,19 @@ export default function LandingUploadPanel({
   }, [previewResult])
 
   const previewMeta = useMemo(() => {
-    const metadata = previewResult?.data?.metadata
-    if (!metadata || typeof metadata !== 'object') return null
-    const meta = metadata as Record<string, unknown>
-    return {
-      formType: typeof meta.form_type_detected === 'string' ? meta.form_type_detected : null,
-      lineOfBusiness: typeof meta.line_of_business === 'string' ? meta.line_of_business : null,
-    }
+    const dataMeta = previewResult?.data?.metadata
+    const topMeta = previewResult?.metadata
+    const dm = dataMeta && typeof dataMeta === 'object' ? (dataMeta as Record<string, unknown>) : null
+    const tm = topMeta && typeof topMeta === 'object' ? (topMeta as Record<string, unknown>) : null
+    const rawDocType = typeof tm?.document_type === 'string' ? (tm.document_type as string) : null
+    const rawFormType = dm && typeof dm.form_type_detected === 'string' ? (dm.form_type_detected as string) : null
+    const formType =
+      (rawFormType && rawFormType.toUpperCase() !== 'UNKNOWN' ? rawFormType : null) ??
+      (rawDocType && rawDocType.toLowerCase() !== 'unknown' ? rawDocType.replace(/_/g, ' ').toUpperCase() : null)
+    const lineOfBusiness =
+      dm && typeof dm.line_of_business === 'string' ? dm.line_of_business : null
+    if (!formType && !lineOfBusiness) return null
+    return { formType, lineOfBusiness }
   }, [previewResult])
 
   useEffect(() => {
@@ -434,14 +442,20 @@ export default function LandingUploadPanel({
                       <div>
                         <div className="flex items-start gap-3 mb-4">
                           <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-blue-100">
-                            <Lock className="h-4 w-4 text-blue-600" />
+                            {previewResult ? null : <Loader2 className="h-4 w-4 animate-spin text-blue-600" />}
                           </div>
                           <div>
                             <p className="text-sm font-semibold text-gray-900">
-                              Ready to process
+                              {previewResult
+                                ? 'Preview ready — sign in to continue'
+                                : 'Preparing extraction preview'}
                             </p>
                             <p className="mt-0.5 text-xs text-gray-500 leading-relaxed">
-                              Your file is staged in your browser. Sign in to upload it to AutoFil and continue.
+                              {previewResult
+                                ? (Array.isArray(previewResult.errors) && previewResult.errors.length > 0
+                                    ? previewResult.errors[0]
+                                    : 'AutoFil identified your document. Sign in to run the full extraction.')
+                                : 'AutoFil will try to identify the document type and show sample fields from the selected file.'}
                             </p>
                           </div>
                         </div>
@@ -585,9 +599,17 @@ export default function LandingUploadPanel({
                           ))}
                         </div>
                       ) : (
-                        <p className="text-sm text-gray-600">
-                          AutoFil processed this file, but there were no preview fields worth showing yet.
-                        </p>
+                        <div className="space-y-2">
+                          {Array.isArray(previewResult?.errors) && previewResult.errors.length > 0 ? (
+                            <p className="text-sm text-amber-700">
+                              {previewResult.errors[0]}
+                            </p>
+                          ) : (
+                            <p className="text-sm text-gray-600">
+                              AutoFil processed this file but couldn&apos;t extract structured fields for a preview. Sign in to run the full extraction pipeline.
+                            </p>
+                          )}
+                        </div>
                       )}
                     </div>
 

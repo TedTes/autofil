@@ -55,8 +55,9 @@ class ExtractionService:
         self.preview_pipeline = ExtractionPipeline(
             use_classification=True,
             classification_strategy='highest_confidence',
-            min_classification_confidence=0.6,
+            min_classification_confidence=0.0,
             enable_ocr_enrichment=False,
+            bypass_support_gate=True,
         )
         
         # Storage (persisted to disk)
@@ -174,9 +175,51 @@ class ExtractionService:
                 override_document_type=document_type,
             )
 
+            # If the pipeline produced no scalar-valued fields, try extracting
+            # raw PDF form field values directly and building a simple preview.
+            primary_sections = (
+                result.data.get('semantic_sections', [])
+                if isinstance(result.data, dict)
+                else []
+            )
+            extraction_method = (
+                (result.data.get('source') or {}).get('extraction_method', '')
+                if isinstance(result.data, dict)
+                else ''
+            )
+            is_generic = extraction_method == 'generic_extractor'
+            has_meaningful_fields = not is_generic and any(
+                any(
+                    any(
+                        isinstance(v.get('value'), (str, int, float, bool))
+                        and str(v.get('value', '')).strip()
+                        for v in (f.get('values') or [])
+                        if isinstance(v, dict)
+                    )
+                    for f in (s.get('fields') or [])
+                    if isinstance(f, dict)
+                )
+                for s in primary_sections
+                if isinstance(s, dict)
+            )
+            if not has_meaningful_fields and extension and extension.lower() == '.pdf':
+                fallback_result = self._preview_pdf_fields_fallback(
+                    temp_path, filename, result
+                )
+                if fallback_result is not None:
+                    result = fallback_result
+
+            rm = result.metadata or {}
+            detected_doc_type = (
+                rm.get('document_type')
+                or (rm.get('pipeline') or {}).get('document_type')
+                or (rm.get('document_support') or {}).get('document_type')
+                or document_type
+                or 'unknown'
+            )
             metadata = {
-                'extractor_used': result.metadata.get('extractor_used', 'Unknown') if result.metadata else 'Unknown',
-                'document_type': result.metadata.get('document_type', document_type or 'unknown') if result.metadata else (document_type or 'unknown'),
+                'extractor_used': rm.get('extractor_used', 'Unknown'),
+                'document_type': detected_doc_type,
                 'preview_generated_at': datetime.utcnow().isoformat(),
                 'file_name': filename,
                 'is_preview': True,
@@ -202,6 +245,106 @@ class ExtractionService:
             except OSError:
                 logger.warning("failed to clean preview extraction temp file %s", temp_path)
     
+    def _preview_pdf_fields_fallback(
+        self,
+        pdf_path: str,
+        filename: str,
+        primary_result,
+    ):
+        """
+        Last-resort preview: read raw PDF form field values directly.
+
+        Returns an ExtractionResult with simple scalar fields, or None if the
+        PDF has no fillable fields with values.
+        """
+        from extraction.parsers.pdf_field_parser import PdfFieldParser
+        from extraction.models.extraction_result import ExtractionResult
+        from extraction.core.schema import (
+            CanonicalOutput, EntityValue, Metadata, SemanticField,
+            SemanticSection, SourceInfo, SourceRef,
+        )
+
+        try:
+            parser = PdfFieldParser()
+            if not parser.is_fillable(pdf_path):
+                return None
+
+            field_metadata = parser.extract_field_metadata(pdf_path)
+            if not field_metadata:
+                return None
+
+            # Keep only fields that have a non-empty string value.
+            simple_fields: List[SemanticField] = []
+            for field_name, meta in field_metadata.items():
+                raw_value = meta.get('value')
+                if raw_value is None:
+                    continue
+                value_str = str(raw_value).strip()
+                if not value_str:
+                    continue
+                label = field_name.replace('_', ' ').replace('-', ' ').strip()
+                simple_fields.append(
+                    SemanticField(
+                        id=field_name,
+                        label=label,
+                        values=[
+                            EntityValue(
+                                value=value_str,
+                                confidence=0.85,
+                                source=SourceRef(extraction_rule='pdf_field_raw'),
+                                tags=['pdf_field_raw'],
+                            )
+                        ],
+                    )
+                )
+
+            if not simple_fields:
+                return None
+
+            primary_meta = primary_result.metadata or {}
+            primary_pipeline = primary_meta.get('pipeline') or {}
+            doc_type_str = (
+                primary_meta.get('document_type')
+                or primary_pipeline.get('document_type')
+                or 'unknown'
+            )
+
+            section = SemanticSection(
+                key='raw_fields',
+                display_name='Extracted Fields',
+                fields=simple_fields,
+            )
+            canonical = CanonicalOutput(
+                job_id=str(uuid.uuid4()),
+                source=SourceInfo(
+                    file_name=filename,
+                    file_type='pdf',
+                    extraction_method='pdf_field_raw',
+                    extracted_at=datetime.utcnow(),
+                ),
+                semantic_sections=[section],
+                metadata=Metadata(
+                    form_type_detected=doc_type_str.replace('_', ' ').upper()
+                    if doc_type_str and doc_type_str != 'unknown'
+                    else None,
+                ),
+            )
+
+            result = ExtractionResult(
+                success=True,
+                data=canonical.to_dict(),
+                confidence=0.7,
+                warnings=['Used raw PDF field extraction — structured field mapping not available for this form.'],
+            )
+            if result.metadata is None:
+                result.metadata = {}
+            result.metadata['document_type'] = doc_type_str
+            return result
+
+        except Exception as exc:
+            logger.warning("preview PDF fields fallback failed for %s: %s", filename, exc)
+            return None
+
     def classify_document(self, file_id: str, current_user_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Classify a document using real classifiers.

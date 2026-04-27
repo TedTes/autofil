@@ -386,7 +386,7 @@ export default function LandingPage() {
               </div>
 
               <h2 className="mb-5 text-3xl font-bold leading-tight text-gray-900 sm:mb-6 sm:text-5xl lg:text-6xl">
-                Extract, Fill, and Submit Insurance Documents — Automatically
+                Extract, Fill, and Submit Forms Without the Manual Work
               </h2>
 
               <p className="mx-auto mb-8 max-w-3xl text-base text-gray-600 sm:text-xl">

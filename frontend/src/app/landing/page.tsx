@@ -612,27 +612,27 @@ export default function LandingPage() {
         </section>
 
         {/* CTA */}
-        <section className="relative overflow-hidden bg-gray-950 py-20 sm:py-28">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(37,99,235,0.22),transparent)]" />
+        <section className="relative overflow-hidden bg-gradient-to-b from-blue-50 to-white py-20 sm:py-28">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_110%,rgba(37,99,235,0.07),transparent)]" />
           <div className="relative max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-blue-800/60 bg-blue-950/60 px-4 py-1.5 text-sm font-medium text-blue-300">
+            <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-100 px-4 py-1.5 text-sm font-medium text-blue-700">
               <span className="relative flex h-1.5 w-1.5">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-blue-400" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-blue-500" />
               </span>
               Built for insurance teams
             </div>
-            <h3 className="mb-5 text-3xl font-bold leading-tight text-white sm:text-5xl">
+            <h3 className="mb-5 text-3xl font-bold leading-tight text-gray-900 sm:text-5xl">
               Your next submission<br className="hidden sm:block" /> is one upload away.
             </h3>
-            <p className="mx-auto mb-10 max-w-xl text-base leading-relaxed text-gray-400 sm:text-lg">
+            <p className="mx-auto mb-10 max-w-xl text-base leading-relaxed text-gray-600 sm:text-lg">
               Drop your documents. AutoFil extracts, merges, and generates a carrier-ready package — without spreadsheets, without copy-paste.
             </p>
             <div className="flex flex-col justify-center gap-3 sm:flex-row sm:gap-4">
               <button
                 onClick={() => handleGetStarted('start your free trial')}
                 disabled={isCtaPending('start your free trial')}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-7 py-4 text-base font-semibold text-white shadow-lg shadow-blue-900/40 transition-all hover:bg-blue-500 disabled:cursor-wait disabled:opacity-60 sm:text-lg"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-7 py-4 text-base font-semibold text-white shadow-lg shadow-blue-200 transition-all hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60 sm:text-lg"
               >
                 {isCtaPending('start your free trial') && <Loader2 className="h-5 w-5 animate-spin" />}
                 Start for free
@@ -643,7 +643,7 @@ export default function LandingPage() {
                   const el = document.getElementById('demo-section')
                   if (el) el.scrollIntoView({ behavior: 'smooth' })
                 }}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-700 bg-gray-900 px-7 py-4 text-base font-semibold text-gray-200 transition-all hover:border-gray-600 hover:bg-gray-800 sm:text-lg"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border-2 border-gray-200 bg-white px-7 py-4 text-base font-semibold text-gray-900 transition-all hover:border-gray-300 hover:bg-gray-50 sm:text-lg"
               >
                 See how it works
               </button>
@@ -653,7 +653,7 @@ export default function LandingPage() {
       </main>
 
       {/* FOOTER */}
-      <footer className="border-t border-gray-800 bg-gray-950 py-10">
+      <footer className="border-t border-gray-100 bg-white py-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col items-center gap-6 md:flex-row md:justify-between">
             <div className="flex items-center gap-3">
@@ -663,11 +663,11 @@ export default function LandingPage() {
                 </svg>
               </div>
               <div>
-                <p className="text-sm font-semibold text-white">AutoFil</p>
-                <p className="text-xs text-gray-500">Insurance document automation</p>
+                <p className="text-sm font-semibold text-gray-900">AutoFil</p>
+                <p className="text-xs text-gray-400">Insurance document automation</p>
               </div>
             </div>
-            <p className="text-xs text-gray-600">
+            <p className="text-xs text-gray-400">
               © {new Date().getFullYear()} AutoFil. All rights reserved.
             </p>
           </div>
